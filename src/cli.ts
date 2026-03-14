@@ -88,7 +88,7 @@ interface AutoDiscoveryPlan {
 
 const AUTO_DISCOVERY_POOL_MULTIPLIER = 5;
 const AUTO_DISCOVERY_POOL_MAX_PER_STORE = 50;
-const AUTO_MIN_REVIEWS_EXCLUSIVE = 30;
+const AUTO_MIN_REVIEWS_EXCLUSIVE = 20;
 
 function createLogger(outputMode: OutputMode) {
   if (outputMode === "json") {
