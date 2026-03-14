@@ -107,14 +107,21 @@ const PLAY_COUNTRY_LANGUAGE_MAP: Record<string, string> = {
   nz: "en"
 };
 
+const NORTH_AMERICA_COUNTRIES = ["us", "ca", "mx"] as const;
 const GLOBAL_PLAY_COUNTRY_CODES = Object.keys(PLAY_COUNTRY_LANGUAGE_MAP);
 
 function resolvePlayLang(country: string): string {
   return PLAY_COUNTRY_LANGUAGE_MAP[country] ?? DEFAULT_STORE_LANG;
 }
 
-export const GLOBAL_IOS_COUNTRIES: string[] = [...GLOBAL_IOS_COUNTRY_CODES];
-export const GLOBAL_PLAY_MARKETS: PlayMarket[] = GLOBAL_PLAY_COUNTRY_CODES.map((country) => ({
+function prioritizeNorthAmerica(countries: string[]): string[] {
+  const northAmerica = countries.filter((country) => NORTH_AMERICA_COUNTRIES.includes(country as (typeof NORTH_AMERICA_COUNTRIES)[number]));
+  const others = countries.filter((country) => !NORTH_AMERICA_COUNTRIES.includes(country as (typeof NORTH_AMERICA_COUNTRIES)[number]));
+  return [...northAmerica, ...others];
+}
+
+export const GLOBAL_IOS_COUNTRIES: string[] = prioritizeNorthAmerica([...GLOBAL_IOS_COUNTRY_CODES]);
+export const GLOBAL_PLAY_MARKETS: PlayMarket[] = prioritizeNorthAmerica([...GLOBAL_PLAY_COUNTRY_CODES]).map((country) => ({
   country,
   lang: resolvePlayLang(country)
 }));

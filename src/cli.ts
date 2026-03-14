@@ -191,7 +191,7 @@ async function parseArgs(): Promise<CliArgs> {
     })
     .option("global", {
       type: "boolean",
-      default: false,
+      default: true,
       describe:
         "Collect reviews market-by-market using store-specific global market lists (Play country+lang, App Store country). In global mode, --limit applies per market."
     })
@@ -602,16 +602,75 @@ function getPrimaryStoreKey(target: AppTarget): "play" | "ios" | null {
   return null;
 }
 
+function getStoreKeyFromResult(result: AppProcessResult): "play" | "ios" | null {
+  if (result.play && !result.ios) {
+    return "play";
+  }
+
+  if (result.ios && !result.play) {
+    return "ios";
+  }
+
+  if (result.play) {
+    return "play";
+  }
+
+  if (result.ios) {
+    return "ios";
+  }
+
+  return null;
+}
+
+function resolveGlobalMode(rawArgv: string[]): boolean {
+  let mode = true;
+
+  for (const token of rawArgv) {
+    if (token === "--global" || token === "--global=true") {
+      mode = true;
+      continue;
+    }
+
+    if (token === "--no-global" || token === "--global=false") {
+      mode = false;
+      continue;
+    }
+
+    if (token.startsWith("--global=")) {
+      const value = token.slice("--global=".length).trim().toLowerCase();
+      if (["true", "1", "yes"].includes(value)) {
+        mode = true;
+      } else if (["false", "0", "no"].includes(value)) {
+        mode = false;
+      }
+    }
+  }
+
+  return mode;
+}
+
 async function run(): Promise<void> {
   const argv = await parseArgs();
   const logger = createLogger(argv.output);
+  const globalMode = resolveGlobalMode(process.argv.slice(2));
+  argv.global = globalMode;
 
   const owner = await resolveOwnerApp(argv.myApp ?? "", argv.registeredAppsPath);
   const ownerAppId = owner.ownerAppId;
   const { targets, autoDiscoveryUsed, autoPlan } = await loadTargets(argv, owner, logger);
   const targetsWithNames = await enrichTargetsWithDisplayNames(targets, DEFAULT_STORE_COUNTRY, DEFAULT_STORE_LANG);
+  const targetByName = new Map(targetsWithNames.map((target) => [target.name, target]));
 
   const results: AppProcessResult[] = [];
+  const upsertResult = (result: AppProcessResult): void => {
+    const index = results.findIndex((item) => item.app === result.app);
+    if (index >= 0) {
+      results[index] = result;
+      return;
+    }
+
+    results.push(result);
+  };
   const shouldApplyAutoThreshold = autoDiscoveryUsed && Boolean(autoPlan) && !argv.dryRun && !argv.validateOnly;
 
   if (shouldApplyAutoThreshold && autoPlan) {
@@ -636,12 +695,12 @@ async function run(): Promise<void> {
       const result = await processApp(process.cwd(), ownerAppId, target, argv.limit, {
         dryRun: false,
         validateOnly: false,
-        globalMode: Boolean(argv.global),
+        globalMode,
         minReviewsExclusive: autoPlan.minReviewsExclusive,
         logger
       });
 
-      results.push(result);
+      upsertResult(result);
 
       if (result.status === "ok") {
         if (storeKey === "play") {
@@ -661,6 +720,56 @@ async function run(): Promise<void> {
     const playDone = !autoPlan.requirePlay || acceptedByStore.play >= autoPlan.perStoreTarget;
     const iosDone = !autoPlan.requireIos || acceptedByStore.ios >= autoPlan.perStoreTarget;
     if (!playDone || !iosDone) {
+      const fallbackCandidates = results
+        .filter((result) => result.status === "skipped")
+        .sort((a, b) => (b.reviewCount ?? 0) - (a.reviewCount ?? 0));
+
+      for (const candidate of fallbackCandidates) {
+        const storeKey = getStoreKeyFromResult(candidate);
+        if (!storeKey) {
+          continue;
+        }
+
+        if (
+          (storeKey === "play" && (!autoPlan.requirePlay || acceptedByStore.play >= autoPlan.perStoreTarget)) ||
+          (storeKey === "ios" && (!autoPlan.requireIos || acceptedByStore.ios >= autoPlan.perStoreTarget))
+        ) {
+          continue;
+        }
+
+        const target = targetByName.get(candidate.app);
+        if (!target) {
+          continue;
+        }
+
+        const retryResult = await processApp(process.cwd(), ownerAppId, target, argv.limit, {
+          dryRun: false,
+          validateOnly: false,
+          globalMode,
+          logger
+        });
+
+        upsertResult(retryResult);
+
+        if (retryResult.status === "ok") {
+          if (storeKey === "play") {
+            acceptedByStore.play += 1;
+          } else {
+            acceptedByStore.ios += 1;
+          }
+        }
+
+        const playFilled = !autoPlan.requirePlay || acceptedByStore.play >= autoPlan.perStoreTarget;
+        const iosFilled = !autoPlan.requireIos || acceptedByStore.ios >= autoPlan.perStoreTarget;
+        if (playFilled && iosFilled) {
+          break;
+        }
+      }
+    }
+
+    const playFilled = !autoPlan.requirePlay || acceptedByStore.play >= autoPlan.perStoreTarget;
+    const iosFilled = !autoPlan.requireIos || acceptedByStore.ios >= autoPlan.perStoreTarget;
+    if (!playFilled || !iosFilled) {
       logger.warn(
         `[auto] Unable to fill target competitor quota with review threshold > ${autoPlan.minReviewsExclusive}. ` +
           `play=${acceptedByStore.play}/${autoPlan.requirePlay ? autoPlan.perStoreTarget : 0}, ` +
@@ -672,11 +781,11 @@ async function run(): Promise<void> {
       const result = await processApp(process.cwd(), ownerAppId, target, argv.limit, {
         dryRun: Boolean(argv.dryRun),
         validateOnly: Boolean(argv.validateOnly),
-        globalMode: Boolean(argv.global),
+        globalMode,
         logger
       });
 
-      results.push(result);
+      upsertResult(result);
     }
   }
 
@@ -690,7 +799,7 @@ async function run(): Promise<void> {
       output: argv.output,
       dryRun: Boolean(argv.dryRun),
       validateOnly: Boolean(argv.validateOnly),
-      global: Boolean(argv.global),
+      global: globalMode,
       limit: argv.limit,
       summary,
       results

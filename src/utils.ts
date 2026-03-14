@@ -5,6 +5,8 @@ import fetch, { RequestInit } from "node-fetch";
 export type ReviewSource = "play" | "ios";
 
 export const DEFAULT_REVIEW_LIMIT = 200;
+export const MIN_REVIEW_TEXT_LENGTH_EXCLUSIVE = 10;
+const FETCH_TIMEOUT_MS = 15_000;
 
 export interface ReviewItem {
   rating: number;
@@ -60,6 +62,10 @@ export const sleep = (ms: number): Promise<void> =>
 
 export function normalizeText(input: string | undefined | null): string {
   return (input ?? "").replace(/\s+/g, " ").trim();
+}
+
+export function hasMeaningfulReviewText(input: string | undefined | null): boolean {
+  return normalizeText(input).length > MIN_REVIEW_TEXT_LENGTH_EXCLUSIVE;
 }
 
 export function toIsoString(input: string | Date | undefined | null): string {
@@ -164,7 +170,22 @@ async function requestWithRetry<T>(
 
   for (let attempt = 0; attempt < retries; attempt += 1) {
     try {
-      const response = await fetch(url, options);
+      const requestOptions: RequestInit = {
+        ...(options ?? {})
+      };
+      let timeoutHandle: NodeJS.Timeout | undefined;
+
+      if (!requestOptions.signal) {
+        const controller = new AbortController();
+        timeoutHandle = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+        requestOptions.signal = controller.signal;
+      }
+
+      const response = await fetch(url, requestOptions);
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+
       if (!response.ok) {
         const body = (await response.text()).slice(0, 300);
         throw new Error(`Request failed (${response.status}) for ${url}. ${body}`);

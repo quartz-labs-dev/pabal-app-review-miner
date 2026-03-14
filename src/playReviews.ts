@@ -1,6 +1,6 @@
 import gplay, { IReviewsItem } from "google-play-scraper";
 import { DEFAULT_STORE_COUNTRY, DEFAULT_STORE_LANG } from "./storeLocale";
-import { normalizeText, ReviewItem, SourceReviewResult, toIsoString } from "./utils";
+import { hasMeaningfulReviewText, normalizeText, ReviewItem, SourceReviewResult, toIsoString } from "./utils";
 
 const PLAY_MAX_PAGES = 20;
 const PLAY_MAX_BATCH = 200;
@@ -53,13 +53,13 @@ export async function fetchPlayReviews(
 
     const mapped = response.data
       .map(mapPlayReview)
-      .filter((item) => item.text.length > 0);
+      .filter((item) => hasMeaningfulReviewText(item.text));
 
     reviews.push(...mapped);
     token = response.nextPaginationToken;
     page += 1;
 
-    if (!token || mapped.length === 0) {
+    if (!token || response.data.length === 0) {
       break;
     }
   }

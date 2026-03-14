@@ -1,4 +1,11 @@
-import { fetchJsonWithRetry, normalizeText, ReviewItem, SourceReviewResult, toIsoString } from "./utils";
+import {
+  fetchJsonWithRetry,
+  hasMeaningfulReviewText,
+  normalizeText,
+  ReviewItem,
+  SourceReviewResult,
+  toIsoString
+} from "./utils";
 import { DEFAULT_STORE_COUNTRY } from "./storeLocale";
 
 interface AppStoreEntry {
@@ -31,7 +38,7 @@ function parseEntry(entry: AppStoreEntry): ReviewItem | null {
   }
 
   const text = normalizeText(entry.content?.label);
-  if (!text) {
+  if (!hasMeaningfulReviewText(text)) {
     return null;
   }
 
@@ -72,11 +79,12 @@ export async function fetchAppStoreReviews(
       throw new Error(`Error requesting App Store page ${page}:${message}`);
     }
 
-    const mapped = toEntries(payload).map(parseEntry).filter((item): item is ReviewItem => item !== null);
+    const entries = toEntries(payload);
+    const mapped = entries.map(parseEntry).filter((item): item is ReviewItem => item !== null);
 
     reviews.push(...mapped);
 
-    if (mapped.length === 0) {
+    if (entries.length === 0) {
       break;
     }
   }
