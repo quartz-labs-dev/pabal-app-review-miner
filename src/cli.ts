@@ -148,7 +148,7 @@ function resolveRequestedAppName(argv: CliArgs): string {
 
 async function parseArgs(): Promise<CliArgs> {
   const parsed = await yargs(hideBin(process.argv))
-    .scriptName("pabal-app-review-miner")
+    .scriptName("collect-reviews")
     .command("$0 [appName]", "Collect raw reviews for one app or apps.json list", (command) =>
       command.positional("appName", {
         type: "string",

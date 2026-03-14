@@ -73,5 +73,5 @@ chmod 600 ~/.config/pabal-mcp/*
 ## 5. 빠른 검증
 
 ```bash
-node dist/cli.js --my-app golden-horizon --apps apps.json --limit 1
+npm run collect-reviews -- --my-app golden-horizon --apps apps.json --limit 1
 ```

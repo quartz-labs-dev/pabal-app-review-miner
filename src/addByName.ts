@@ -280,7 +280,7 @@ async function collectReviews(target: AppTarget, limit: number, globalMode: bool
 
 async function parseArgs(): Promise<CliArgs> {
   const parsed = await yargs(hideBin(process.argv))
-    .scriptName("add-by-name")
+    .scriptName("collect-reviews-by-name")
     .usage("$0 --my-app <owner> --name \"App Name\" [options]")
     .option("my-app", {
       type: "string",

@@ -20,11 +20,15 @@ Output structure:
 ```bash
 npm install
 npm run build
-node dist/cli.js --my-app golden-horizon --apps apps.json --limit 200
-node dist/cli.js --my-app golden-horizon --auto-top 5 --limit 200
+npm run setup:config
+npm run collect-reviews -- --my-app golden-horizon --apps apps.json --limit 200
+npm run collect-reviews -- --my-app golden-horizon --auto-top 5 --limit 200
+npm run collect-reviews -- --my-app golden-horizon --apps apps.json --platform ios --limit 200
+npm run collect-reviews-by-name -- --my-app golden-horizon --name "BJJBuddy"
 ```
 
 ## Documentation Map
 
 - [Setup](./setup.md): prerequisites and `registered-apps.json` preparation
-- [Usage](./usage.md): CLI options, commands, and output format
+- [collect-reviews](./collect-reviews.md): main competitor review collection flow
+- [collect-reviews-by-name](./collect-reviews-by-name.md): name-based id resolution and collection flow

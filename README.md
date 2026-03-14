@@ -19,16 +19,16 @@ Output structure:
 npm install
 npm run build
 npm run setup:config
-node dist/cli.js --my-app golden-horizon --apps apps.json --limit 200
+npm run collect-reviews -- --my-app golden-horizon --apps apps.json --limit 200
 
 # or auto-discover competitors (top 5 per available store by default)
-node dist/cli.js --my-app golden-horizon --auto-top 5 --limit 200
+npm run collect-reviews -- --my-app golden-horizon --auto-top 5 --limit 200
 
 # platform filter (default: both, optional: ios | android)
-node dist/cli.js --my-app golden-horizon --apps apps.json --platform ios --limit 200
+npm run collect-reviews -- --my-app golden-horizon --apps apps.json --platform ios --limit 200
 
 # add one app by name (searches both stores, then collects and saves reviews)
-node dist/addByName.js --my-app golden-horizon --name "BJJBuddy"
+npm run collect-reviews-by-name -- --my-app golden-horizon --name "BJJBuddy"
 ```
 
 ## Documentation
@@ -39,7 +39,7 @@ node dist/addByName.js --my-app golden-horizon --name "BJJBuddy"
 ## Development
 
 ```bash
-npm run dev -- --my-app golden-horizon --apps apps.json --limit 200
+npm run dev:collect-reviews -- --my-app golden-horizon --apps apps.json --limit 200
 ```
 
 ## License

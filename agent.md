@@ -1,0 +1,3 @@
+# Agent Guide
+
+Canonical agent instructions live in [`AGENTS.md`](./AGENTS.md).

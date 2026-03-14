@@ -20,11 +20,15 @@
 ```bash
 npm install
 npm run build
-node dist/cli.js --my-app golden-horizon --apps apps.json --limit 200
-node dist/cli.js --my-app golden-horizon --auto-top 5 --limit 200
+npm run setup:config
+npm run collect-reviews -- --my-app golden-horizon --apps apps.json --limit 200
+npm run collect-reviews -- --my-app golden-horizon --auto-top 5 --limit 200
+npm run collect-reviews -- --my-app golden-horizon --apps apps.json --platform ios --limit 200
+npm run collect-reviews-by-name -- --my-app golden-horizon --name "BJJBuddy"
 ```
 
 ## 문서 안내
 
 - [셋업](./setup.md): 사전 준비 및 `registered-apps.json` 설정
-- [사용법](./usage.md): CLI 옵션, 실행 예시, 출력 형식
+- [collect-reviews](./collect-reviews.md): 메인 경쟁앱 리뷰 수집 흐름
+- [collect-reviews-by-name](./collect-reviews-by-name.md): 앱 이름 기반 ID 탐색 + 수집 흐름

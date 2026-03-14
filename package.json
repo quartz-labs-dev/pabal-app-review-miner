@@ -8,11 +8,15 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev": "tsx src/cli.ts",
-    "dev:add-by-name": "tsx src/addByName.ts",
-    "add-by-name": "npm run build && node dist/addByName.js",
+    "dev": "npm run dev:collect-reviews",
+    "dev:collect-reviews": "tsx src/cli.ts",
+    "dev:collect-reviews-by-name": "tsx src/addByName.ts",
+    "precollect-reviews": "npm run build",
+    "collect-reviews": "node dist/cli.js",
+    "precollect-reviews-by-name": "npm run build",
+    "collect-reviews-by-name": "node dist/addByName.js",
     "setup:config": "node scripts/setup-config.mjs",
-    "start": "npm run build && node dist/cli.js"
+    "start": "npm run collect-reviews"
   },
   "keywords": [
     "app-store",
