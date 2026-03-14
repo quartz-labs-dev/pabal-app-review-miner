@@ -1,0 +1,448 @@
+#!/usr/bin/env node
+
+import path from "node:path";
+import yargs from "yargs";
+import { hideBin } from "yargs/helpers";
+import { fetchAppStoreReviews } from "./appStoreReviews";
+import { fetchPlayReviews } from "./playReviews";
+import { resolveOwnerAppId } from "./registeredApps";
+import {
+  AppTarget,
+  createOutputPaths,
+  dedupeReviews,
+  DEFAULT_REVIEW_LIMIT,
+  readJsonFile,
+  ReviewsOutput,
+  UnifiedReview,
+  writeJsonFile
+} from "./utils";
+
+type OutputMode = "text" | "json";
+type AppStatus = "ok" | "failed" | "skipped";
+
+interface CliArgs {
+  _: (string | number)[];
+  appName?: string;
+  myApp?: string;
+  registeredAppsPath?: string;
+  play?: string;
+  ios?: string;
+  limit: number;
+  apps?: string;
+  output: OutputMode;
+  dryRun?: boolean;
+  validateOnly?: boolean;
+}
+
+interface AppProcessResult {
+  app: string;
+  status: AppStatus;
+  mode: "run" | "dry-run" | "validate-only";
+  play?: string;
+  ios?: string;
+  outputPath?: string;
+  reviewCount?: number;
+  message?: string;
+}
+
+interface RunSummary {
+  succeeded: number;
+  failed: number;
+  skipped: number;
+}
+
+interface RunReport {
+  ok: boolean;
+  ownerAppId: string;
+  output: OutputMode;
+  dryRun: boolean;
+  validateOnly: boolean;
+  limit: number;
+  summary: RunSummary;
+  results: AppProcessResult[];
+}
+
+function createLogger(outputMode: OutputMode) {
+  if (outputMode === "json") {
+    return {
+      info(_message: string): void {
+        // no-op
+      },
+      warn(_message: string): void {
+        // no-op
+      },
+      error(_message: string): void {
+        // no-op
+      }
+    };
+  }
+
+  return {
+    info(message: string): void {
+      console.log(message);
+    },
+    warn(message: string): void {
+      console.warn(message);
+    },
+    error(message: string): void {
+      console.error(message);
+    }
+  };
+}
+
+function normalizeTarget(raw: AppTarget, index: number): AppTarget {
+  const name = (raw.name ?? "").trim();
+  if (!name) {
+    throw new Error(`apps.json item at index ${index} is missing a valid "name"`);
+  }
+
+  return {
+    name,
+    play: raw.play,
+    ios: raw.ios
+  };
+}
+
+async function parseArgs(): Promise<CliArgs> {
+  const parsed = await yargs(hideBin(process.argv))
+    .scriptName("pabal-app-review-miner")
+    .command("$0 [appName]", "Collect raw reviews for one app or apps.json list", (command) =>
+      command.positional("appName", {
+        type: "string",
+        describe: "Output app name (and shorthand lookup key in apps.json)"
+      })
+    )
+    .usage("$0 [appName] [options]")
+    .option("my-app", {
+      type: "string",
+      describe: "My app key used to find owner app id (slug/name/bundleId/packageName/appId)",
+      demandOption: true
+    })
+    .option("registered-apps-path", {
+      type: "string",
+      describe: "Path to registered-apps.json (default: ~/.config/pabal-mcp/registered-apps.json)"
+    })
+    .option("play", {
+      type: "string",
+      describe: "Google Play app id"
+    })
+    .option("ios", {
+      type: "string",
+      describe: "App Store app id"
+    })
+    .option("limit", {
+      type: "number",
+      default: DEFAULT_REVIEW_LIMIT,
+      describe: "Number of reviews per source"
+    })
+    .option("apps", {
+      type: "string",
+      describe: "Path to apps.json for multi-app mode"
+    })
+    .option("output", {
+      choices: ["text", "json"] as const,
+      default: "text",
+      describe: "Output format for agent-friendly consumption"
+    })
+    .option("dry-run", {
+      type: "boolean",
+      default: false,
+      describe: "Plan actions without fetching or writing files"
+    })
+    .option("validate-only", {
+      type: "boolean",
+      default: false,
+      describe: "Validate inputs/target mapping only (no fetch, no write)"
+    })
+    .help()
+    .strict()
+    .parse();
+
+  return parsed as unknown as CliArgs;
+}
+
+async function loadTargetsFromAppsFile(appsPath: string): Promise<AppTarget[]> {
+  const resolved = path.resolve(process.cwd(), appsPath);
+  const apps = await readJsonFile<AppTarget[]>(resolved);
+
+  if (!Array.isArray(apps) || apps.length === 0) {
+    throw new Error(`No app targets found in ${resolved}`);
+  }
+
+  return apps.map((item, index) => normalizeTarget(item, index));
+}
+
+async function loadSingleTarget(argv: CliArgs): Promise<AppTarget> {
+  const appName = argv.appName || (typeof argv._[0] === "string" ? String(argv._[0]) : "app");
+
+  if (argv.play || argv.ios) {
+    return {
+      name: appName,
+      play: argv.play,
+      ios: argv.ios
+    };
+  }
+
+  const defaultAppsPath = path.resolve(process.cwd(), "apps.json");
+  try {
+    const apps = await readJsonFile<AppTarget[]>(defaultAppsPath);
+    const matched = apps.find((item) => item.name === appName);
+    if (matched) {
+      return normalizeTarget(matched, 0);
+    }
+  } catch {
+    // Ignore missing/invalid default apps file.
+  }
+
+  throw new Error(
+    `Provide --play and/or --ios, or use --apps <apps.json>. ` +
+      `Tip: add "${appName}" to ${defaultAppsPath} for shorthand usage.`
+  );
+}
+
+async function loadTargets(argv: CliArgs): Promise<AppTarget[]> {
+  if (argv.apps) {
+    return loadTargetsFromAppsFile(argv.apps);
+  }
+
+  return [await loadSingleTarget(argv)];
+}
+
+async function collectReviews(target: AppTarget, limit: number): Promise<UnifiedReview[]> {
+  const merged: UnifiedReview[] = [];
+
+  if (target.play) {
+    const play = await fetchPlayReviews(target.play, limit);
+    merged.push(...play.reviews.map((review) => ({ ...review, source: "play" as const })));
+  }
+
+  if (target.ios) {
+    const ios = await fetchAppStoreReviews(target.ios, limit);
+    merged.push(...ios.reviews.map((review) => ({ ...review, source: "ios" as const })));
+  }
+
+  return dedupeReviews(merged);
+}
+
+async function saveReviews(
+  baseDir: string,
+  ownerAppId: string,
+  target: AppTarget,
+  limit: number,
+  reviews: UnifiedReview[]
+): Promise<string> {
+  const paths = createOutputPaths(baseDir, ownerAppId, target.name);
+
+  const payload: ReviewsOutput = {
+    ownerAppId,
+    app: target.name,
+    collectedAt: new Date().toISOString(),
+    limitPerStore: limit,
+    ids: {
+      play: target.play,
+      ios: target.ios
+    },
+    counts: {
+      play: reviews.filter((review) => review.source === "play").length,
+      ios: reviews.filter((review) => review.source === "ios").length,
+      total: reviews.length
+    },
+    reviews
+  };
+
+  await writeJsonFile(paths.reviewsPath, payload);
+  return paths.reviewsPath;
+}
+
+async function processApp(
+  baseDir: string,
+  ownerAppId: string,
+  target: AppTarget,
+  limit: number,
+  options: {
+    dryRun: boolean;
+    validateOnly: boolean;
+    logger: ReturnType<typeof createLogger>;
+  }
+): Promise<AppProcessResult> {
+  const logger = options.logger;
+  const prefix = `[${target.name}]`;
+  const outputPath = createOutputPaths(baseDir, ownerAppId, target.name).reviewsPath;
+
+  if (!target.play && !target.ios) {
+    const message = "skipped: no play/ios id";
+    logger.warn(`${prefix} ${message}`);
+
+    return {
+      app: target.name,
+      status: "skipped",
+      mode: options.validateOnly ? "validate-only" : options.dryRun ? "dry-run" : "run",
+      play: target.play,
+      ios: target.ios,
+      outputPath,
+      message
+    };
+  }
+
+  if (options.validateOnly) {
+    return {
+      app: target.name,
+      status: "ok",
+      mode: "validate-only",
+      play: target.play,
+      ios: target.ios,
+      outputPath,
+      message: "validated target configuration"
+    };
+  }
+
+  if (options.dryRun) {
+    return {
+      app: target.name,
+      status: "ok",
+      mode: "dry-run",
+      play: target.play,
+      ios: target.ios,
+      outputPath,
+      message: "would fetch and write reviews"
+    };
+  }
+
+  try {
+    if (target.play) {
+      logger.info(`${prefix} Fetching Google Play reviews: ${target.play}`);
+    }
+
+    if (target.ios) {
+      logger.info(`${prefix} Fetching App Store reviews: ${target.ios}`);
+    }
+
+    const reviews = await collectReviews(target, limit);
+    await saveReviews(baseDir, ownerAppId, target, limit, reviews);
+
+    logger.info(`${prefix} Saved ${reviews.length} reviews -> ${outputPath}`);
+
+    return {
+      app: target.name,
+      status: "ok",
+      mode: "run",
+      play: target.play,
+      ios: target.ios,
+      outputPath,
+      reviewCount: reviews.length
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(`${prefix} failed: ${message}`);
+
+    return {
+      app: target.name,
+      status: "failed",
+      mode: "run",
+      play: target.play,
+      ios: target.ios,
+      outputPath,
+      message
+    };
+  }
+}
+
+function summarize(results: AppProcessResult[]): RunSummary {
+  return {
+    succeeded: results.filter((result) => result.status === "ok").length,
+    failed: results.filter((result) => result.status === "failed").length,
+    skipped: results.filter((result) => result.status === "skipped").length
+  };
+}
+
+function printTextSummary(ownerAppId: string, summary: RunSummary, argv: CliArgs): void {
+  if (argv.validateOnly) {
+    console.log("\nValidation summary");
+  } else if (argv.dryRun) {
+    console.log("\nDry-run summary");
+  } else {
+    console.log("\nRun summary");
+  }
+
+  console.log(`- ownerAppId: ${ownerAppId}`);
+  console.log(`- succeeded: ${summary.succeeded}`);
+  console.log(`- failed: ${summary.failed}`);
+  console.log(`- skipped: ${summary.skipped}`);
+}
+
+async function run(): Promise<void> {
+  const argv = await parseArgs();
+  const logger = createLogger(argv.output);
+
+  const ownerAppId = await resolveOwnerAppId(argv.myApp ?? "", argv.registeredAppsPath);
+  const targets = await loadTargets(argv);
+
+  const results: AppProcessResult[] = [];
+
+  for (const target of targets) {
+    const result = await processApp(process.cwd(), ownerAppId, target, argv.limit, {
+      dryRun: Boolean(argv.dryRun),
+      validateOnly: Boolean(argv.validateOnly),
+      logger
+    });
+
+    results.push(result);
+  }
+
+  const summary = summarize(results);
+
+  if (argv.output === "json") {
+    const report: RunReport = {
+      ok: summary.failed === 0,
+      ownerAppId,
+      output: argv.output,
+      dryRun: Boolean(argv.dryRun),
+      validateOnly: Boolean(argv.validateOnly),
+      limit: argv.limit,
+      summary,
+      results
+    };
+
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
+
+  printTextSummary(ownerAppId, summary, argv);
+}
+
+function wantsJsonOutputFromArgv(argv: string[]): boolean {
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index];
+
+    if (token === "--output" && argv[index + 1] === "json") {
+      return true;
+    }
+
+    if (token === "--output=json") {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+run().catch((error) => {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (wantsJsonOutputFromArgv(process.argv)) {
+    console.log(
+      JSON.stringify(
+        {
+          ok: false,
+          error: message
+        },
+        null,
+        2
+      )
+    );
+    process.exit(1);
+  }
+
+  console.error(`Fatal error: ${message}`);
+  process.exit(1);
+});

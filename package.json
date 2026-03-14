@@ -1,0 +1,37 @@
+{
+  "name": "pabal-app-review-miner",
+  "version": "1.0.0",
+  "description": "CLI tool for collecting raw App Store and Google Play reviews by app.",
+  "type": "commonjs",
+  "bin": {
+    "pabal-app-review-miner": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "setup:config": "node scripts/setup-config.mjs",
+    "start": "npm run build && node dist/cli.js"
+  },
+  "keywords": [
+    "app-store",
+    "google-play",
+    "reviews",
+    "review-mining"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "google-play-scraper": "^10.1.2",
+    "node-fetch": "^3.3.2",
+    "yargs": "^18.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "@types/yargs": "^17.0.33",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}

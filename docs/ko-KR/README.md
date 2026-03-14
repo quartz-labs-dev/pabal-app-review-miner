@@ -1,0 +1,28 @@
+# pabal-app-review-miner 문서 (ko-KR)
+
+## 개요
+
+`pabal-app-review-miner`는 Google Play / App Store 경쟁 앱 리뷰를 raw 데이터로 수집하고, 내 앱 ID 기준으로 정리해 저장하는 CLI입니다.
+
+## 주요 기능
+
+- Google Play / App Store 최신 리뷰 수집
+- 단일 경쟁 앱, 멀티 경쟁 앱 수집 지원
+- 내 앱 기준 스코프로 경쟁 앱별 JSON 저장
+
+출력 구조:
+
+- `data/{myAppId}/reviews/{competitor}.json`
+
+## 빠른 시작
+
+```bash
+npm install
+npm run build
+node dist/cli.js --my-app golden-horizon --apps apps.json --limit 200
+```
+
+## 문서 안내
+
+- [셋업](./setup.md): 사전 준비 및 `registered-apps.json` 설정
+- [사용법](./usage.md): CLI 옵션, 실행 예시, 출력 형식
