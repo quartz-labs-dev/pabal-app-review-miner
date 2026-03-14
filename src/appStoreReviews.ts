@@ -27,6 +27,11 @@ interface FetchAppStoreReviewsOptions {
   country?: string;
 }
 
+function isHttp403Error(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("Request failed (403)");
+}
+
 function createAppStoreUrl(appId: string, page: number, country: string): string {
   return `https://itunes.apple.com/${encodeURIComponent(country.toLowerCase())}/rss/customerreviews/page=${page}/id=${appId}/sortby=mostrecent/json`;
 }
@@ -75,6 +80,10 @@ export async function fetchAppStoreReviews(
     try {
       payload = await fetchJsonWithRetry<AppStoreFeed>(url);
     } catch (error) {
+      // App Store RSS often returns 403 on later pages; keep already collected pages.
+      if (isHttp403Error(error)) {
+        break;
+      }
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`Error requesting App Store page ${page}:${message}`);
     }
