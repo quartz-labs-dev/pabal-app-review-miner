@@ -25,6 +25,7 @@ export interface UnifiedReview extends ReviewItem {
 export interface ReviewsOutput {
   ownerAppId: string;
   app: string;
+  appName: string;
   collectedAt: string;
   limitPerStore: number;
   ids: {
@@ -41,6 +42,7 @@ export interface ReviewsOutput {
 
 export interface AppTarget {
   name: string;
+  displayName?: string;
   play?: string;
   ios?: string;
 }

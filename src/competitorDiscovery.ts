@@ -1,4 +1,5 @@
 import gplay, { IAppItem } from "google-play-scraper";
+import { DEFAULT_STORE_COUNTRY, DEFAULT_STORE_LANG } from "./storeLocale";
 import { AppTarget, fetchJsonWithRetry, fetchTextWithRetry, normalizeText } from "./utils";
 
 interface ITunesApp {
@@ -26,9 +27,8 @@ interface RankedIosCandidate {
   rank: number;
 }
 
-const DEFAULT_COUNTRY = "us";
-const DEFAULT_LANG = "en";
 const IOS_SEARCH_LIMIT = 50;
+const PLAY_SEARCH_LIMIT = 50;
 
 function createLookupUrl(appId: string, country: string): string {
   return `https://itunes.apple.com/lookup?id=${encodeURIComponent(appId)}&country=${encodeURIComponent(country)}`;
@@ -78,18 +78,44 @@ function dedupeIds(ids: string[]): string[] {
   return deduped;
 }
 
-function toPlayTarget(appId: string): AppTarget {
+function toPlayTargetWithName(app: IAppItem): AppTarget {
+  const appId = normalizeText(app.appId);
   return {
     name: `play-${appId}`,
+    displayName: normalizeText(app.title) || `play-${appId}`,
     play: appId
   };
 }
 
-function toIosTarget(appId: string): AppTarget {
+function toIosTarget(appId: string, trackName?: string): AppTarget {
   return {
     name: `ios-${appId}`,
+    displayName: normalizeText(trackName) || `ios-${appId}`,
     ios: appId
   };
+}
+
+function getPackageNamespace(packageName: string, depth = 2): string {
+  const normalized = normalizeText(packageName).toLowerCase();
+  if (!normalized) {
+    return "";
+  }
+
+  const parts = normalized.split(".").filter(Boolean);
+  if (parts.length <= 1) {
+    return normalized;
+  }
+
+  return parts.slice(0, Math.min(depth, parts.length)).join(".");
+}
+
+function isSameNamespaceApp(ownerNamespace: string, candidateAppId: string): boolean {
+  if (!ownerNamespace) {
+    return false;
+  }
+
+  const candidate = normalizeText(candidateAppId).toLowerCase();
+  return candidate === ownerNamespace || candidate.startsWith(`${ownerNamespace}.`);
 }
 
 function getIosTargetId(target: AppTarget): string {
@@ -119,6 +145,19 @@ async function discoverPlayTargets(
   country: string,
   lang: string
 ): Promise<AppTarget[]> {
+  let ownerApp: IAppItem | undefined;
+  try {
+    ownerApp = await gplay.app({
+      appId: ownerPlayAppId,
+      country,
+      lang
+    });
+  } catch {
+    ownerApp = undefined;
+  }
+  const ownerDeveloperId = normalizeText(ownerApp?.developerId).toLowerCase();
+  const ownerSearchTerms = dedupeIds([normalizeText(ownerApp?.title), normalizeText(ownerApp?.summary)]);
+
   let similarApps: IAppItem[];
   try {
     similarApps = await gplay.similar({
@@ -132,25 +171,66 @@ async function discoverPlayTargets(
   }
 
   const owner = normalizeText(ownerPlayAppId).toLowerCase();
+  const ownerNamespace = getPackageNamespace(ownerPlayAppId);
   const targets: AppTarget[] = [];
   const seen = new Set<string>();
 
-  for (const app of similarApps) {
+  const appendCandidate = (app: IAppItem): void => {
     const appId = normalizeText(app.appId);
     if (!appId) {
-      continue;
+      return;
     }
 
     const normalized = appId.toLowerCase();
     if (normalized === owner || seen.has(normalized)) {
-      continue;
+      return;
+    }
+
+    const candidateDeveloperId = normalizeText(app.developerId).toLowerCase();
+    if (ownerDeveloperId && candidateDeveloperId && ownerDeveloperId === candidateDeveloperId) {
+      return;
+    }
+
+    if (isSameNamespaceApp(ownerNamespace, appId)) {
+      return;
     }
 
     seen.add(normalized);
-    targets.push(toPlayTarget(appId));
+    targets.push(toPlayTargetWithName(app));
+  };
+
+  for (const app of similarApps) {
+    appendCandidate(app);
 
     if (targets.length >= top) {
       break;
+    }
+  }
+
+  if (targets.length < top) {
+    for (const term of ownerSearchTerms) {
+      let searchApps: IAppItem[] = [];
+      try {
+        searchApps = await gplay.search({
+          term,
+          num: PLAY_SEARCH_LIMIT,
+          country,
+          lang
+        });
+      } catch {
+        searchApps = [];
+      }
+
+      for (const app of searchApps) {
+        appendCandidate(app);
+        if (targets.length >= top) {
+          break;
+        }
+      }
+
+      if (targets.length >= top) {
+        break;
+      }
     }
   }
 
@@ -276,9 +356,9 @@ async function discoverIosTargetsBySearch(ownerEntry: ITunesApp, top: number, co
   return Array.from(ranked.values())
     .sort(scoreIosCandidate)
     .slice(0, top)
-    .map((candidate) => candidate.app.trackId)
-    .filter((trackId): trackId is number => Number.isFinite(trackId))
-    .map((trackId) => toIosTarget(String(trackId)));
+    .map((candidate) => candidate.app)
+    .filter((app): app is ITunesApp & { trackId: number } => Number.isFinite(app.trackId))
+    .map((app) => toIosTarget(String(app.trackId), app.trackName));
 }
 
 async function discoverIosTargetsByRecommendations(
@@ -315,7 +395,7 @@ async function discoverIosTargetsByRecommendations(
     }
 
     seen.add(appId);
-    targets.push(toIosTarget(appId));
+    targets.push(toIosTarget(appId, app?.trackName));
 
     if (targets.length >= top) {
       break;
@@ -372,8 +452,8 @@ async function discoverIosTargets(ownerIosAppId: string, top: number, country: s
 
 export async function discoverCompetitorTargets(options: DiscoverCompetitorsOptions): Promise<AppTarget[]> {
   const top = normalizeTop(options.top);
-  const country = options.country ?? DEFAULT_COUNTRY;
-  const lang = options.lang ?? DEFAULT_LANG;
+  const country = options.country ?? DEFAULT_STORE_COUNTRY;
+  const lang = options.lang ?? DEFAULT_STORE_LANG;
   const ownerPlayAppId = normalizeText(options.ownerPlayAppId);
   const ownerIosAppId = normalizeText(options.ownerIosAppId);
 

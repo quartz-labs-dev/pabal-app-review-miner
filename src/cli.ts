@@ -3,10 +3,12 @@
 import path from "node:path";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
+import { enrichTargetsWithDisplayNames } from "./appMetadata";
 import { fetchAppStoreReviews } from "./appStoreReviews";
 import { discoverCompetitorTargets } from "./competitorDiscovery";
 import { fetchPlayReviews } from "./playReviews";
 import { resolveOwnerApp, ResolvedOwnerApp } from "./registeredApps";
+import { DEFAULT_STORE_COUNTRY, DEFAULT_STORE_LANG } from "./storeLocale";
 import {
   AppTarget,
   createOutputPaths,
@@ -38,6 +40,7 @@ interface CliArgs {
 
 interface AppProcessResult {
   app: string;
+  appName: string;
   status: AppStatus;
   mode: "run" | "dry-run" | "validate-only";
   play?: string;
@@ -99,8 +102,11 @@ function normalizeTarget(raw: AppTarget, index: number): AppTarget {
     throw new Error(`apps.json item at index ${index} is missing a valid "name"`);
   }
 
+  const displayName = (raw.displayName ?? "").trim();
+
   return {
     name,
+    displayName,
     play: raw.play,
     ios: raw.ios
   };
@@ -258,7 +264,9 @@ async function loadTargets(
   const targets = await discoverCompetitorTargets({
     ownerPlayAppId: owner.play,
     ownerIosAppId: owner.ios,
-    top
+    top,
+    country: DEFAULT_STORE_COUNTRY,
+    lang: DEFAULT_STORE_LANG
   });
 
   if (!targets.length) {
@@ -300,10 +308,12 @@ async function saveReviews(
   reviews: UnifiedReview[]
 ): Promise<string> {
   const paths = createOutputPaths(baseDir, ownerAppId, target.name);
+  const appName = target.displayName || target.name;
 
   const payload: ReviewsOutput = {
     ownerAppId,
     app: target.name,
+    appName,
     collectedAt: new Date().toISOString(),
     limitPerStore: limit,
     ids: {
@@ -334,7 +344,8 @@ async function processApp(
   }
 ): Promise<AppProcessResult> {
   const logger = options.logger;
-  const prefix = `[${target.name}]`;
+  const appName = target.displayName || target.name;
+  const prefix = `[${appName}]`;
   const outputPath = createOutputPaths(baseDir, ownerAppId, target.name).reviewsPath;
 
   if (!target.play && !target.ios) {
@@ -343,6 +354,7 @@ async function processApp(
 
     return {
       app: target.name,
+      appName,
       status: "skipped",
       mode: options.validateOnly ? "validate-only" : options.dryRun ? "dry-run" : "run",
       play: target.play,
@@ -355,6 +367,7 @@ async function processApp(
   if (options.validateOnly) {
     return {
       app: target.name,
+      appName,
       status: "ok",
       mode: "validate-only",
       play: target.play,
@@ -367,6 +380,7 @@ async function processApp(
   if (options.dryRun) {
     return {
       app: target.name,
+      appName,
       status: "ok",
       mode: "dry-run",
       play: target.play,
@@ -392,6 +406,7 @@ async function processApp(
 
     return {
       app: target.name,
+      appName,
       status: "ok",
       mode: "run",
       play: target.play,
@@ -405,6 +420,7 @@ async function processApp(
 
     return {
       app: target.name,
+      appName,
       status: "failed",
       mode: "run",
       play: target.play,
@@ -446,10 +462,11 @@ async function run(): Promise<void> {
   const owner = await resolveOwnerApp(argv.myApp ?? "", argv.registeredAppsPath);
   const ownerAppId = owner.ownerAppId;
   const { targets, autoDiscoveryUsed } = await loadTargets(argv, owner, logger);
+  const targetsWithNames = await enrichTargetsWithDisplayNames(targets, DEFAULT_STORE_COUNTRY, DEFAULT_STORE_LANG);
 
   const results: AppProcessResult[] = [];
 
-  for (const target of targets) {
+  for (const target of targetsWithNames) {
     const result = await processApp(process.cwd(), ownerAppId, target, argv.limit, {
       dryRun: Boolean(argv.dryRun),
       validateOnly: Boolean(argv.validateOnly),

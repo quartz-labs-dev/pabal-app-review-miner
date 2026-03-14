@@ -1,4 +1,5 @@
 import gplay, { IReviewsItem } from "google-play-scraper";
+import { DEFAULT_STORE_COUNTRY, DEFAULT_STORE_LANG } from "./storeLocale";
 import { normalizeText, ReviewItem, SourceReviewResult, toIsoString } from "./utils";
 
 const PLAY_MAX_PAGES = 20;
@@ -31,8 +32,8 @@ export async function fetchPlayReviews(appId: string, limit: number): Promise<So
         num: batchSize,
         paginate: true,
         nextPaginationToken: token,
-        lang: "en",
-        country: "us"
+        lang: DEFAULT_STORE_LANG,
+        country: DEFAULT_STORE_COUNTRY
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
