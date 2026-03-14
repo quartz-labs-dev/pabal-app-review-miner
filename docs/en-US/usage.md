@@ -9,6 +9,7 @@ For prerequisites and registered app setup, see [Setup](./setup.md).
 - `--ios`: competitor App Store app id
 - `--auto-top`: top N competitors per available store for auto-discovery mode (default `5`)
 - `--limit`: number of reviews per store (default `200`)
+- `--global`: collect reviews by iterating store-specific global market lists (Play country+language, App Store country). In global mode, `--limit` applies per market.
 - `--apps`: path to competitor list JSON
 - `--registered-apps-path`: custom registered apps file path
 - `--output text|json`: output mode (default `text`)
@@ -35,6 +36,12 @@ node dist/cli.js --my-app golden-horizon --apps apps.json --limit 200
 
 ```bash
 node dist/cli.js --my-app golden-horizon --auto-top 5 --limit 200
+```
+
+Global market sweep:
+
+```bash
+node dist/cli.js --my-app golden-horizon --auto-top 5 --limit 200 --global
 ```
 
 - If no `--apps`, `--play`, `--ios`, or positional `appName` is provided, the CLI auto-discovers competitors.

@@ -9,6 +9,7 @@
 - `--ios`: 경쟁 앱 App Store app id
 - `--auto-top`: 자동 탐색 시 스토어별 상위 N개 수집 (기본값 `5`)
 - `--limit`: 스토어별 리뷰 수 (기본값 `200`)
+- `--global`: 스토어별 글로벌 마켓 목록(Play: 국가+언어, App Store: 국가)을 순회하며 리뷰 수집. 글로벌 모드에서는 `--limit`이 마켓별로 적용됩니다.
 - `--apps`: 경쟁 앱 목록 JSON 경로
 - `--registered-apps-path`: 등록 앱 파일 경로 커스텀
 - `--output text|json`: 출력 모드 (기본값 `text`)
@@ -35,6 +36,12 @@ node dist/cli.js --my-app golden-horizon --apps apps.json --limit 200
 
 ```bash
 node dist/cli.js --my-app golden-horizon --auto-top 5 --limit 200
+```
+
+글로벌 국가 순회 수집:
+
+```bash
+node dist/cli.js --my-app golden-horizon --auto-top 5 --limit 200 --global
 ```
 
 - `--apps`, `--play`, `--ios`, positional `appName`이 없으면 자동 경쟁앱 탐색 모드로 동작합니다.

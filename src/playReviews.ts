@@ -6,6 +6,11 @@ const PLAY_MAX_PAGES = 20;
 const PLAY_MAX_BATCH = 200;
 const PLAY_SORT_NEWEST = 2;
 
+interface FetchPlayReviewsOptions {
+  country?: string;
+  lang?: string;
+}
+
 function mapPlayReview(row: IReviewsItem): ReviewItem {
   return {
     rating: Number(row.score ?? 0),
@@ -15,8 +20,14 @@ function mapPlayReview(row: IReviewsItem): ReviewItem {
   };
 }
 
-export async function fetchPlayReviews(appId: string, limit: number): Promise<SourceReviewResult> {
+export async function fetchPlayReviews(
+  appId: string,
+  limit: number,
+  options?: FetchPlayReviewsOptions
+): Promise<SourceReviewResult> {
   const targetLimit = Math.max(1, limit);
+  const country = options?.country ?? DEFAULT_STORE_COUNTRY;
+  const lang = options?.lang ?? DEFAULT_STORE_LANG;
   const reviews: ReviewItem[] = [];
   let token: string | undefined;
   let page = 0;
@@ -32,8 +43,8 @@ export async function fetchPlayReviews(appId: string, limit: number): Promise<So
         num: batchSize,
         paginate: true,
         nextPaginationToken: token,
-        lang: DEFAULT_STORE_LANG,
-        country: DEFAULT_STORE_COUNTRY
+        lang,
+        country
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

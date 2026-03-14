@@ -8,7 +8,12 @@ import { fetchAppStoreReviews } from "./appStoreReviews";
 import { discoverCompetitorTargets } from "./competitorDiscovery";
 import { fetchPlayReviews } from "./playReviews";
 import { resolveOwnerApp, ResolvedOwnerApp } from "./registeredApps";
-import { DEFAULT_STORE_COUNTRY, DEFAULT_STORE_LANG } from "./storeLocale";
+import {
+  DEFAULT_STORE_COUNTRY,
+  DEFAULT_STORE_LANG,
+  getIosCountries,
+  getPlayMarkets
+} from "./storeLocale";
 import {
   AppTarget,
   createOutputPaths,
@@ -34,6 +39,7 @@ interface CliArgs {
   limit: number;
   apps?: string;
   output: OutputMode;
+  global?: boolean;
   dryRun?: boolean;
   validateOnly?: boolean;
 }
@@ -63,6 +69,7 @@ interface RunReport {
   output: OutputMode;
   dryRun: boolean;
   validateOnly: boolean;
+  global: boolean;
   limit: number;
   summary: RunSummary;
   results: AppProcessResult[];
@@ -166,6 +173,12 @@ async function parseArgs(): Promise<CliArgs> {
       choices: ["text", "json"] as const,
       default: "text",
       describe: "Output format for agent-friendly consumption"
+    })
+    .option("global", {
+      type: "boolean",
+      default: false,
+      describe:
+        "Collect reviews market-by-market using store-specific global market lists (Play country+lang, App Store country). In global mode, --limit applies per market."
     })
     .option("dry-run", {
       type: "boolean",
@@ -284,17 +297,69 @@ async function loadTargets(
   };
 }
 
-async function collectReviews(target: AppTarget, limit: number): Promise<UnifiedReview[]> {
+async function collectReviews(
+  target: AppTarget,
+  limit: number,
+  options: {
+    globalMode: boolean;
+    logger: ReturnType<typeof createLogger>;
+    prefix: string;
+  }
+): Promise<UnifiedReview[]> {
   const merged: UnifiedReview[] = [];
+  let attempts = 0;
+  let successfulRequests = 0;
+
+  const playMarkets = getPlayMarkets(options.globalMode);
+  const iosCountries = getIosCountries(options.globalMode);
 
   if (target.play) {
-    const play = await fetchPlayReviews(target.play, limit);
-    merged.push(...play.reviews.map((review) => ({ ...review, source: "play" as const })));
+    for (const market of playMarkets) {
+      attempts += 1;
+      try {
+        const play = await fetchPlayReviews(target.play, limit, {
+          country: market.country,
+          lang: market.lang
+        });
+
+        merged.push(...play.reviews.map((review) => ({ ...review, source: "play" as const })));
+        successfulRequests += 1;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!options.globalMode) {
+          throw error;
+        }
+
+        options.logger.warn(
+          `${options.prefix} skipped Google Play market ${market.country}/${market.lang}: ${message}`
+        );
+      }
+    }
   }
 
   if (target.ios) {
-    const ios = await fetchAppStoreReviews(target.ios, limit);
-    merged.push(...ios.reviews.map((review) => ({ ...review, source: "ios" as const })));
+    for (const country of iosCountries) {
+      attempts += 1;
+      try {
+        const ios = await fetchAppStoreReviews(target.ios, limit, {
+          country
+        });
+
+        merged.push(...ios.reviews.map((review) => ({ ...review, source: "ios" as const })));
+        successfulRequests += 1;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!options.globalMode) {
+          throw error;
+        }
+
+        options.logger.warn(`${options.prefix} skipped App Store country ${country}: ${message}`);
+      }
+    }
+  }
+
+  if (attempts > 0 && successfulRequests === 0) {
+    throw new Error("All market requests failed.");
   }
 
   return dedupeReviews(merged);
@@ -340,6 +405,7 @@ async function processApp(
   options: {
     dryRun: boolean;
     validateOnly: boolean;
+    globalMode: boolean;
     logger: ReturnType<typeof createLogger>;
   }
 ): Promise<AppProcessResult> {
@@ -392,14 +458,20 @@ async function processApp(
 
   try {
     if (target.play) {
-      logger.info(`${prefix} Fetching Google Play reviews: ${target.play}`);
+      logger.info(
+        `${prefix} Fetching Google Play reviews: ${target.play}${options.globalMode ? " (global markets)" : ""}`
+      );
     }
 
     if (target.ios) {
-      logger.info(`${prefix} Fetching App Store reviews: ${target.ios}`);
+      logger.info(`${prefix} Fetching App Store reviews: ${target.ios}${options.globalMode ? " (global countries)" : ""}`);
     }
 
-    const reviews = await collectReviews(target, limit);
+    const reviews = await collectReviews(target, limit, {
+      globalMode: options.globalMode,
+      logger,
+      prefix
+    });
     await saveReviews(baseDir, ownerAppId, target, limit, reviews);
 
     logger.info(`${prefix} Saved ${reviews.length} reviews -> ${outputPath}`);
@@ -450,6 +522,7 @@ function printTextSummary(ownerAppId: string, summary: RunSummary, argv: CliArgs
 
   console.log(`- ownerAppId: ${ownerAppId}`);
   console.log(`- autoDiscoveryUsed: ${autoDiscoveryUsed}`);
+  console.log(`- global: ${Boolean(argv.global)}`);
   console.log(`- succeeded: ${summary.succeeded}`);
   console.log(`- failed: ${summary.failed}`);
   console.log(`- skipped: ${summary.skipped}`);
@@ -470,6 +543,7 @@ async function run(): Promise<void> {
     const result = await processApp(process.cwd(), ownerAppId, target, argv.limit, {
       dryRun: Boolean(argv.dryRun),
       validateOnly: Boolean(argv.validateOnly),
+      globalMode: Boolean(argv.global),
       logger
     });
 
@@ -486,6 +560,7 @@ async function run(): Promise<void> {
       output: argv.output,
       dryRun: Boolean(argv.dryRun),
       validateOnly: Boolean(argv.validateOnly),
+      global: Boolean(argv.global),
       limit: argv.limit,
       summary,
       results

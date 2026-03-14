@@ -27,6 +27,12 @@ interface RankedIosCandidate {
   rank: number;
 }
 
+interface RankedIosRecommendation {
+  appId: string;
+  app?: ITunesApp;
+  rank: number;
+}
+
 const IOS_SEARCH_LIMIT = 50;
 const PLAY_SEARCH_LIMIT = 50;
 
@@ -309,6 +315,16 @@ function scoreIosCandidate(a: RankedIosCandidate, b: RankedIosCandidate): number
   return bCount - aCount;
 }
 
+function scoreIosRecommendation(a: RankedIosRecommendation, b: RankedIosRecommendation): number {
+  const aCount = a.app?.userRatingCount ?? 0;
+  const bCount = b.app?.userRatingCount ?? 0;
+  if (aCount !== bCount) {
+    return bCount - aCount;
+  }
+
+  return a.rank - b.rank;
+}
+
 async function discoverIosTargetsBySearch(ownerEntry: ITunesApp, top: number, country: string): Promise<AppTarget[]> {
   const searchTerms = [normalizeText(ownerEntry.trackName), normalizeText(ownerEntry.primaryGenreName)].filter(
     (term): term is string => term.length > 0
@@ -387,16 +403,27 @@ async function discoverIosTargetsByRecommendations(
 
   const targets: AppTarget[] = [];
   const seen = new Set<string>();
+  const ranked: RankedIosRecommendation[] = [];
 
-  for (const appId of recommendationIds) {
+  for (let index = 0; index < recommendationIds.length; index += 1) {
+    const appId = recommendationIds[index];
     const app = recommendationApps.get(appId);
     if (shouldSkipIosApp(appId, ownerId, seen, ownerArtistId, app)) {
       continue;
     }
 
-    seen.add(appId);
-    targets.push(toIosTarget(appId, app?.trackName));
+    ranked.push({
+      appId,
+      app,
+      rank: index
+    });
+  }
 
+  ranked.sort(scoreIosRecommendation);
+
+  for (const candidate of ranked) {
+    seen.add(candidate.appId);
+    targets.push(toIosTarget(candidate.appId, candidate.app?.trackName));
     if (targets.length >= top) {
       break;
     }
