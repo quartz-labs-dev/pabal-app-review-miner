@@ -137,6 +137,17 @@ export async function writeJsonFile(filePath: string, data: unknown): Promise<vo
   await fs.writeFile(filePath, JSON.stringify(data, null, 2), "utf8");
 }
 
+export async function removeFileIfExists(filePath: string): Promise<void> {
+  try {
+    await fs.unlink(filePath);
+  } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException;
+    if (nodeError?.code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
 export async function readJsonFile<T>(filePath: string): Promise<T> {
   const raw = await fs.readFile(filePath, "utf8");
   return JSON.parse(raw) as T;

@@ -48,6 +48,7 @@ node dist/cli.js --my-app golden-horizon --auto-top 5 --limit 200 --global
 - Discovery is per available owner store id in `registered-apps.json`:
   - Google Play: `googlePlay.packageName`
   - App Store: `appStore.appId` (`You Might Also Like` shelf first, then search fallback)
+- In auto-discovery run mode, competitors with `30` or fewer total collected reviews are skipped and replaced by the next candidate from the same store pool.
 
 ## Output
 

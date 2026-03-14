@@ -48,6 +48,7 @@ node dist/cli.js --my-app golden-horizon --auto-top 5 --limit 200 --global
 - `registered-apps.json`의 내 앱 스토어 식별자를 기준으로 스토어별 탐색합니다.
   - Google Play: `googlePlay.packageName`
   - App Store: `appStore.appId` (`You Might Also Like` 우선, 부족 시 검색 폴백)
+- 자동 탐색 실수행(run)에서는 총 수집 리뷰가 `30개 이하`인 경쟁앱은 저장하지 않고, 같은 스토어의 다음 후보로 대체합니다.
 
 ## 출력
 

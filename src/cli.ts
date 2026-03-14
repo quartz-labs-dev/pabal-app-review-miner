@@ -22,6 +22,7 @@ import {
   dedupeReviews,
   DEFAULT_REVIEW_LIMIT,
   readJsonFile,
+  removeFileIfExists,
   ReviewsOutput,
   UnifiedReview,
   writeJsonFile
@@ -76,6 +77,18 @@ interface RunReport {
   summary: RunSummary;
   results: AppProcessResult[];
 }
+
+interface AutoDiscoveryPlan {
+  perStoreTarget: number;
+  requirePlay: boolean;
+  requireIos: boolean;
+  minReviewsExclusive: number;
+  candidatePoolTopPerStore: number;
+}
+
+const AUTO_DISCOVERY_POOL_MULTIPLIER = 5;
+const AUTO_DISCOVERY_POOL_MAX_PER_STORE = 50;
+const AUTO_MIN_REVIEWS_EXCLUSIVE = 30;
 
 function createLogger(outputMode: OutputMode) {
   if (outputMode === "json") {
@@ -259,11 +272,12 @@ async function loadTargets(
   argv: CliArgs,
   owner: ResolvedOwnerApp,
   logger: ReturnType<typeof createLogger>
-): Promise<{ targets: AppTarget[]; autoDiscoveryUsed: boolean }> {
+): Promise<{ targets: AppTarget[]; autoDiscoveryUsed: boolean; autoPlan?: AutoDiscoveryPlan }> {
   if (argv.apps) {
     return {
       targets: await loadTargetsFromAppsFile(argv.apps),
-      autoDiscoveryUsed: false
+      autoDiscoveryUsed: false,
+      autoPlan: undefined
     };
   }
 
@@ -271,15 +285,19 @@ async function loadTargets(
   if (hasDirectStoreIds || hasExplicitPositionalAppName(argv)) {
     return {
       targets: [await loadSingleTarget(argv)],
-      autoDiscoveryUsed: false
+      autoDiscoveryUsed: false,
+      autoPlan: undefined
     };
   }
 
   const top = normalizeAutoTop(argv.autoTop);
+  const requirePlay = Boolean(owner.play);
+  const requireIos = Boolean(owner.ios);
+  const candidatePoolTopPerStore = Math.min(AUTO_DISCOVERY_POOL_MAX_PER_STORE, top * AUTO_DISCOVERY_POOL_MULTIPLIER);
   const targets = await discoverCompetitorTargets({
     ownerPlayAppId: owner.play,
     ownerIosAppId: owner.ios,
-    top,
+    top: candidatePoolTopPerStore,
     country: DEFAULT_STORE_COUNTRY,
     lang: DEFAULT_STORE_LANG
   });
@@ -291,11 +309,21 @@ async function loadTargets(
     );
   }
 
-  logger.info(`[auto] Discovered ${targets.length} competitors (top ${top} per available store).`);
+  logger.info(
+    `[auto] Discovered ${targets.length} competitors ` +
+      `(candidate pool top ${candidatePoolTopPerStore} per available store, keep top ${top} per store).`
+  );
 
   return {
     targets,
-    autoDiscoveryUsed: true
+    autoDiscoveryUsed: true,
+    autoPlan: {
+      perStoreTarget: top,
+      requirePlay,
+      requireIos,
+      minReviewsExclusive: AUTO_MIN_REVIEWS_EXCLUSIVE,
+      candidatePoolTopPerStore
+    }
   };
 }
 
@@ -412,6 +440,7 @@ async function processApp(
     dryRun: boolean;
     validateOnly: boolean;
     globalMode: boolean;
+    minReviewsExclusive?: number;
     logger: ReturnType<typeof createLogger>;
   }
 ): Promise<AppProcessResult> {
@@ -478,6 +507,25 @@ async function processApp(
       logger,
       prefix
     });
+
+    if (typeof options.minReviewsExclusive === "number" && reviews.length <= options.minReviewsExclusive) {
+      const message = `skipped: ${reviews.length} reviews (<= ${options.minReviewsExclusive})`;
+      await removeFileIfExists(outputPath);
+      logger.warn(`${prefix} ${message}`);
+
+      return {
+        app: target.name,
+        appName,
+        status: "skipped",
+        mode: "run",
+        play: target.play,
+        ios: target.ios,
+        outputPath,
+        reviewCount: reviews.length,
+        message
+      };
+    }
+
     await saveReviews(baseDir, ownerAppId, target, limit, reviews);
 
     logger.info(`${prefix} Saved ${reviews.length} reviews -> ${outputPath}`);
@@ -534,26 +582,102 @@ function printTextSummary(ownerAppId: string, summary: RunSummary, argv: CliArgs
   console.log(`- skipped: ${summary.skipped}`);
 }
 
+function getPrimaryStoreKey(target: AppTarget): "play" | "ios" | null {
+  if (target.play && !target.ios) {
+    return "play";
+  }
+
+  if (target.ios && !target.play) {
+    return "ios";
+  }
+
+  if (target.play) {
+    return "play";
+  }
+
+  if (target.ios) {
+    return "ios";
+  }
+
+  return null;
+}
+
 async function run(): Promise<void> {
   const argv = await parseArgs();
   const logger = createLogger(argv.output);
 
   const owner = await resolveOwnerApp(argv.myApp ?? "", argv.registeredAppsPath);
   const ownerAppId = owner.ownerAppId;
-  const { targets, autoDiscoveryUsed } = await loadTargets(argv, owner, logger);
+  const { targets, autoDiscoveryUsed, autoPlan } = await loadTargets(argv, owner, logger);
   const targetsWithNames = await enrichTargetsWithDisplayNames(targets, DEFAULT_STORE_COUNTRY, DEFAULT_STORE_LANG);
 
   const results: AppProcessResult[] = [];
+  const shouldApplyAutoThreshold = autoDiscoveryUsed && Boolean(autoPlan) && !argv.dryRun && !argv.validateOnly;
 
-  for (const target of targetsWithNames) {
-    const result = await processApp(process.cwd(), ownerAppId, target, argv.limit, {
-      dryRun: Boolean(argv.dryRun),
-      validateOnly: Boolean(argv.validateOnly),
-      globalMode: Boolean(argv.global),
-      logger
-    });
+  if (shouldApplyAutoThreshold && autoPlan) {
+    const acceptedByStore = {
+      play: 0,
+      ios: 0
+    };
 
-    results.push(result);
+    for (const target of targetsWithNames) {
+      const storeKey = getPrimaryStoreKey(target);
+      if (!storeKey) {
+        continue;
+      }
+
+      if (
+        (storeKey === "play" && autoPlan.requirePlay && acceptedByStore.play >= autoPlan.perStoreTarget) ||
+        (storeKey === "ios" && autoPlan.requireIos && acceptedByStore.ios >= autoPlan.perStoreTarget)
+      ) {
+        continue;
+      }
+
+      const result = await processApp(process.cwd(), ownerAppId, target, argv.limit, {
+        dryRun: false,
+        validateOnly: false,
+        globalMode: Boolean(argv.global),
+        minReviewsExclusive: autoPlan.minReviewsExclusive,
+        logger
+      });
+
+      results.push(result);
+
+      if (result.status === "ok") {
+        if (storeKey === "play") {
+          acceptedByStore.play += 1;
+        } else {
+          acceptedByStore.ios += 1;
+        }
+      }
+
+      const playDone = !autoPlan.requirePlay || acceptedByStore.play >= autoPlan.perStoreTarget;
+      const iosDone = !autoPlan.requireIos || acceptedByStore.ios >= autoPlan.perStoreTarget;
+      if (playDone && iosDone) {
+        break;
+      }
+    }
+
+    const playDone = !autoPlan.requirePlay || acceptedByStore.play >= autoPlan.perStoreTarget;
+    const iosDone = !autoPlan.requireIos || acceptedByStore.ios >= autoPlan.perStoreTarget;
+    if (!playDone || !iosDone) {
+      logger.warn(
+        `[auto] Unable to fill target competitor quota with review threshold > ${autoPlan.minReviewsExclusive}. ` +
+          `play=${acceptedByStore.play}/${autoPlan.requirePlay ? autoPlan.perStoreTarget : 0}, ` +
+          `ios=${acceptedByStore.ios}/${autoPlan.requireIos ? autoPlan.perStoreTarget : 0}`
+      );
+    }
+  } else {
+    for (const target of targetsWithNames) {
+      const result = await processApp(process.cwd(), ownerAppId, target, argv.limit, {
+        dryRun: Boolean(argv.dryRun),
+        validateOnly: Boolean(argv.validateOnly),
+        globalMode: Boolean(argv.global),
+        logger
+      });
+
+      results.push(result);
+    }
   }
 
   const summary = summarize(results);
