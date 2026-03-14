@@ -4,8 +4,9 @@ import path from "node:path";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { fetchAppStoreReviews } from "./appStoreReviews";
+import { discoverCompetitorTargets } from "./competitorDiscovery";
 import { fetchPlayReviews } from "./playReviews";
-import { resolveOwnerAppId } from "./registeredApps";
+import { resolveOwnerApp, ResolvedOwnerApp } from "./registeredApps";
 import {
   AppTarget,
   createOutputPaths,
@@ -27,6 +28,7 @@ interface CliArgs {
   registeredAppsPath?: string;
   play?: string;
   ios?: string;
+  autoTop: number;
   limit: number;
   apps?: string;
   output: OutputMode;
@@ -54,6 +56,7 @@ interface RunSummary {
 interface RunReport {
   ok: boolean;
   ownerAppId: string;
+  autoDiscoveryUsed: boolean;
   output: OutputMode;
   dryRun: boolean;
   validateOnly: boolean;
@@ -103,6 +106,15 @@ function normalizeTarget(raw: AppTarget, index: number): AppTarget {
   };
 }
 
+function readRawRequestedAppName(argv: CliArgs): string {
+  const raw = argv.appName || (typeof argv._[0] === "string" ? String(argv._[0]) : "");
+  return raw.trim();
+}
+
+function resolveRequestedAppName(argv: CliArgs): string {
+  return readRawRequestedAppName(argv) || "app";
+}
+
 async function parseArgs(): Promise<CliArgs> {
   const parsed = await yargs(hideBin(process.argv))
     .scriptName("pabal-app-review-miner")
@@ -129,6 +141,11 @@ async function parseArgs(): Promise<CliArgs> {
     .option("ios", {
       type: "string",
       describe: "App Store app id"
+    })
+    .option("auto-top", {
+      type: "number",
+      default: 5,
+      describe: "Top N competitors per available store when only --my-app is provided"
     })
     .option("limit", {
       type: "number",
@@ -173,7 +190,7 @@ async function loadTargetsFromAppsFile(appsPath: string): Promise<AppTarget[]> {
 }
 
 async function loadSingleTarget(argv: CliArgs): Promise<AppTarget> {
-  const appName = argv.appName || (typeof argv._[0] === "string" ? String(argv._[0]) : "app");
+  const appName = resolveRequestedAppName(argv);
 
   if (argv.play || argv.ios) {
     return {
@@ -200,12 +217,63 @@ async function loadSingleTarget(argv: CliArgs): Promise<AppTarget> {
   );
 }
 
-async function loadTargets(argv: CliArgs): Promise<AppTarget[]> {
-  if (argv.apps) {
-    return loadTargetsFromAppsFile(argv.apps);
+function hasExplicitPositionalAppName(argv: CliArgs): boolean {
+  return readRawRequestedAppName(argv).length > 0;
+}
+
+function normalizeAutoTop(value: number): number {
+  if (!Number.isFinite(value)) {
+    throw new Error("--auto-top must be a finite number greater than or equal to 1.");
   }
 
-  return [await loadSingleTarget(argv)];
+  const normalized = Math.floor(value);
+  if (normalized < 1) {
+    throw new Error("--auto-top must be greater than or equal to 1.");
+  }
+
+  return normalized;
+}
+
+async function loadTargets(
+  argv: CliArgs,
+  owner: ResolvedOwnerApp,
+  logger: ReturnType<typeof createLogger>
+): Promise<{ targets: AppTarget[]; autoDiscoveryUsed: boolean }> {
+  if (argv.apps) {
+    return {
+      targets: await loadTargetsFromAppsFile(argv.apps),
+      autoDiscoveryUsed: false
+    };
+  }
+
+  const hasDirectStoreIds = Boolean(argv.play || argv.ios);
+  if (hasDirectStoreIds || hasExplicitPositionalAppName(argv)) {
+    return {
+      targets: [await loadSingleTarget(argv)],
+      autoDiscoveryUsed: false
+    };
+  }
+
+  const top = normalizeAutoTop(argv.autoTop);
+  const targets = await discoverCompetitorTargets({
+    ownerPlayAppId: owner.play,
+    ownerIosAppId: owner.ios,
+    top
+  });
+
+  if (!targets.length) {
+    throw new Error(
+      "Auto competitor discovery returned no targets. " +
+        "Provide --apps/--play/--ios explicitly or verify owner ids in registered-apps.json."
+    );
+  }
+
+  logger.info(`[auto] Discovered ${targets.length} competitors (top ${top} per available store).`);
+
+  return {
+    targets,
+    autoDiscoveryUsed: true
+  };
 }
 
 async function collectReviews(target: AppTarget, limit: number): Promise<UnifiedReview[]> {
@@ -355,7 +423,7 @@ function summarize(results: AppProcessResult[]): RunSummary {
   };
 }
 
-function printTextSummary(ownerAppId: string, summary: RunSummary, argv: CliArgs): void {
+function printTextSummary(ownerAppId: string, summary: RunSummary, argv: CliArgs, autoDiscoveryUsed: boolean): void {
   if (argv.validateOnly) {
     console.log("\nValidation summary");
   } else if (argv.dryRun) {
@@ -365,6 +433,7 @@ function printTextSummary(ownerAppId: string, summary: RunSummary, argv: CliArgs
   }
 
   console.log(`- ownerAppId: ${ownerAppId}`);
+  console.log(`- autoDiscoveryUsed: ${autoDiscoveryUsed}`);
   console.log(`- succeeded: ${summary.succeeded}`);
   console.log(`- failed: ${summary.failed}`);
   console.log(`- skipped: ${summary.skipped}`);
@@ -374,8 +443,9 @@ async function run(): Promise<void> {
   const argv = await parseArgs();
   const logger = createLogger(argv.output);
 
-  const ownerAppId = await resolveOwnerAppId(argv.myApp ?? "", argv.registeredAppsPath);
-  const targets = await loadTargets(argv);
+  const owner = await resolveOwnerApp(argv.myApp ?? "", argv.registeredAppsPath);
+  const ownerAppId = owner.ownerAppId;
+  const { targets, autoDiscoveryUsed } = await loadTargets(argv, owner, logger);
 
   const results: AppProcessResult[] = [];
 
@@ -395,6 +465,7 @@ async function run(): Promise<void> {
     const report: RunReport = {
       ok: summary.failed === 0,
       ownerAppId,
+      autoDiscoveryUsed,
       output: argv.output,
       dryRun: Boolean(argv.dryRun),
       validateOnly: Boolean(argv.validateOnly),
@@ -407,7 +478,7 @@ async function run(): Promise<void> {
     return;
   }
 
-  printTextSummary(ownerAppId, summary, argv);
+  printTextSummary(ownerAppId, summary, argv, autoDiscoveryUsed);
 }
 
 function wantsJsonOutputFromArgv(argv: string[]): boolean {

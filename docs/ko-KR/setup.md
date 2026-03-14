@@ -60,6 +60,9 @@ chmod 600 ~/.config/pabal-mcp/*
 - 앱 항목 최소 필수 필드는 `slug`입니다.
 - `--my-app`은 `slug`, `name`, `appStore.bundleId`, `appStore.appId`, `googlePlay.packageName` 중 하나로 매칭됩니다.
 - 출력 경로의 `{myAppId}`로 `slug`가 사용되므로 일관되게 유지하세요.
+- 자동 경쟁앱 탐색(`--my-app`만 사용)은 아래 중 최소 1개가 필요합니다.
+  - `googlePlay.packageName`
+  - `appStore.appId`
 
 ## 4. (선택) 등록 파일 경로 커스텀
 

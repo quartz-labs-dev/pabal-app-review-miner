@@ -8,6 +8,7 @@
 
 - Collects newest reviews from Google Play and App Store
 - Supports single competitor and multi competitor workflows
+- Auto-discovers top competitors when only `--my-app` is provided
 - Saves raw JSON per competitor under your app scope
 
 Output structure:
@@ -20,6 +21,7 @@ Output structure:
 npm install
 npm run build
 node dist/cli.js --my-app golden-horizon --apps apps.json --limit 200
+node dist/cli.js --my-app golden-horizon --auto-top 5 --limit 200
 ```
 
 ## Documentation Map

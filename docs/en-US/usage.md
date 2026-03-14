@@ -7,6 +7,7 @@ For prerequisites and registered app setup, see [Setup](./setup.md).
 - `--my-app` (required): key to resolve your app id
 - `--play`: competitor Google Play app id
 - `--ios`: competitor App Store app id
+- `--auto-top`: top N competitors per available store for auto-discovery mode (default `5`)
 - `--limit`: number of reviews per store (default `200`)
 - `--apps`: path to competitor list JSON
 - `--registered-apps-path`: custom registered apps file path
@@ -29,6 +30,17 @@ node dist/cli.js photopills \
 ```bash
 node dist/cli.js --my-app golden-horizon --apps apps.json --limit 200
 ```
+
+## Auto Discovery (`--my-app` only)
+
+```bash
+node dist/cli.js --my-app golden-horizon --auto-top 5 --limit 200
+```
+
+- If no `--apps`, `--play`, `--ios`, or positional `appName` is provided, the CLI auto-discovers competitors.
+- Discovery is per available owner store id in `registered-apps.json`:
+  - Google Play: `googlePlay.packageName`
+  - App Store: `appStore.appId` (`You Might Also Like` shelf first, then search fallback)
 
 ## Output
 

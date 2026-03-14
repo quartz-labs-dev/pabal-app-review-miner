@@ -25,6 +25,13 @@ interface RegisteredAppsFile {
   apps?: RegisteredAppEntry[];
 }
 
+export interface ResolvedOwnerApp {
+  ownerAppId: string;
+  name?: string;
+  play?: string;
+  ios?: string;
+}
+
 function normalize(value: string | undefined): string {
   return (value ?? "").trim().toLowerCase();
 }
@@ -45,6 +52,11 @@ function matchesQuery(app: RegisteredAppEntry, query: string): boolean {
 }
 
 export async function resolveOwnerAppId(query: string, filePath?: string): Promise<string> {
+  const owner = await resolveOwnerApp(query, filePath);
+  return owner.ownerAppId;
+}
+
+export async function resolveOwnerApp(query: string, filePath?: string): Promise<ResolvedOwnerApp> {
   const registeredPath = filePath
     ? path.resolve(process.cwd(), filePath)
     : DEFAULT_REGISTERED_APPS_PATH;
@@ -69,5 +81,10 @@ export async function resolveOwnerAppId(query: string, filePath?: string): Promi
     );
   }
 
-  return found.slug;
+  return {
+    ownerAppId: found.slug,
+    name: found.name,
+    play: found.googlePlay?.packageName,
+    ios: found.appStore?.appId
+  };
 }

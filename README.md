@@ -6,6 +6,7 @@ CLI tool for collecting raw competitor reviews from Google Play and App Store, o
 
 - Collects newest reviews from Google Play and App Store
 - Supports single-app and multi-app competitor input
+- Auto-discovers top competitors when only `--my-app` is provided
 - Saves raw JSON per competitor under your app scope
 
 Output structure:
@@ -19,6 +20,9 @@ npm install
 npm run build
 npm run setup:config
 node dist/cli.js --my-app golden-horizon --apps apps.json --limit 200
+
+# or auto-discover competitors (top 5 per available store by default)
+node dist/cli.js --my-app golden-horizon --auto-top 5 --limit 200
 ```
 
 ## Documentation

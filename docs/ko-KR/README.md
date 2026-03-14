@@ -8,6 +8,7 @@
 
 - Google Play / App Store 최신 리뷰 수집
 - 단일 경쟁 앱, 멀티 경쟁 앱 수집 지원
+- `--my-app`만으로 스토어별 상위 경쟁 앱 자동 탐색 지원
 - 내 앱 기준 스코프로 경쟁 앱별 JSON 저장
 
 출력 구조:
@@ -20,6 +21,7 @@
 npm install
 npm run build
 node dist/cli.js --my-app golden-horizon --apps apps.json --limit 200
+node dist/cli.js --my-app golden-horizon --auto-top 5 --limit 200
 ```
 
 ## 문서 안내

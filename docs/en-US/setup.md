@@ -60,6 +60,9 @@ chmod 600 ~/.config/pabal-mcp/*
 - Minimum required field per app is `slug`.
 - `--my-app` can match `slug`, `name`, `appStore.bundleId`, `appStore.appId`, or `googlePlay.packageName`.
 - Keep `slug` stable because it is used as `{myAppId}` in output paths.
+- Auto competitor discovery (`--my-app` only mode) requires at least one of:
+  - `googlePlay.packageName`
+  - `appStore.appId`
 
 ## 4. Optional Custom Path
 
