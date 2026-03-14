@@ -32,6 +32,10 @@ export interface ReviewsOutput {
     play?: string;
     ios?: string;
   };
+  links: {
+    play?: string;
+    ios?: string;
+  };
   counts: {
     play: number;
     ios: number;
@@ -87,6 +91,24 @@ export function createOutputPaths(baseDir: string, ownerAppId: string, appName: 
   return {
     reviewsPath: path.resolve(baseDir, "data", safeOwnerId, "reviews", `${safeName}.json`)
   };
+}
+
+export function createPlayStoreAppUrl(appId: string | undefined): string | undefined {
+  const normalized = normalizeText(appId);
+  if (!normalized) {
+    return undefined;
+  }
+
+  return `https://play.google.com/store/apps/details?id=${encodeURIComponent(normalized)}`;
+}
+
+export function createAppStoreAppUrl(appId: string | undefined): string | undefined {
+  const normalized = normalizeText(appId);
+  if (!normalized) {
+    return undefined;
+  }
+
+  return `https://apps.apple.com/app/id${encodeURIComponent(normalized)}`;
 }
 
 export function dedupeReviews(reviews: UnifiedReview[]): UnifiedReview[] {

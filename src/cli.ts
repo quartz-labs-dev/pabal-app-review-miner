@@ -16,7 +16,9 @@ import {
 } from "./storeLocale";
 import {
   AppTarget,
+  createAppStoreAppUrl,
   createOutputPaths,
+  createPlayStoreAppUrl,
   dedupeReviews,
   DEFAULT_REVIEW_LIMIT,
   readJsonFile,
@@ -384,6 +386,10 @@ async function saveReviews(
     ids: {
       play: target.play,
       ios: target.ios
+    },
+    links: {
+      play: createPlayStoreAppUrl(target.play),
+      ios: createAppStoreAppUrl(target.ios)
     },
     counts: {
       play: reviews.filter((review) => review.source === "play").length,
