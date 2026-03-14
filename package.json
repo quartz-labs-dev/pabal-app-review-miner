@@ -9,6 +9,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/cli.ts",
+    "dev:add-by-name": "tsx src/addByName.ts",
+    "add-by-name": "npm run build && node dist/addByName.js",
     "setup:config": "node scripts/setup-config.mjs",
     "start": "npm run build && node dist/cli.js"
   },

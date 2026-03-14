@@ -23,6 +23,9 @@ node dist/cli.js --my-app golden-horizon --apps apps.json --limit 200
 
 # or auto-discover competitors (top 5 per available store by default)
 node dist/cli.js --my-app golden-horizon --auto-top 5 --limit 200
+
+# add one app by name (searches both stores, then collects and saves reviews)
+node dist/addByName.js --my-app golden-horizon --name "BJJBuddy"
 ```
 
 ## Documentation
