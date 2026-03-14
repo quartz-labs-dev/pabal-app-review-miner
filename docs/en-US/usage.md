@@ -7,6 +7,7 @@ For prerequisites and registered app setup, see [Setup](./setup.md).
 - `--my-app` (required): key to resolve your app id
 - `--play`: competitor Google Play app id
 - `--ios`: competitor App Store app id
+- `--platform`: review source filter: `both` | `ios` | `android` (default `both`)
 - `--auto-top`: top N competitors per available store for auto-discovery mode (default `5`)
 - `--limit`: number of reviews per store (default `200`)
 - `--global`: collect reviews by iterating store-specific global market lists (Play country+language, App Store country). In global mode, `--limit` applies per market.
@@ -23,6 +24,28 @@ node dist/cli.js photopills \
   --my-app golden-horizon \
   --play com.photopills.photopills \
   --ios 596027698 \
+  --limit 200
+```
+
+iOS only (even when both ids are present):
+
+```bash
+node dist/cli.js photopills \
+  --my-app golden-horizon \
+  --play com.photopills.photopills \
+  --ios 596027698 \
+  --platform ios \
+  --limit 200
+```
+
+Android only:
+
+```bash
+node dist/cli.js photopills \
+  --my-app golden-horizon \
+  --play com.photopills.photopills \
+  --ios 596027698 \
+  --platform android \
   --limit 200
 ```
 

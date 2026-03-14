@@ -7,6 +7,7 @@
 - `--my-app` (필수): 내 앱 ID를 찾기 위한 키
 - `--play`: 경쟁 앱 Google Play app id
 - `--ios`: 경쟁 앱 App Store app id
+- `--platform`: 수집 플랫폼 필터 `both` | `ios` | `android` (기본값 `both`)
 - `--auto-top`: 자동 탐색 시 스토어별 상위 N개 수집 (기본값 `5`)
 - `--limit`: 스토어별 리뷰 수 (기본값 `200`)
 - `--global`: 스토어별 글로벌 마켓 목록(Play: 국가+언어, App Store: 국가)을 순회하며 리뷰 수집. 글로벌 모드에서는 `--limit`이 마켓별로 적용됩니다.
@@ -23,6 +24,28 @@ node dist/cli.js photopills \
   --my-app golden-horizon \
   --play com.photopills.photopills \
   --ios 596027698 \
+  --limit 200
+```
+
+둘 다 ID가 있어도 iOS만 수집:
+
+```bash
+node dist/cli.js photopills \
+  --my-app golden-horizon \
+  --play com.photopills.photopills \
+  --ios 596027698 \
+  --platform ios \
+  --limit 200
+```
+
+Android만 수집:
+
+```bash
+node dist/cli.js photopills \
+  --my-app golden-horizon \
+  --play com.photopills.photopills \
+  --ios 596027698 \
+  --platform android \
   --limit 200
 ```
 

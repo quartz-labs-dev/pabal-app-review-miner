@@ -4,6 +4,7 @@ import gplay, { IAppItem } from "google-play-scraper";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { fetchAppStoreReviews } from "./appStoreReviews";
+import { includesIos, includesPlay, PlatformMode } from "./platform";
 import { fetchPlayReviews } from "./playReviews";
 import { resolveOwnerApp } from "./registeredApps";
 import {
@@ -35,6 +36,7 @@ interface CliArgs {
   name?: string;
   playId?: string;
   iosId?: string;
+  platform: PlatformMode;
   limit: number;
   global: boolean;
   output: OutputMode;
@@ -181,34 +183,39 @@ function pickBestIosResult(results: ITunesSearchResult[], term: string): ITunesS
 async function resolveStoreIds(
   term: string,
   playIdOverride: string | undefined,
-  iosIdOverride: string | undefined
+  iosIdOverride: string | undefined,
+  platform: PlatformMode
 ): Promise<ResolvedStoreIds> {
   const resolved: ResolvedStoreIds = {};
   const country = DEFAULT_STORE_COUNTRY;
   const lang = DEFAULT_STORE_LANG;
 
-  if (normalizeText(playIdOverride)) {
-    resolved.playId = normalizeText(playIdOverride);
-  } else {
-    const playResults = await gplay.search({
-      term,
-      num: 25,
-      country,
-      lang
-    });
-    const bestPlay = pickBestPlayResult(playResults, term);
-    resolved.playId = normalizeText(bestPlay?.appId) || undefined;
-    resolved.playTitle = normalizeText(bestPlay?.title) || undefined;
+  if (includesPlay(platform)) {
+    if (normalizeText(playIdOverride)) {
+      resolved.playId = normalizeText(playIdOverride);
+    } else {
+      const playResults = await gplay.search({
+        term,
+        num: 25,
+        country,
+        lang
+      });
+      const bestPlay = pickBestPlayResult(playResults, term);
+      resolved.playId = normalizeText(bestPlay?.appId) || undefined;
+      resolved.playTitle = normalizeText(bestPlay?.title) || undefined;
+    }
   }
 
-  if (normalizeText(iosIdOverride)) {
-    resolved.iosId = normalizeText(iosIdOverride);
-  } else {
-    const iosPayload = await fetchJsonWithRetry<ITunesSearchResponse>(createIosSearchUrl(term, country));
-    const iosResults = Array.isArray(iosPayload.results) ? iosPayload.results : [];
-    const bestIos = pickBestIosResult(iosResults, term);
-    resolved.iosId = normalizeText(String(bestIos?.trackId ?? "")) || undefined;
-    resolved.iosTitle = normalizeText(bestIos?.trackName) || undefined;
+  if (includesIos(platform)) {
+    if (normalizeText(iosIdOverride)) {
+      resolved.iosId = normalizeText(iosIdOverride);
+    } else {
+      const iosPayload = await fetchJsonWithRetry<ITunesSearchResponse>(createIosSearchUrl(term, country));
+      const iosResults = Array.isArray(iosPayload.results) ? iosPayload.results : [];
+      const bestIos = pickBestIosResult(iosResults, term);
+      resolved.iosId = normalizeText(String(bestIos?.trackId ?? "")) || undefined;
+      resolved.iosTitle = normalizeText(bestIos?.trackName) || undefined;
+    }
   }
 
   return resolved;
@@ -297,6 +304,11 @@ async function parseArgs(): Promise<CliArgs> {
       type: "string",
       describe: "Optional App Store id override"
     })
+    .option("platform", {
+      choices: ["both", "ios", "android"] as const,
+      default: "both",
+      describe: "Review source platform filter (default: both)"
+    })
     .option("limit", {
       type: "number",
       default: DEFAULT_REVIEW_LIMIT,
@@ -326,9 +338,12 @@ async function run(): Promise<void> {
   const owner = await resolveOwnerApp(args.myApp ?? "", args.registeredAppsPath);
   const term = normalizeText(args.name);
 
-  const ids = await resolveStoreIds(term, args.playId, args.iosId);
+  const ids = await resolveStoreIds(term, args.playId, args.iosId, args.platform);
   if (!ids.playId && !ids.iosId) {
-    throw new Error(`No store app ids found for "${term}".`);
+    throw new Error(
+      `No store app ids found for "${term}" with --platform=${args.platform}. ` +
+        "Provide matching --play-id/--ios-id or switch --platform."
+    );
   }
 
   const appName = ids.playTitle || ids.iosTitle || term;
@@ -340,7 +355,8 @@ async function run(): Promise<void> {
   };
 
   logger.info(
-    `[resolve] ${term} -> play=${target.play ?? "-"} ios=${target.ios ?? "-"} (global=${String(args.global)})`
+    `[resolve] ${term} -> play=${target.play ?? "-"} ios=${target.ios ?? "-"} ` +
+      `(platform=${args.platform}, global=${String(args.global)})`
   );
 
   const reviews = await collectReviews(target, args.limit, Boolean(args.global), logger);

@@ -6,6 +6,7 @@ import { hideBin } from "yargs/helpers";
 import { enrichTargetsWithDisplayNames } from "./appMetadata";
 import { fetchAppStoreReviews } from "./appStoreReviews";
 import { discoverCompetitorTargets } from "./competitorDiscovery";
+import { applyPlatformFilter, includesIos, includesPlay, PlatformMode } from "./platform";
 import { fetchPlayReviews } from "./playReviews";
 import { resolveOwnerApp, ResolvedOwnerApp } from "./registeredApps";
 import {
@@ -42,6 +43,7 @@ interface CliArgs {
   limit: number;
   apps?: string;
   output: OutputMode;
+  platform: PlatformMode;
   global?: boolean;
   dryRun?: boolean;
   validateOnly?: boolean;
@@ -73,6 +75,7 @@ interface RunReport {
   dryRun: boolean;
   validateOnly: boolean;
   global: boolean;
+  platform: PlatformMode;
   limit: number;
   summary: RunSummary;
   results: AppProcessResult[];
@@ -189,6 +192,11 @@ async function parseArgs(): Promise<CliArgs> {
       default: "text",
       describe: "Output format for agent-friendly consumption"
     })
+    .option("platform", {
+      choices: ["both", "ios", "android"] as const,
+      default: "both",
+      describe: "Review source platform filter (default: both)"
+    })
     .option("global", {
       type: "boolean",
       default: true,
@@ -275,7 +283,7 @@ async function loadTargets(
 ): Promise<{ targets: AppTarget[]; autoDiscoveryUsed: boolean; autoPlan?: AutoDiscoveryPlan }> {
   if (argv.apps) {
     return {
-      targets: await loadTargetsFromAppsFile(argv.apps),
+      targets: (await loadTargetsFromAppsFile(argv.apps)).map((target) => applyPlatformFilter(target, argv.platform)),
       autoDiscoveryUsed: false,
       autoPlan: undefined
     };
@@ -283,20 +291,35 @@ async function loadTargets(
 
   const hasDirectStoreIds = Boolean(argv.play || argv.ios);
   if (hasDirectStoreIds || hasExplicitPositionalAppName(argv)) {
+    const target = applyPlatformFilter(await loadSingleTarget(argv), argv.platform);
+    if (!target.play && !target.ios) {
+      throw new Error(
+        `No target ids remain after applying --platform=${argv.platform}. ` +
+          "Provide a matching store id (--play or --ios) or switch --platform."
+      );
+    }
+
     return {
-      targets: [await loadSingleTarget(argv)],
+      targets: [target],
       autoDiscoveryUsed: false,
       autoPlan: undefined
     };
   }
 
   const top = normalizeAutoTop(argv.autoTop);
-  const requirePlay = Boolean(owner.play);
-  const requireIos = Boolean(owner.ios);
+  const requirePlay = includesPlay(argv.platform) && Boolean(owner.play);
+  const requireIos = includesIos(argv.platform) && Boolean(owner.ios);
+  if (!requirePlay && !requireIos) {
+    throw new Error(
+      `Auto discovery has no owner store id for --platform=${argv.platform}. ` +
+        "Check registered-apps.json or switch --platform."
+    );
+  }
+
   const candidatePoolTopPerStore = Math.min(AUTO_DISCOVERY_POOL_MAX_PER_STORE, top * AUTO_DISCOVERY_POOL_MULTIPLIER);
   const targets = await discoverCompetitorTargets({
-    ownerPlayAppId: owner.play,
-    ownerIosAppId: owner.ios,
+    ownerPlayAppId: requirePlay ? owner.play : undefined,
+    ownerIosAppId: requireIos ? owner.ios : undefined,
     top: candidatePoolTopPerStore,
     country: DEFAULT_STORE_COUNTRY,
     lang: DEFAULT_STORE_LANG
@@ -315,7 +338,7 @@ async function loadTargets(
   );
 
   return {
-    targets,
+    targets: targets.map((target) => applyPlatformFilter(target, argv.platform)),
     autoDiscoveryUsed: true,
     autoPlan: {
       perStoreTarget: top,
@@ -576,6 +599,7 @@ function printTextSummary(ownerAppId: string, summary: RunSummary, argv: CliArgs
 
   console.log(`- ownerAppId: ${ownerAppId}`);
   console.log(`- autoDiscoveryUsed: ${autoDiscoveryUsed}`);
+  console.log(`- platform: ${argv.platform}`);
   console.log(`- global: ${Boolean(argv.global)}`);
   console.log(`- succeeded: ${summary.succeeded}`);
   console.log(`- failed: ${summary.failed}`);
@@ -800,6 +824,7 @@ async function run(): Promise<void> {
       dryRun: Boolean(argv.dryRun),
       validateOnly: Boolean(argv.validateOnly),
       global: globalMode,
+      platform: argv.platform,
       limit: argv.limit,
       summary,
       results
