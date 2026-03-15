@@ -67,6 +67,8 @@ npm run report:analyze -- --my-app golden-horizon --include-self
 
 - `npm run report:render-html -- --my-app <owner> ...`
 - `node dist/renderReportHtml.js ...`
+- 생성되는 HTML 상단 왼쪽에는 홈으로 이동하는 `Home` 버튼(`/`)이 포함됩니다.
+- 상단 컨트롤은 탭에 따라 표시됩니다: `Raw 리뷰`에서는 `원어 전체 보기`, `실행 백로그`에서는 `근거 펼치기`만 노출됩니다.
 
 ### CLI 옵션
 

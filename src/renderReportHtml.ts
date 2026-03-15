@@ -882,24 +882,47 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
         margin: 0 auto;
         padding: 10px 14px;
         display: grid;
-        grid-template-columns: minmax(320px, 1fr) auto auto auto auto;
+        grid-template-columns: auto minmax(320px, 1fr) auto auto auto;
         gap: 10px;
         align-items: center;
       }
-      .tabs { display: flex; gap: 6px; }
+      .home-link {
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        white-space: nowrap;
+      }
+      .tabs {
+        display: inline-flex;
+        align-items: flex-end;
+        gap: 4px;
+        padding: 0 2px;
+        border-bottom: 1px solid var(--line);
+      }
       .tab-btn {
-        border: 1px solid var(--line);
-        background: var(--panel);
-        color: var(--ink);
-        border-radius: 10px;
-        padding: 8px 10px;
+        border: 1px solid transparent;
+        border-bottom: 0;
+        background: transparent;
+        color: var(--sub);
+        border-radius: 10px 10px 0 0;
+        padding: 9px 12px 8px;
         font-size: 13px;
+        font-weight: 600;
         cursor: pointer;
       }
       .tab-btn.active {
-        border-color: var(--accent);
+        border-top-color: var(--accent);
+        border-left-color: var(--line);
+        border-right-color: var(--line);
         color: #0369a1;
-        background: var(--accent-soft);
+        background: var(--panel);
+      }
+      .tab-btn:not(.active):hover {
+        color: var(--ink);
+        background: #eef2f8;
+        border-left-color: #dbe2ea;
+        border-right-color: #dbe2ea;
       }
       h1 {
         margin: 8px 0 10px;
@@ -964,6 +987,14 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
         align-items: center;
         gap: 8px;
         cursor: pointer;
+      }
+      .hidden-control {
+        display: none !important;
+      }
+      .home-link:hover {
+        border-color: var(--accent);
+        color: #0369a1;
+        background: var(--accent-soft);
       }
       .app {
         border: 1px solid var(--line);
@@ -1035,7 +1066,7 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
         font-size: 13px;
         line-height: 1.4;
       }
-      .show-all-original .org-text,
+      body.show-all-original #viewRaw .org-text,
       .quote-card.show-one-original .org-text {
         display: block;
       }
@@ -1110,7 +1141,7 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
       .example-org { margin-top: 6px; }
       @media (max-width: 1100px) {
         .top-inner {
-          grid-template-columns: minmax(240px, 1fr) auto auto;
+          grid-template-columns: auto minmax(220px, 1fr) auto auto;
         }
       }
       @media (max-width: 900px) {
@@ -1129,13 +1160,13 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
   <body>
     <div class=\"top\">
       <div class=\"top-inner\">
+        <a class=\"home-link\" href=\"/\">홈</a>
         <input id=\"search\" type=\"search\" placeholder=\"검색 (앱명, 기능요청, 키워드, 원문)\" />
         <div class=\"tabs\">
           <button id=\"tabRaw\" class=\"tab-btn active\" type=\"button\">Raw 리뷰</button>
           <button id=\"tabBacklog\" class=\"tab-btn\" type=\"button\">실행 백로그</button>
         </div>
         <label class=\"toggle-all-label\"><input id=\"toggleAll\" type=\"checkbox\" /> 원어 전체 보기</label>
-        <button id=\"expandAll\" type=\"button\">모두 펼치기</button>
         <button id=\"toggleEvidenceAll\" type=\"button\">근거 펼치기</button>
       </div>
     </div>
@@ -1162,7 +1193,7 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
       const root = document.getElementById('root');
       const searchInput = document.getElementById('search');
       const toggleAll = document.getElementById('toggleAll');
-      const expandAll = document.getElementById('expandAll');
+      const toggleAllLabel = toggleAll ? toggleAll.closest('.toggle-all-label') : null;
       const toggleEvidenceAll = document.getElementById('toggleEvidenceAll');
       const tabRaw = document.getElementById('tabRaw');
       const tabBacklog = document.getElementById('tabBacklog');
@@ -1171,10 +1202,6 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
 
       function currentViewElement() {
         return viewRaw.classList.contains('active') ? viewRaw : viewBacklog;
-      }
-
-      function currentDetails() {
-        return Array.from(currentViewElement().querySelectorAll('details.app'));
       }
 
       function visibleEvidenceRows() {
@@ -1234,6 +1261,11 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
           viewBacklog.classList.add('active');
         }
 
+        if (toggleAllLabel instanceof HTMLElement) {
+          toggleAllLabel.classList.toggle('hidden-control', !raw);
+        }
+        toggleEvidenceAll.classList.toggle('hidden-control', raw);
+        syncEvidenceToggleText();
         applySearch();
       }
 
@@ -1291,15 +1323,6 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
         } else {
           document.body.classList.remove('show-all-original');
         }
-      });
-
-      expandAll.addEventListener('click', () => {
-        const details = currentDetails();
-        const allOpen = details.every((app) => app.open);
-        details.forEach((app) => {
-          app.open = !allOpen;
-        });
-        expandAll.textContent = allOpen ? '모두 펼치기' : '모두 접기';
       });
 
       searchInput.addEventListener('input', applySearch);

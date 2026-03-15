@@ -67,6 +67,8 @@ Render actionable markdown report to interactive HTML.
 
 - `npm run report:render-html -- --my-app <owner> ...`
 - `node dist/renderReportHtml.js ...`
+- Generated HTML top bar includes a `Home` button (`/`) at the top-left.
+- In top controls, `Show all original text` appears only in `Raw Reviews` tab, and `Expand evidence` appears only in `Actionable Backlog` tab.
 
 ### CLI Options
 
