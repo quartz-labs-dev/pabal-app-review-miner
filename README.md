@@ -40,6 +40,9 @@ npm run analyze-competitors -- --my-app golden-horizon
 
 # render interactive HTML (Raw + Backlog tabs, Korean default with source toggle)
 npm run render-report-html -- --my-app golden-horizon
+
+# preview the rendered HTML on localhost
+npm run preview-report -- --my-app golden-horizon --port 4173
 ```
 
 ## Documentation

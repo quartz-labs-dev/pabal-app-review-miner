@@ -2,7 +2,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import yargs from "yargs";
+import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 import { resolveOwnerApp } from "./registeredApps";
 import { ensureDir, fetchJsonWithRetry, normalizeText, readJsonFile, ReviewsOutput, writeJsonFile } from "./utils";

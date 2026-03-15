@@ -14,6 +14,7 @@
     "dev:translate-reviews": "tsx src/translateReviews.ts",
     "dev:analyze-competitors": "tsx src/analyzeCompetitors.ts",
     "dev:render-report-html": "tsx src/renderReportHtml.ts",
+    "dev:preview-report": "tsx src/previewReport.ts",
     "precollect-reviews": "npm run build",
     "collect-reviews": "node dist/cli.js",
     "precollect-reviews-by-name": "npm run build",
@@ -24,6 +25,8 @@
     "analyze-competitors": "node dist/analyzeCompetitors.js",
     "prerender-report-html": "npm run build",
     "render-report-html": "node dist/renderReportHtml.js",
+    "prepreview-report": "npm run build",
+    "preview-report": "node dist/previewReport.js",
     "setup:config": "node scripts/setup-config.mjs",
     "start": "npm run collect-reviews"
   },
@@ -36,7 +39,7 @@
   "author": "",
   "license": "MIT",
   "engines": {
-    "node": ">=18"
+    "node": ">=20.19.0"
   },
   "dependencies": {
     "google-play-scraper": "^10.1.2",

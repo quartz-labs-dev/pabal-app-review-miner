@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import gplay, { IAppItem } from "google-play-scraper";
-import yargs from "yargs";
+import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 import { fetchAppStoreReviews } from "./appStoreReviews";
 import { includesIos, includesPlay, PlatformMode } from "./platform";

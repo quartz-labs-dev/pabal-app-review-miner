@@ -30,6 +30,7 @@ npm run collect-reviews-by-name -- --my-app golden-horizon --name "BJJBuddy"
 npm run translate-reviews -- --my-app golden-horizon
 npm run analyze-competitors -- --my-app golden-horizon
 npm run render-report-html -- --my-app golden-horizon
+npm run preview-report -- --my-app golden-horizon --port 4173
 ```
 
 ## Documentation Map
@@ -40,3 +41,4 @@ npm run render-report-html -- --my-app golden-horizon
 - [translate-reviews](./translate-reviews.md): Korean translation pipeline for collected reviews
 - [analyze-competitors](./analyze-competitors.md): Korean competitor insight report generation
 - [render-report-html](./render-report-html.md): interactive web view (Raw + actionable backlog)
+- [preview-report](./preview-report.md): local localhost preview server for rendered reports

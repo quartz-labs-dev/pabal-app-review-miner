@@ -30,6 +30,7 @@ npm run collect-reviews-by-name -- --my-app golden-horizon --name "BJJBuddy"
 npm run translate-reviews -- --my-app golden-horizon
 npm run analyze-competitors -- --my-app golden-horizon
 npm run render-report-html -- --my-app golden-horizon
+npm run preview-report -- --my-app golden-horizon --port 4173
 ```
 
 ## 문서 안내
@@ -40,3 +41,4 @@ npm run render-report-html -- --my-app golden-horizon
 - [translate-reviews](./translate-reviews.md): 수집 리뷰 한국어 번역 파이프라인
 - [analyze-competitors](./analyze-competitors.md): 경쟁앱 한글 분석 리포트 생성
 - [render-report-html](./render-report-html.md): Raw+백로그 웹 뷰어 생성
+- [preview-report](./preview-report.md): 생성된 리포트 localhost 미리보기 서버

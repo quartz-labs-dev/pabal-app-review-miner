@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import path from "node:path";
-import yargs from "yargs";
+import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 import { enrichTargetsWithDisplayNames } from "./appMetadata";
 import { fetchAppStoreReviews } from "./appStoreReviews";

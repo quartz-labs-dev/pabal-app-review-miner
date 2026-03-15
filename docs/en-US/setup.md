@@ -2,6 +2,10 @@
 
 ## 1. Install
 
+Runtime requirement:
+
+- Node.js `>=20.19.0`
+
 ```bash
 npm install
 npm run build

@@ -2,6 +2,10 @@
 
 ## 1. 설치
 
+런타임 요구사항:
+
+- Node.js `>=20.19.0`
+
 ```bash
 npm install
 npm run build
