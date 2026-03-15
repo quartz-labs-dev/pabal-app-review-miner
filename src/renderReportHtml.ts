@@ -56,10 +56,15 @@ interface AppBacklog {
   items: BacklogItem[];
 }
 
+interface StoreLink {
+  label: "App Store" | "Google Play";
+  href: string;
+}
+
 const THEMES: ThemeDefinition[] = [
   {
     id: "reliability_performance",
-    title: "Core Flow Reliability (Loading/Crash/Sync)",
+    title: "핵심 플로우 안정화 (로딩/크래시/동기화)",
     keywords: [
       "crash",
       "freeze",
@@ -80,11 +85,11 @@ const THEMES: ThemeDefinition[] = [
     ],
     impact: "high",
     effort: "high",
-    action: "Prioritize stability fixes in core journeys such as login, playback, alerts, and map entry."
+    action: "로그인/재생/알림/지도 진입 등 핵심 사용자 여정의 안정성 이슈를 우선 해결"
   },
   {
     id: "multi_location_planning",
-    title: "Multi-Location and Trip Planning Support",
+    title: "다중 위치/여행 계획 지원",
     keywords: [
       "choose location",
       "select location",
@@ -102,11 +107,11 @@ const THEMES: ThemeDefinition[] = [
     ],
     impact: "high",
     effort: "medium",
-    action: "Let users save remote locations beyond current GPS location for comparison and trip planning."
+    action: "현재 위치 외에 저장 위치/원격 위치를 등록해 비교·계획 가능한 UX 제공"
   },
   {
     id: "alert_relevance",
-    title: "Alert Relevance Improvements (Daylight/Cloud/Local Filters)",
+    title: "알림 관련성 개선 (주간/구름/현지 조건 필터)",
     keywords: [
       "daylight",
       "dawn",
@@ -127,11 +132,11 @@ const THEMES: ThemeDefinition[] = [
     ],
     impact: "high",
     effort: "medium",
-    action: "Reduce alert noise by applying local sunrise/sunset, cloud cover, and user-defined thresholds."
+    action: "지역 일출/일몰·구름량·사용자 임계값을 반영한 알림 정책으로 노이즈를 축소"
   },
   {
     id: "advanced_alert_logic",
-    title: "Advanced Alert Rules (Multi-Condition Triggers)",
+    title: "고급 알림 규칙 (복합 조건 트리거)",
     keywords: [
       "bz",
       "bt",
@@ -148,11 +153,11 @@ const THEMES: ThemeDefinition[] = [
     ],
     impact: "high",
     effort: "high",
-    action: "Support advanced triggers based on combined conditions (for example Bz + solar wind speed)."
+    action: "단일 기준이 아닌 복합 조건(Bz+속도 등) 기반의 고급 알림 룰 제공"
   },
   {
     id: "forecast_transparency",
-    title: "Forecast Reliability and Source Transparency",
+    title: "예보 신뢰성/출처 투명화",
     keywords: [
       "model",
       "source",
@@ -170,11 +175,11 @@ const THEMES: ThemeDefinition[] = [
     ],
     impact: "high",
     effort: "medium",
-    action: "Disclose forecast models/sources and provide multi-model comparison or calibration guidance."
+    action: "예보 모델/출처를 명시하고 다중 모델 비교 또는 보정 가이드를 제공"
   },
   {
     id: "notification_controls",
-    title: "Notification Control Granularity",
+    title: "알림 제어권 강화",
     keywords: [
       "notification",
       "alert",
@@ -187,11 +192,11 @@ const THEMES: ThemeDefinition[] = [
     ],
     impact: "medium",
     effort: "medium",
-    action: "Provide personalized control across notification frequency, time window, trigger, and channel."
+    action: "알림 빈도/시간대/조건/채널을 세분화해 개인화된 제어 옵션 제공"
   },
   {
     id: "widget_watch_screen",
-    title: "Widget/Watch/Large-Screen Optimization",
+    title: "위젯/워치/대화면 최적화",
     keywords: [
       "widget",
       "apple watch",
@@ -207,11 +212,11 @@ const THEMES: ThemeDefinition[] = [
     ],
     impact: "medium",
     effort: "medium",
-    action: "Optimize usage context per device, including widgets, Apple Watch, tablets, and landscape mode."
+    action: "위젯, Apple Watch, 태블릿/가로모드 등 기기별 사용 맥락 최적화"
   },
   {
     id: "pricing_paywall",
-    title: "Pricing and Paywall Clarity",
+    title: "가격/유료화 명확성 개선",
     keywords: [
       "price",
       "paid",
@@ -227,11 +232,11 @@ const THEMES: ThemeDefinition[] = [
     ],
     impact: "medium",
     effort: "low",
-    action: "Clearly communicate paid features, pricing, refund policy, and trial conditions up front."
+    action: "유료 기능/가격/환불/체험 조건을 초반 화면에서 명확하게 고지"
   },
   {
     id: "offline_playback",
-    title: "Offline Download and Playback Quality",
+    title: "오프라인 다운로드/재생 품질",
     keywords: [
       "download",
       "offline",
@@ -250,11 +255,11 @@ const THEMES: ThemeDefinition[] = [
     ],
     impact: "high",
     effort: "high",
-    action: "Improve media reliability around download queue/resume, chapter navigation, casting, and fullscreen."
+    action: "다운로드 큐, 재개, 챕터 탐색, 캐스팅/전체화면 안정성 중심으로 미디어 스택 개선"
   },
   {
     id: "timezone_localization",
-    title: "Timezone and Localization Accuracy",
+    title: "시간대/지역화 정확성",
     keywords: [
       "timezone",
       "time zone",
@@ -267,7 +272,7 @@ const THEMES: ThemeDefinition[] = [
     ],
     impact: "medium",
     effort: "low",
-    action: "Clarify timezone display/calculation logic and offer user-selectable timezone options."
+    action: "시간대 표기 및 계산 로직을 명확화하고 사용자 선택 옵션 제공"
   }
 ];
 
@@ -338,6 +343,73 @@ function escapeHtml(input: string): string {
     .replace(/'/g, "&#39;");
 }
 
+function createAppStoreUrl(appId: string): string {
+  return `https://apps.apple.com/app/id${encodeURIComponent(appId)}`;
+}
+
+function createPlayStoreUrl(packageName: string): string {
+  return `https://play.google.com/store/apps/details?id=${encodeURIComponent(packageName)}`;
+}
+
+function parseAppTitle(rawTitle: string): { displayName: string; sourceToken?: string } {
+  const trimmed = normalizeText(rawTitle);
+  const match = trimmed.match(/^(.*)\(([^()]+)\)\s*$/);
+
+  if (!match) {
+    return { displayName: trimmed };
+  }
+
+  return {
+    displayName: normalizeText(match[1]),
+    sourceToken: normalizeText(match[2])
+  };
+}
+
+function extractStoreLinks(sourceToken?: string): StoreLink[] {
+  if (!sourceToken) {
+    return [];
+  }
+
+  const links: StoreLink[] = [];
+  const seen = new Set<string>();
+  const add = (label: StoreLink["label"], href: string) => {
+    if (seen.has(href)) {
+      return;
+    }
+    seen.add(href);
+    links.push({ label, href });
+  };
+
+  for (const match of sourceToken.matchAll(/(?:^|__)ios-([0-9]+)/g)) {
+    add("App Store", createAppStoreUrl(match[1]));
+  }
+
+  for (const match of sourceToken.matchAll(/(?:^|__)play-([a-z0-9._]+)/gi)) {
+    add("Google Play", createPlayStoreUrl(match[1]));
+  }
+
+  return links;
+}
+
+function renderAppHeading(rawTitle: string): string {
+  const parsed = parseAppTitle(rawTitle);
+  const links = extractStoreLinks(parsed.sourceToken);
+  const tokenHtml = parsed.sourceToken
+    ? `<span class=\"app-token\">(${escapeHtml(parsed.sourceToken)})</span>`
+    : "";
+
+  const linksHtml = links.length
+    ? `<span class=\"store-links\">${links
+        .map(
+          (link) =>
+            `<a class=\"store-link\" href=\"${escapeHtml(link.href)}\" target=\"_blank\" rel=\"noopener noreferrer\" onclick=\"event.stopPropagation()\">${escapeHtml(link.label)}</a>`
+        )
+        .join("")}</span>`
+    : "";
+
+  return `<span class=\"app-heading\"><span class=\"app-title\">${escapeHtml(parsed.displayName)}</span>${tokenHtml}${linksHtml}</span>`;
+}
+
 function mapCategory(heading: string): CategoryKey | undefined {
   const normalized = heading.toLowerCase();
   if (includesAny(heading, ["만족"]) || includesAny(normalized, ["satisfaction"])) {
@@ -354,7 +426,7 @@ function mapCategory(heading: string): CategoryKey | undefined {
 
 function parseMarkdown(input: string): { title: string; metadata: string[]; apps: AppSection[] } {
   const lines = input.split(/\r?\n/);
-  let title = "Raw Review Report";
+  let title = "Raw 리뷰 리포트";
   const metadata: string[] = [];
   const apps: AppSection[] = [];
 
@@ -461,12 +533,12 @@ function parseMarkdown(input: string): { title: string; metadata: string[]; apps
 
 function renderCategoryTitle(key: CategoryKey): string {
   if (key === "satisfaction") {
-    return "Satisfaction (Concrete Examples)";
+    return "만족 (구체 사례)";
   }
   if (key === "dissatisfaction") {
-    return "Dissatisfaction (Concrete Problems)";
+    return "불만족 (구체 문제)";
   }
-  return "Requested Features / Improvement Suggestions";
+  return "요청 기능 / 개선 제안";
 }
 
 function priorityOrder(priority: Priority): number {
@@ -604,11 +676,11 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
           const items = app.categories[categoryKey];
           const cards =
             items.length === 0
-              ? `<p class=\"empty\">No items in this section.</p>`
+              ? `<p class=\"empty\">해당 항목 없음</p>`
               : items
                   .map((item) => {
-                    const kr = escapeHtml(item.kr || "(No Korean translation)");
-                    const org = escapeHtml(item.org || "(No original text)");
+                    const kr = escapeHtml(item.kr || "(한국어 번역 없음)");
+                    const org = escapeHtml(item.org || "(원문 없음)");
 
                     return `
                       <article class=\"quote-card searchable\" data-search=\"${escapeHtml(
@@ -617,7 +689,7 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
                         <div class=\"quote-meta\">${escapeHtml(item.meta)}</div>
                         <div class=\"quote-kr\">${kr}</div>
                         <div class=\"quote-org org-text\">${org}</div>
-                        <button class=\"toggle-one\" type=\"button\">Show Original</button>
+                        <button class=\"toggle-one\" type=\"button\">원어 보기</button>
                       </article>
                     `;
                   })
@@ -637,8 +709,8 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
       return `
         <details class=\"app\" open>
           <summary>
-            <span class=\"app-title\">${escapeHtml(app.title)}</span>
-            <span class=\"app-count\">Reviews ${escapeHtml(app.reviewCount ?? "-")}</span>
+            ${renderAppHeading(app.title)}
+            <span class=\"app-count\">리뷰 ${escapeHtml(app.reviewCount ?? "-")}</span>
           </summary>
           <div class=\"app-body\">
             ${categoryBlocks}
@@ -649,7 +721,7 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
     .join("\n");
 
   const backlogSections = backlogs
-    .map((appBacklog) => {
+    .map((appBacklog, appIndex) => {
       const counts = {
         must: appBacklog.items.filter((item) => item.priority === "must").length,
         should: appBacklog.items.filter((item) => item.priority === "should").length,
@@ -658,9 +730,10 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
 
       const rows =
         appBacklog.items.length === 0
-          ? `<tr><td colspan=\"6\" class=\"empty\">No actionable backlog items extracted.</td></tr>`
+          ? `<tr><td colspan=\"6\" class=\"empty\">추출된 실행 백로그 없음</td></tr>`
           : appBacklog.items
-              .map((item) => {
+              .map((item, itemIndex) => {
+                const evidenceId = `evidence-${appIndex}-${itemIndex}`;
                 const examples = item.examples
                   .map(
                     (q) => `
@@ -673,11 +746,11 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
                   .join("\n");
 
                 return `
-                  <tr class=\"backlog-item searchable\" data-search=\"${escapeHtml(
+                  <tr class=\"backlog-item main-row searchable\" data-search=\"${escapeHtml(
                     `${appBacklog.appTitle} ${item.priority} ${item.title} ${item.action} ${item.examples
                       .map((q) => `${q.kr} ${q.org}`)
                       .join(" ")}`
-                  ).toLowerCase()}\">
+                  ).toLowerCase()}\" data-evidence-id=\"${escapeHtml(evidenceId)}\">
                     <td>${renderPriorityBadge(item.priority)}</td>
                     <td>
                       <div class=\"item-title\">${escapeHtml(item.title)}</div>
@@ -687,10 +760,16 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
                     <td>${renderLevel(item.effort)}</td>
                     <td>${item.evidenceCount}</td>
                     <td>
-                      <details>
-                        <summary>View Evidence</summary>
+                      <button class=\"evidence-toggle\" type=\"button\" data-evidence-id=\"${escapeHtml(
+                        evidenceId
+                      )}\" aria-expanded=\"false\">근거 보기</button>
+                    </td>
+                  </tr>
+                  <tr id=\"${escapeHtml(evidenceId)}\" class=\"evidence-row\">
+                    <td colspan=\"6\">
+                      <div class=\"evidence-panel\">
                         <ul class=\"evidence-list\">${examples}</ul>
-                      </details>
+                      </div>
                     </td>
                   </tr>
                 `;
@@ -700,8 +779,8 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
       return `
         <details class=\"app\" open>
           <summary>
-            <span class=\"app-title\">${escapeHtml(appBacklog.appTitle)}</span>
-            <span class=\"app-count\">Reviews ${escapeHtml(appBacklog.reviewCount)} / MUST ${counts.must} · SHOULD ${counts.should} · COULD ${counts.could}</span>
+            ${renderAppHeading(appBacklog.appTitle)}
+            <span class=\"app-count\">리뷰 ${escapeHtml(appBacklog.reviewCount)} / MUST ${counts.must} · SHOULD ${counts.should} · COULD ${counts.could}</span>
           </summary>
           <div class=\"app-body\">
             <div class=\"table-wrap\">
@@ -709,11 +788,11 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
                 <thead>
                   <tr>
                     <th>Priority</th>
-                    <th>Backlog Item</th>
+                    <th>백로그 항목</th>
                     <th>Impact</th>
                     <th>Effort</th>
-                    <th>Evidence Count</th>
-                    <th>Evidence</th>
+                    <th>근거 수</th>
+                    <th>근거</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -728,9 +807,38 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
     .join("\n");
 
   const metadataHtml = metadata.map((line) => `<li>${escapeHtml(line)}</li>`).join("\n");
+  const totalRawQuotes = apps.reduce(
+    (sum, app) =>
+      sum +
+      app.categories.satisfaction.length +
+      app.categories.dissatisfaction.length +
+      app.categories.requests.length,
+    0
+  );
+  const totalBacklogItems = backlogs.reduce((sum, appBacklog) => sum + appBacklog.items.length, 0);
+  const totalMustItems = backlogs.reduce(
+    (sum, appBacklog) => sum + appBacklog.items.filter((item) => item.priority === "must").length,
+    0
+  );
+  const totalShouldItems = backlogs.reduce(
+    (sum, appBacklog) => sum + appBacklog.items.filter((item) => item.priority === "should").length,
+    0
+  );
+  const totalCouldItems = backlogs.reduce(
+    (sum, appBacklog) => sum + appBacklog.items.filter((item) => item.priority === "could").length,
+    0
+  );
+  const statsHtml = `
+    <section class=\"stats\">
+      <article class=\"stat\"><span class=\"label\">앱 수</span><strong>${apps.length}</strong></article>
+      <article class=\"stat\"><span class=\"label\">Raw 인용</span><strong>${totalRawQuotes}</strong></article>
+      <article class=\"stat\"><span class=\"label\">백로그 항목</span><strong>${totalBacklogItems}</strong></article>
+      <article class=\"stat\"><span class=\"label\">MUST / SHOULD / COULD</span><strong>${totalMustItems} / ${totalShouldItems} / ${totalCouldItems}</strong></article>
+    </section>
+  `;
 
   return `<!doctype html>
-<html lang=\"en\">
+<html lang=\"ko\">
   <head>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
@@ -743,6 +851,7 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
         --sub: #475569;
         --line: #dbe2ea;
         --accent: #0ea5e9;
+        --accent-soft: #e0f2fe;
         --must: #dc2626;
         --should: #ea580c;
         --could: #15803d;
@@ -750,7 +859,7 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
       * { box-sizing: border-box; }
       body {
         margin: 0;
-        font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        font-family: "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
         color: var(--ink);
         background: radial-gradient(circle at top right, #e0f2fe 0%, var(--bg) 45%);
       }
@@ -766,13 +875,14 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
         backdrop-filter: blur(8px);
         background: rgba(243, 246, 251, 0.86);
         border-bottom: 1px solid var(--line);
+        box-shadow: 0 4px 14px rgba(2, 132, 199, 0.08);
       }
       .top-inner {
         max-width: 1240px;
         margin: 0 auto;
         padding: 10px 14px;
         display: grid;
-        grid-template-columns: 1fr auto auto auto;
+        grid-template-columns: minmax(320px, 1fr) auto auto auto auto;
         gap: 10px;
         align-items: center;
       }
@@ -789,11 +899,34 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
       .tab-btn.active {
         border-color: var(--accent);
         color: #0369a1;
-        background: #e0f2fe;
+        background: var(--accent-soft);
       }
       h1 {
         margin: 8px 0 10px;
         font-size: 1.45rem;
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin: 0 0 14px;
+      }
+      .stat {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px 12px;
+        background: var(--panel);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .stat .label {
+        color: var(--sub);
+        font-size: 12px;
+      }
+      .stat strong {
+        font-size: 1rem;
+        line-height: 1.2;
       }
       .meta {
         margin: 0 0 18px;
@@ -818,6 +951,14 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
         padding: 8px 10px;
         font-size: 13px;
       }
+      button {
+        cursor: pointer;
+      }
+      button:disabled {
+        cursor: not-allowed;
+        color: #94a3b8;
+        background: #f8fafc;
+      }
       .toggle-all-label {
         display: inline-flex;
         align-items: center;
@@ -838,10 +979,37 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
         background: linear-gradient(180deg, #ffffff, #f8fbff);
       }
       .app > summary::-webkit-details-marker { display: none; }
+      .app-heading {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
       .app-title { font-weight: 700; }
+      .app-token { color: var(--sub); font-size: 12px; }
+      .store-links {
+        display: inline-flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .store-link {
+        text-decoration: none;
+        color: var(--sub);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 11px;
+        background: #fff;
+      }
+      .store-link:hover {
+        border-color: var(--accent);
+        color: #0369a1;
+      }
       .app-count { color: var(--sub); font-size: 12px; }
       .app-body { padding: 4px 12px 12px; }
       .category h3 { margin: 12px 2px 8px; font-size: 1rem; }
@@ -897,8 +1065,14 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
         font-size: 13px;
       }
       th { background: #f8fbff; color: #0f172a; }
+      .main-row:hover td {
+        background: #f8fbff;
+      }
       .item-title { font-weight: 700; margin-bottom: 4px; }
-      .item-action { color: #334155; }
+      .item-action {
+        color: #334155;
+        line-height: 1.4;
+      }
       .badge {
         display: inline-block;
         border-radius: 999px;
@@ -910,10 +1084,43 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
       .badge-must { background: var(--must); }
       .badge-should { background: var(--should); }
       .badge-could { background: var(--could); }
-      .evidence-list { margin: 8px 0 0; padding-left: 16px; }
+      .evidence-toggle {
+        cursor: pointer;
+        font-size: 12px;
+        padding: 6px 8px;
+        white-space: nowrap;
+      }
+      .evidence-row {
+        display: none;
+      }
+      .evidence-row.open {
+        display: table-row;
+      }
+      .evidence-row td {
+        padding: 0;
+        background: #f8fbff;
+      }
+      .evidence-panel {
+        padding: 12px;
+        border-top: 1px dashed var(--line);
+      }
+      .evidence-list { margin: 0; padding-left: 16px; }
       .evidence-list li { margin-bottom: 8px; }
       .example-kr { line-height: 1.35; }
       .example-org { margin-top: 6px; }
+      @media (max-width: 1100px) {
+        .top-inner {
+          grid-template-columns: minmax(240px, 1fr) auto auto;
+        }
+      }
+      @media (max-width: 900px) {
+        .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+      @media (max-width: 780px) {
+        .top-inner {
+          grid-template-columns: 1fr;
+        }
+      }
       @media (min-width: 900px) {
         .cards { grid-template-columns: 1fr 1fr; }
       }
@@ -922,18 +1129,20 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
   <body>
     <div class=\"top\">
       <div class=\"top-inner\">
-        <input id=\"search\" type=\"search\" placeholder=\"Search (app name, request, keyword, original text)\" />
+        <input id=\"search\" type=\"search\" placeholder=\"검색 (앱명, 기능요청, 키워드, 원문)\" />
         <div class=\"tabs\">
-          <button id=\"tabRaw\" class=\"tab-btn active\" type=\"button\">Raw Reviews</button>
-          <button id=\"tabBacklog\" class=\"tab-btn\" type=\"button\">Actionable Backlog</button>
+          <button id=\"tabRaw\" class=\"tab-btn active\" type=\"button\">Raw 리뷰</button>
+          <button id=\"tabBacklog\" class=\"tab-btn\" type=\"button\">실행 백로그</button>
         </div>
-        <label class=\"toggle-all-label\"><input id=\"toggleAll\" type=\"checkbox\" /> Show all original text</label>
-        <button id=\"expandAll\" type=\"button\">Expand all</button>
+        <label class=\"toggle-all-label\"><input id=\"toggleAll\" type=\"checkbox\" /> 원어 전체 보기</label>
+        <button id=\"expandAll\" type=\"button\">모두 펼치기</button>
+        <button id=\"toggleEvidenceAll\" type=\"button\">근거 펼치기</button>
       </div>
     </div>
 
     <main class=\"wrap\" id=\"root\">
       <h1>${escapeHtml(title)}</h1>
+      ${statsHtml}
       <section class=\"meta\">
         <ul>
           ${metadataHtml}
@@ -954,6 +1163,7 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
       const searchInput = document.getElementById('search');
       const toggleAll = document.getElementById('toggleAll');
       const expandAll = document.getElementById('expandAll');
+      const toggleEvidenceAll = document.getElementById('toggleEvidenceAll');
       const tabRaw = document.getElementById('tabRaw');
       const tabBacklog = document.getElementById('tabBacklog');
       const viewRaw = document.getElementById('viewRaw');
@@ -967,6 +1177,19 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
         return Array.from(currentViewElement().querySelectorAll('details.app'));
       }
 
+      function visibleEvidenceRows() {
+        return Array.from(viewBacklog.querySelectorAll('.evidence-row')).filter(
+          (row) => !row.classList.contains('hidden-by-search')
+        );
+      }
+
+      function syncEvidenceToggleText() {
+        const rows = visibleEvidenceRows();
+        const allOpen = rows.length > 0 && rows.every((row) => row.classList.contains('open'));
+        toggleEvidenceAll.textContent = allOpen ? '근거 접기' : '근거 펼치기';
+        toggleEvidenceAll.disabled = !viewBacklog.classList.contains('active') || rows.length === 0;
+      }
+
       function applySearch() {
         const q = searchInput.value.trim().toLowerCase();
         const searchables = Array.from(currentViewElement().querySelectorAll('.searchable'));
@@ -975,7 +1198,27 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
           const hay = (el.getAttribute('data-search') || '').toLowerCase();
           const visible = !q || hay.includes(q);
           el.classList.toggle('hidden-by-search', !visible);
+
+          if (el.classList.contains('backlog-item')) {
+            const evidenceId = el.getAttribute('data-evidence-id');
+            if (!evidenceId) return;
+            const evidenceRow = document.getElementById(evidenceId);
+            if (!evidenceRow) return;
+
+            evidenceRow.classList.toggle('hidden-by-search', !visible);
+
+            if (!visible) {
+              evidenceRow.classList.remove('open');
+              const evidenceToggle = el.querySelector('.evidence-toggle');
+              if (evidenceToggle instanceof HTMLElement) {
+                evidenceToggle.setAttribute('aria-expanded', 'false');
+                evidenceToggle.textContent = '근거 보기';
+              }
+            }
+          }
         });
+
+        syncEvidenceToggleText();
       }
 
       function setTab(raw) {
@@ -996,17 +1239,50 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
 
       tabRaw.addEventListener('click', () => setTab(true));
       tabBacklog.addEventListener('click', () => setTab(false));
+      toggleEvidenceAll.addEventListener('click', () => {
+        const rows = visibleEvidenceRows();
+        if (!rows.length) return;
+
+        const openAll = !rows.every((row) => row.classList.contains('open'));
+        rows.forEach((row) => {
+          row.classList.toggle('open', openAll);
+          const evidenceId = row.getAttribute('id');
+          if (!evidenceId) return;
+          const button = viewBacklog.querySelector('.evidence-toggle[data-evidence-id=\"' + evidenceId + '\"]');
+          if (!(button instanceof HTMLElement)) return;
+          button.setAttribute('aria-expanded', openAll ? 'true' : 'false');
+          button.textContent = openAll ? '근거 숨기기' : '근거 보기';
+        });
+
+        syncEvidenceToggleText();
+      });
 
       root.addEventListener('click', (event) => {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
-        if (!target.classList.contains('toggle-one')) return;
 
-        const card = target.closest('.quote-card');
+        const evidenceToggle = target.closest('.evidence-toggle');
+        if (evidenceToggle instanceof HTMLElement) {
+          const evidenceId = evidenceToggle.getAttribute('data-evidence-id');
+          if (!evidenceId) return;
+          const evidenceRow = document.getElementById(evidenceId);
+          if (!evidenceRow || evidenceRow.classList.contains('hidden-by-search')) return;
+
+          const opened = evidenceRow.classList.toggle('open');
+          evidenceToggle.setAttribute('aria-expanded', opened ? 'true' : 'false');
+          evidenceToggle.textContent = opened ? '근거 숨기기' : '근거 보기';
+          syncEvidenceToggleText();
+          return;
+        }
+
+        const toggleOne = target.closest('.toggle-one');
+        if (!(toggleOne instanceof HTMLElement)) return;
+
+        const card = toggleOne.closest('.quote-card');
         if (!card) return;
 
         card.classList.toggle('show-one-original');
-        target.textContent = card.classList.contains('show-one-original') ? 'Hide Original' : 'Show Original';
+        toggleOne.textContent = card.classList.contains('show-one-original') ? '원어 숨기기' : '원어 보기';
       });
 
       toggleAll.addEventListener('change', () => {
@@ -1023,10 +1299,11 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
         details.forEach((app) => {
           app.open = !allOpen;
         });
-        expandAll.textContent = allOpen ? 'Expand all' : 'Collapse all';
+        expandAll.textContent = allOpen ? '모두 펼치기' : '모두 접기';
       });
 
       searchInput.addEventListener('input', applySearch);
+      setTab(true);
     </script>
   </body>
 </html>`;

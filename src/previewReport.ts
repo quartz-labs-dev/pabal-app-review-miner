@@ -218,22 +218,50 @@ function escapeHtml(input: string): string {
     .replace(/'/g, "&#39;");
 }
 
+function fileExtLabel(fileName: string): string {
+  return path.extname(fileName).toLowerCase().replace(".", "").toUpperCase();
+}
+
+function pickPrimaryReport(reports: ReportEntry[]): ReportEntry {
+  const primaryHtml = reports.find((report) => path.extname(report.fileName).toLowerCase() === ".html");
+  return primaryHtml ?? reports[0];
+}
+
 function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
   const cards = apps
     .map((app) => {
-      const links = app.reports
+      const primaryReport = pickPrimaryReport(app.reports);
+      const referenceReports = app.reports.filter((report) => report !== primaryReport);
+
+      const referenceLinks = referenceReports
         .map((report) => {
-          const ext = path.extname(report.fileName).toLowerCase().replace(".", "").toUpperCase();
+          const ext = fileExtLabel(report.fileName);
           return `<a class=\"file-link\" href=\"${escapeHtml(report.href)}\">${escapeHtml(report.fileName)} <span class=\"tag\">${ext}</span></a>`;
         })
         .join("\n");
+
+      const referenceSection =
+        referenceReports.length > 0
+          ? `
+          <details class=\"refs\">
+            <summary>Reference files (${referenceReports.length})</summary>
+            <div class=\"links refs-links\">${referenceLinks}</div>
+          </details>
+        `
+          : "";
 
       return `
         <section class=\"card searchable\" data-search=\"${escapeHtml(
           `${app.appId} ${app.reports.map((x) => x.fileName).join(" ")}`
         ).toLowerCase()}\">
           <h2>${escapeHtml(app.appId)}</h2>
-          <div class=\"links\">${links}</div>
+          <a class=\"file-link file-link-main\" href=\"${escapeHtml(primaryReport.href)}\">
+            <span class=\"main-link-text\">
+              <span class=\"main-link-title\">View Report</span>
+              <span class=\"main-link-meta\">${escapeHtml(primaryReport.fileName)}</span>
+            </span>
+          </a>
+          ${referenceSection}
         </section>
       `;
     })
@@ -330,6 +358,45 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
         border-color: var(--accent);
         color: var(--accent);
       }
+      .file-link-main {
+        background: #eef6ff;
+        border-color: #b9d8f4;
+        font-weight: 600;
+        margin-bottom: 10px;
+        justify-content: flex-start;
+      }
+      .main-link-text {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+      }
+      .main-link-title {
+        font-size: 1rem;
+        line-height: 1.25;
+      }
+      .main-link-meta {
+        font-size: 12px;
+        color: var(--sub);
+        font-weight: 500;
+        word-break: break-all;
+      }
+      .refs {
+        border-top: 1px dashed var(--line);
+        padding-top: 8px;
+      }
+      .refs summary {
+        cursor: pointer;
+        color: var(--sub);
+        font-size: 13px;
+        margin-bottom: 8px;
+      }
+      .refs[open] summary {
+        color: var(--ink);
+      }
+      .refs-links .file-link {
+        font-size: 13px;
+      }
       .tag {
         font-size: 11px;
         color: var(--sub);
@@ -350,7 +417,7 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
   <body>
     <main class=\"wrap\">
       <h1>Report Preview Dashboard</h1>
-      <p class=\"sub\">${infoLine} · Click a file to open it from local storage.</p>
+      <p class=\"sub\">${infoLine} · Open the main HTML first, then expand references if needed.</p>
       <div class=\"toolbar\">
         <input id=\"search\" type=\"search\" placeholder=\"Search by app ID or file name\" />
       </div>
