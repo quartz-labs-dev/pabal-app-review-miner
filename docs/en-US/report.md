@@ -69,7 +69,13 @@ Render actionable markdown report to interactive HTML.
 - `node dist/renderReportHtml.js ...`
 - Generated HTML top bar includes a `Home` button (`/`) at the top-left.
 - In top controls, `Show all original text` appears only in `Raw Reviews` tab, and `Expand evidence` appears only in `Actionable Backlog` tab.
+- In `Raw Reviews`, excluded-state filter is tri-state: `All` / `Active only` / `Excluded only` (default: `All`).
+- In `Raw Reviews`, you can toggle `100+ chars only` to focus on longer reviews.
+- The summary/stat block below the title also switches by tab, so each tab shows only relevant context.
 - Raw review cards include `Favorite` and `Exclude/Restore` actions.
+- Raw view is hydrated from full review datasets (`data/{myAppId}/reviews-ko/*.json`, fallback `reviews/*.json`) per app:
+  - preselected report quotes start as `Active`
+  - non-selected reviews are included as `Excluded` by default for manual curation
 - In preview mode, card states are persisted to `data/{myAppId}/reports/preview-state.json`.
 
 ### CLI Options

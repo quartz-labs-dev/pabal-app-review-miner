@@ -6,7 +6,7 @@ import path from "node:path";
 import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 import { resolveOwnerApp } from "./registeredApps";
-import { normalizeText } from "./utils";
+import { ensureReviewId, normalizeText, UnifiedReview } from "./utils";
 
 interface CliArgs {
   myApp?: string;
@@ -61,6 +61,27 @@ interface AppBacklog {
 interface StoreLink {
   label: "App Store" | "Google Play";
   href: string;
+}
+
+interface AppReviewPoolItem {
+  reviewId: string;
+  source: "play" | "ios";
+  rating: number;
+  date: string;
+  meta: string;
+  kr: string;
+  org: string;
+}
+
+interface AppReviewPool {
+  sourceToken: string;
+  displayName: string;
+  reviews: AppReviewPoolItem[];
+}
+
+interface ReviewPools {
+  byToken: Map<string, AppReviewPool>;
+  byDisplayName: Map<string, AppReviewPool[]>;
 }
 
 const THEMES: ThemeDefinition[] = [
@@ -320,6 +341,37 @@ function createQuoteReviewId(
   return `rq_${hashToken(fingerprint)}`;
 }
 
+function parseQuoteMeta(meta: string): {
+  platform?: string;
+  rating?: string;
+  date?: string;
+  raw: string;
+} {
+  const raw = normalizeText(meta);
+  if (!raw) {
+    return { raw: "" };
+  }
+
+  const stripped = raw.replace(/^\(/, "").replace(/\)$/, "");
+  const pieces = stripped.split(",").map((item) => normalizeText(item)).filter(Boolean);
+  const first = pieces[0] ?? "";
+  const [platformRaw, ratingRaw] = first.split("/").map((item) => normalizeText(item));
+  const platform = platformRaw || undefined;
+  const rating = ratingRaw || undefined;
+  const date = normalizeText(pieces.slice(1).join(", ")) || undefined;
+
+  if (!platform && !rating && !date) {
+    return { raw };
+  }
+
+  return {
+    platform,
+    rating,
+    date,
+    raw
+  };
+}
+
 function resolveDefaultInput(ownerAppId: string): string {
   return path.resolve(process.cwd(), "data", ownerAppId, "reports", "competitor-raw-actionable.ko.md");
 }
@@ -385,6 +437,237 @@ function parseAppTitle(rawTitle: string): { displayName: string; sourceToken?: s
     displayName: normalizeText(match[1]),
     sourceToken: normalizeText(match[2])
   };
+}
+
+function normalizeMatchText(input: string | undefined): string {
+  return normalizeText(input).toLowerCase();
+}
+
+function normalizeReviewSource(input: unknown): "play" | "ios" | undefined {
+  const normalized = normalizeText(String(input ?? "")).toLowerCase();
+  if (normalized === "play") {
+    return "play";
+  }
+  if (normalized === "ios") {
+    return "ios";
+  }
+  return undefined;
+}
+
+function parseRatingNumber(input: string | undefined): number | undefined {
+  const normalized = normalizeText(input);
+  if (!normalized) {
+    return undefined;
+  }
+
+  const digits = normalized.replace(/[^0-9.]+/g, "");
+  if (!digits) {
+    return undefined;
+  }
+
+  const value = Number(digits);
+  if (!Number.isFinite(value)) {
+    return undefined;
+  }
+
+  return value;
+}
+
+function formatReadableDate(input: string | undefined): string {
+  const normalized = normalizeText(input);
+  if (!normalized) {
+    return "";
+  }
+
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) {
+    return normalized;
+  }
+
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+
+  return `${year}-${month}-${day} ${hours}:${minutes}`;
+}
+
+function formatRatingStars(input: string | undefined): { stars: string; label: string } | undefined {
+  const rating = parseRatingNumber(input);
+  if (typeof rating !== "number") {
+    return undefined;
+  }
+
+  const clamped = Math.max(0, Math.min(5, Math.round(rating)));
+  return {
+    stars: `${"★".repeat(clamped)}${"☆".repeat(5 - clamped)}`,
+    label: `${clamped}점`
+  };
+}
+
+async function loadReviewPools(ownerAppId: string): Promise<ReviewPools> {
+  const primaryDir = path.resolve(process.cwd(), "data", ownerAppId, "reviews-ko");
+  const fallbackDir = path.resolve(process.cwd(), "data", ownerAppId, "reviews");
+
+  let sourceDir = fallbackDir;
+  try {
+    const stat = await fs.stat(primaryDir);
+    if (stat.isDirectory()) {
+      sourceDir = primaryDir;
+    }
+  } catch {
+    sourceDir = fallbackDir;
+  }
+
+  const entries = await fs.readdir(sourceDir, { withFileTypes: true }).catch(() => []);
+  const jsonFiles = entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+    .map((entry) => path.resolve(sourceDir, entry.name))
+    .sort((a, b) => a.localeCompare(b));
+
+  const byToken = new Map<string, AppReviewPool>();
+  const byDisplayName = new Map<string, AppReviewPool[]>();
+
+  for (const filePath of jsonFiles) {
+    try {
+      const raw = await fs.readFile(filePath, "utf8");
+      const payload = JSON.parse(raw) as Record<string, unknown>;
+      const reviewsRaw = Array.isArray(payload.reviews) ? payload.reviews : [];
+      const sourceToken = normalizeText(String(payload.app ?? path.basename(filePath, ".json")));
+      if (!sourceToken) {
+        continue;
+      }
+
+      const displayName = normalizeText(String(payload.appName ?? sourceToken));
+      const seenReviewIds = new Set<string>();
+      const reviews: AppReviewPoolItem[] = [];
+
+      for (const reviewRaw of reviewsRaw) {
+        if (!reviewRaw || typeof reviewRaw !== "object") {
+          continue;
+        }
+
+        const row = reviewRaw as Record<string, unknown>;
+        const source = normalizeReviewSource(row.source);
+        if (!source) {
+          continue;
+        }
+
+        const unifiedReview = ensureReviewId({
+          source,
+          rating: Number(row.rating ?? 0),
+          text: normalizeText(String(row.text ?? "")),
+          date: normalizeText(String(row.date ?? "")),
+          user: normalizeText(String(row.user ?? "anonymous")) || "anonymous",
+          reviewId: normalizeText(String(row.reviewId ?? "")) || undefined,
+          storeReviewId: normalizeText(String(row.storeReviewId ?? "")) || undefined
+        } as UnifiedReview);
+
+        const reviewId = normalizeText(unifiedReview.reviewId);
+        if (!reviewId || seenReviewIds.has(reviewId)) {
+          continue;
+        }
+        seenReviewIds.add(reviewId);
+
+        const rating = Number(unifiedReview.rating ?? 0);
+        const date = normalizeText(unifiedReview.date);
+        const org = normalizeText(unifiedReview.text);
+        const kr = normalizeText(String((row as Record<string, unknown>).textKo ?? "")) || org;
+
+        reviews.push({
+          reviewId,
+          source,
+          rating,
+          date,
+          meta: `${source}/${rating}점, ${date}`,
+          kr,
+          org
+        });
+      }
+
+      reviews.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      const pool: AppReviewPool = {
+        sourceToken,
+        displayName,
+        reviews
+      };
+
+      byToken.set(sourceToken, pool);
+
+      const nameKey = normalizeMatchText(displayName);
+      const list = byDisplayName.get(nameKey) ?? [];
+      list.push(pool);
+      byDisplayName.set(nameKey, list);
+    } catch {
+      // ignore malformed review files in pool loading
+    }
+  }
+
+  return {
+    byToken,
+    byDisplayName
+  };
+}
+
+function resolvePoolForApp(appTitle: string, pools: ReviewPools): AppReviewPool | undefined {
+  const parsed = parseAppTitle(appTitle);
+  if (parsed.sourceToken && pools.byToken.has(parsed.sourceToken)) {
+    return pools.byToken.get(parsed.sourceToken);
+  }
+
+  const candidates = pools.byDisplayName.get(normalizeMatchText(parsed.displayName)) ?? [];
+  if (candidates.length === 1) {
+    return candidates[0];
+  }
+
+  return undefined;
+}
+
+function findPoolReviewIdForQuote(item: QuoteItem, pool?: AppReviewPool): string | undefined {
+  if (!pool || pool.reviews.length === 0) {
+    return undefined;
+  }
+
+  const parsedMeta = parseQuoteMeta(item.meta);
+  const source = normalizeReviewSource(parsedMeta.platform);
+  const rating = parseRatingNumber(parsedMeta.rating);
+  const date = normalizeText(parsedMeta.date);
+  const kr = normalizeMatchText(item.kr);
+  const org = normalizeMatchText(item.org);
+
+  const candidates = pool.reviews.filter((review) => {
+    if (source && review.source !== source) {
+      return false;
+    }
+    if (typeof rating === "number" && review.rating !== rating) {
+      return false;
+    }
+    if (date && review.date !== date) {
+      return false;
+    }
+    return true;
+  });
+
+  const exact = candidates.find(
+    (review) => normalizeMatchText(review.kr) === kr && normalizeMatchText(review.org) === org
+  );
+  if (exact) {
+    return exact.reviewId;
+  }
+
+  const krMatch = candidates.find((review) => normalizeMatchText(review.kr) === kr);
+  if (krMatch) {
+    return krMatch.reviewId;
+  }
+
+  const orgMatch = candidates.find((review) => normalizeMatchText(review.org) === org);
+  if (orgMatch) {
+    return orgMatch.reviewId;
+  }
+
+  return undefined;
 }
 
 function extractStoreLinks(sourceToken?: string): StoreLink[] {
@@ -695,54 +978,148 @@ function renderLevel(level: Impact | Effort): string {
   return "Low";
 }
 
+function renderMetaChip(className: string, content: string | undefined, title?: string): string {
+  const normalized = normalizeText(content);
+  if (!normalized) {
+    return "";
+  }
+
+  const titleAttr = normalizeText(title) ? ` title="${escapeHtml(title ?? "")}"` : "";
+  return `<span class=\"meta-chip ${className}\"${titleAttr}>${escapeHtml(normalized)}</span>`;
+}
+
 function renderHtml(
   title: string,
   metadata: string[],
   apps: AppSection[],
   backlogs: AppBacklog[],
-  ownerAppId: string
+  ownerAppId: string,
+  reviewPools: ReviewPools
 ): string {
+  function renderQuoteCard(params: {
+    appTitle: string;
+    categoryTitle: string;
+    reviewId: string;
+    meta: string;
+    kr: string;
+    org: string;
+    defaultExcluded: boolean;
+  }): string {
+    const kr = escapeHtml(params.kr || "(한국어 번역 없음)");
+    const org = escapeHtml(params.org || "(원문 없음)");
+    const reviewId = escapeHtml(params.reviewId);
+    const parsedMeta = parseQuoteMeta(params.meta);
+    const ratingStars = formatRatingStars(parsedMeta.rating);
+    const formattedDate = formatReadableDate(parsedMeta.date);
+    const platformChip = renderMetaChip("meta-chip-platform", parsedMeta.platform);
+    const ratingChip = ratingStars
+      ? renderMetaChip("meta-chip-rating", ratingStars.stars, ratingStars.label)
+      : "";
+    const dateChip = renderMetaChip("meta-chip-date", formattedDate, parsedMeta.date || "");
+    const rawMetaText =
+      !platformChip && !ratingChip && !dateChip && parsedMeta.raw
+        ? `<div class=\"quote-meta-fallback\">${escapeHtml(parsedMeta.raw)}</div>`
+        : "";
+
+    const textLength = normalizeText(params.kr || params.org).length;
+
+    return `
+      <article class=\"quote-card searchable\" data-review-id=\"${reviewId}\" data-default-excluded=\"${params.defaultExcluded ? "true" : "false"}\" data-text-length=\"${textLength}\" data-search=\"${escapeHtml(
+        `${params.appTitle} ${params.categoryTitle} ${params.meta} ${params.kr} ${params.org}`
+      ).toLowerCase()}\">
+        <div class=\"quote-content\">
+          <div class=\"quote-head\">
+            <div class=\"quote-meta-group\">
+              ${platformChip}
+              ${ratingChip}
+              ${dateChip}
+            </div>
+          </div>
+          ${rawMetaText}
+          <div class=\"quote-kr\">${kr}</div>
+          <div class=\"quote-org org-text\">${org}</div>
+        </div>
+        <div class=\"quote-actions\">
+          <button class=\"toggle-one\" type=\"button\">원어 보기</button>
+          <button class=\"favorite-toggle\" type=\"button\">즐겨찾기</button>
+          <button class=\"exclude-toggle\" type=\"button\">제외</button>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderCategorySection(categoryTitle: string, cardsHtml: string): string {
+    return `
+      <section class=\"category\">
+        <h3>${escapeHtml(categoryTitle)}</h3>
+        <div class=\"cards\">
+          ${cardsHtml}
+        </div>
+      </section>
+    `;
+  }
+
   const rawAppSections = apps
     .map((app) => {
+      const appPool = resolvePoolForApp(app.title, reviewPools);
+      const seededReviewIds = new Set<string>();
       const categoryBlocks = (Object.keys(app.categories) as CategoryKey[])
         .map((categoryKey) => {
           const items = app.categories[categoryKey];
+          const categoryTitle = renderCategoryTitle(categoryKey);
           const cards =
             items.length === 0
               ? `<p class=\"empty\">해당 항목 없음</p>`
               : items
                   .map((item) => {
-                    const kr = escapeHtml(item.kr || "(한국어 번역 없음)");
-                    const org = escapeHtml(item.org || "(원문 없음)");
-                    const reviewId = escapeHtml(item.reviewId);
+                    const matchedReviewId = findPoolReviewIdForQuote(item, appPool);
+                    const reviewId = normalizeText(matchedReviewId) || normalizeText(item.reviewId);
+                    if (reviewId) {
+                      seededReviewIds.add(reviewId);
+                    }
 
-                    return `
-                      <article class=\"quote-card searchable\" data-review-id=\"${reviewId}\" data-search=\"${escapeHtml(
-                        `${app.title} ${renderCategoryTitle(categoryKey)} ${item.meta} ${item.kr} ${item.org}`
-                      ).toLowerCase()}\">
-                        <div class=\"quote-meta\">${escapeHtml(item.meta)}</div>
-                        <div class=\"quote-kr\">${kr}</div>
-                        <div class=\"quote-org org-text\">${org}</div>
-                        <div class=\"quote-actions\">
-                          <button class=\"toggle-one\" type=\"button\">원어 보기</button>
-                          <button class=\"favorite-toggle\" type=\"button\">즐겨찾기</button>
-                          <button class=\"exclude-toggle\" type=\"button\">제외</button>
-                        </div>
-                      </article>
-                    `;
+                    return renderQuoteCard({
+                      appTitle: app.title,
+                      categoryTitle,
+                      reviewId: reviewId || item.reviewId,
+                      meta: item.meta,
+                      kr: item.kr,
+                      org: item.org,
+                      defaultExcluded: false
+                    });
                   })
                   .join("\n");
 
-          return `
-            <section class=\"category\">
-              <h3>${escapeHtml(renderCategoryTitle(categoryKey))}</h3>
-              <div class=\"cards\">
-                ${cards}
-              </div>
-            </section>
-          `;
+          return renderCategorySection(categoryTitle, cards);
         })
         .join("\n");
+
+      const poolReviews = appPool?.reviews ?? [];
+      const unselectedReviews = poolReviews.filter((review) => !seededReviewIds.has(review.reviewId));
+      const fullPoolCards =
+        unselectedReviews.length === 0
+          ? `<p class=\"empty\">미선별 리뷰 없음</p>`
+          : unselectedReviews
+              .map((review) =>
+                renderQuoteCard({
+                  appTitle: app.title,
+                  categoryTitle: "전체 리뷰 풀",
+                  reviewId: review.reviewId,
+                  meta: review.meta,
+                  kr: review.kr,
+                  org: review.org,
+                  defaultExcluded: true
+                })
+              )
+              .join("\n");
+      const fullPoolBlock = `
+        <section class=\"category category-pool\">
+          <h3>전체 리뷰 풀 (미선별 · 기본 제외)</h3>
+          <div class=\"cards\">
+            ${fullPoolCards}
+          </div>
+        </section>
+      `;
 
       return `
         <details class=\"app\" open>
@@ -752,6 +1129,7 @@ function renderHtml(
           </summary>
           <div class=\"app-body\">
             ${categoryBlocks}
+            ${fullPoolBlock}
           </div>
         </details>
       `;
@@ -844,7 +1222,6 @@ function renderHtml(
     })
     .join("\n");
 
-  const metadataHtml = metadata.map((line) => `<li>${escapeHtml(line)}</li>`).join("\n");
   const totalRawQuotes = apps.reduce(
     (sum, app) =>
       sum +
@@ -866,14 +1243,32 @@ function renderHtml(
     (sum, appBacklog) => sum + appBacklog.items.filter((item) => item.priority === "could").length,
     0
   );
-  const statsHtml = `
+  const rawStatsHtml = `
     <section class=\"stats\">
       <article class=\"stat\"><span class=\"label\">앱 수</span><strong>${apps.length}</strong></article>
       <article class=\"stat\"><span class=\"label\">Raw 인용</span><strong>${totalRawQuotes}</strong></article>
-      <article class=\"stat\"><span class=\"label\">백로그 항목</span><strong>${totalBacklogItems}</strong></article>
-      <article class=\"stat\"><span class=\"label\">MUST / SHOULD / COULD</span><strong>${totalMustItems} / ${totalShouldItems} / ${totalCouldItems}</strong></article>
+      <article class=\"stat\"><span class=\"label\">즐겨찾기 상태</span><strong>프리뷰에서 관리</strong></article>
+      <article class=\"stat\"><span class=\"label\">제외 상태</span><strong>프리뷰에서 관리</strong></article>
     </section>
   `;
+  const backlogStatsHtml = `
+    <section class=\"stats\">
+      <article class=\"stat\"><span class=\"label\">앱 수</span><strong>${apps.length}</strong></article>
+      <article class=\"stat\"><span class=\"label\">백로그 항목</span><strong>${totalBacklogItems}</strong></article>
+      <article class=\"stat\"><span class=\"label\">MUST</span><strong>${totalMustItems}</strong></article>
+      <article class=\"stat\"><span class=\"label\">SHOULD / COULD</span><strong>${totalShouldItems} / ${totalCouldItems}</strong></article>
+    </section>
+  `;
+  const rawMetadataHtml = metadata.map((line) => `<li>${escapeHtml(line)}</li>`).join("\n");
+  const generatedAtLine =
+    metadata.find((line) => line.includes("생성 시각")) ??
+    metadata.find((line) => line.toLowerCase().includes("generated at"));
+  const backlogMetaLines = [
+    generatedAtLine || "생성 시각: -",
+    "우선순위 규칙: score = 요청×3 + 불만×2 + 만족×1",
+    "테마 키워드 매칭 기반으로 실행 백로그를 구성"
+  ];
+  const backlogMetadataHtml = backlogMetaLines.map((line) => `<li>${escapeHtml(line)}</li>`).join("\n");
 
   return `<!doctype html>
 <html lang=\"ko\">
@@ -919,10 +1314,33 @@ function renderHtml(
         max-width: 1240px;
         margin: 0 auto;
         padding: 10px 14px;
-        display: grid;
-        grid-template-columns: auto minmax(320px, 1fr) auto auto auto auto auto;
-        gap: 10px;
+        display: flex;
         align-items: center;
+        gap: 10px;
+      }
+      .top-left {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+      .search-fixed {
+        width: 420px;
+        flex: 0 0 420px;
+      }
+      .top-right {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 10px;
+        min-width: 0;
+      }
+      .top-right-controls {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 10px;
       }
       .home-link {
         text-decoration: none;
@@ -933,34 +1351,33 @@ function renderHtml(
       }
       .tabs {
         display: inline-flex;
-        align-items: flex-end;
+        align-items: center;
         gap: 4px;
-        padding: 0 2px;
-        border-bottom: 1px solid var(--line);
+        padding: 4px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
       }
       .tab-btn {
-        border: 1px solid transparent;
-        border-bottom: 0;
+        border: 0;
         background: transparent;
         color: var(--sub);
-        border-radius: 10px 10px 0 0;
-        padding: 9px 12px 8px;
+        border-radius: 9px;
+        padding: 8px 12px;
         font-size: 13px;
-        font-weight: 600;
+        font-weight: 700;
         cursor: pointer;
+        transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
       }
       .tab-btn.active {
-        border-top-color: var(--accent);
-        border-left-color: var(--line);
-        border-right-color: var(--line);
-        color: #0369a1;
-        background: var(--panel);
+        color: #075985;
+        background: #e0f2fe;
+        box-shadow: inset 0 0 0 1px #7dd3fc;
       }
       .tab-btn:not(.active):hover {
         color: var(--ink);
         background: #eef2f8;
-        border-left-color: #dbe2ea;
-        border-right-color: #dbe2ea;
       }
       h1 {
         margin: 8px 0 10px;
@@ -996,6 +1413,12 @@ function renderHtml(
         border-radius: 12px;
         background: var(--panel);
       }
+      .context-panel {
+        display: none;
+      }
+      .context-panel.active {
+        display: block;
+      }
       .meta ul { margin: 0; padding-left: 18px; }
       input[type=\"search\"] {
         width: 100%;
@@ -1004,7 +1427,7 @@ function renderHtml(
         border-radius: 10px;
         font-size: 14px;
       }
-      button, .toggle-all-label, .toggle-favorite-label, .toggle-excluded-label {
+      button, .toggle-all-label, .toggle-favorite-label, .toggle-length-label, .exclude-filter {
         border: 1px solid var(--line);
         background: var(--panel);
         color: var(--ink);
@@ -1022,11 +1445,29 @@ function renderHtml(
       }
       .toggle-all-label,
       .toggle-favorite-label,
-      .toggle-excluded-label {
+      .toggle-length-label,
+      .exclude-filter {
         display: inline-flex;
         align-items: center;
         gap: 8px;
         cursor: pointer;
+      }
+      .exclude-filter {
+        padding: 4px;
+        gap: 4px;
+      }
+      .exclude-filter-btn {
+        border: 1px solid transparent;
+        background: transparent;
+        border-radius: 8px;
+        padding: 6px 8px;
+        font-size: 12px;
+        color: var(--sub);
+      }
+      .exclude-filter-btn.is-active {
+        border-color: var(--accent);
+        color: #0369a1;
+        background: var(--accent-soft);
       }
       .hidden-control {
         display: none !important;
@@ -1093,11 +1534,11 @@ function renderHtml(
       .quote-card {
         border: 1px solid var(--line);
         border-radius: 12px;
-        padding: 10px 12px;
         background: #fff;
         display: flex;
         flex-direction: column;
         min-height: 100%;
+        overflow: hidden;
       }
       .quote-card.is-favorite {
         border-color: #eab308;
@@ -1106,8 +1547,61 @@ function renderHtml(
       .quote-card.is-excluded {
         opacity: 0.6;
       }
-      .quote-meta { color: var(--sub); font-size: 12px; margin-bottom: 8px; }
-      .quote-kr { font-size: 14px; line-height: 1.45; }
+      .category-pool h3 {
+        margin-top: 16px;
+      }
+      .quote-content {
+        padding: 12px 14px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .quote-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 8px;
+      }
+      .quote-meta-group {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .meta-chip {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.25;
+      }
+      .meta-chip-platform {
+        color: #075985;
+        background: #e0f2fe;
+        border-color: #bae6fd;
+      }
+      .meta-chip-rating {
+        color: #9a3412;
+        background: #ffedd5;
+        border-color: #fed7aa;
+        letter-spacing: 0.04em;
+      }
+      .meta-chip-date {
+        color: #475569;
+        background: #f8fafc;
+      }
+      .quote-meta-fallback {
+        color: var(--sub);
+        font-size: 12px;
+      }
+      .quote-kr {
+        font-size: 15px;
+        line-height: 1.55;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
       .org-text {
         display: none;
         margin-top: 8px;
@@ -1126,7 +1620,9 @@ function renderHtml(
         gap: 6px;
         flex-wrap: wrap;
         margin-top: auto;
-        padding-top: 10px;
+        padding: 10px 12px;
+        border-top: 1px dashed var(--line);
+        background: #f8fbff;
         justify-content: flex-end;
         align-items: flex-end;
       }
@@ -1136,6 +1632,15 @@ function renderHtml(
         font-size: 12px;
         padding: 6px 8px;
         cursor: pointer;
+      }
+      .toggle-one {
+        background: #0284c7;
+        border-color: #0369a1;
+        color: #ffffff;
+        font-weight: 700;
+      }
+      .toggle-one:hover {
+        background: #0369a1;
       }
       .favorite-toggle.is-active {
         border-color: #eab308;
@@ -1147,10 +1652,7 @@ function renderHtml(
         color: #b91c1c;
         background: #fee2e2;
       }
-      .toggle-one {
-        margin-top: 0;
-        margin-left: auto;
-      }
+      .toggle-one { margin-left: auto; }
       .empty { margin: 0; color: var(--sub); font-size: 13px; }
       .hidden-by-search { display: none !important; }
       .hidden-by-state { display: none !important; }
@@ -1216,16 +1718,39 @@ function renderHtml(
       .example-kr { line-height: 1.35; }
       .example-org { margin-top: 6px; }
       @media (max-width: 1100px) {
-        .top-inner {
-          grid-template-columns: auto minmax(220px, 1fr) auto auto auto;
+        .search-fixed {
+          width: 340px;
+          flex-basis: 340px;
         }
       }
       @media (max-width: 900px) {
+        .top-inner {
+          flex-wrap: wrap;
+        }
+        .top-left {
+          width: 100%;
+          flex-wrap: wrap;
+        }
+        .search-fixed {
+          width: auto;
+          flex: 1 1 auto;
+        }
+        .top-right {
+          width: 100%;
+          justify-content: flex-end;
+          flex-wrap: wrap;
+        }
+        .top-right-controls {
+          flex-wrap: wrap;
+        }
         .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       }
       @media (max-width: 780px) {
-        .top-inner {
-          grid-template-columns: 1fr;
+        .tabs { order: 2; }
+        .search-fixed {
+          width: 100%;
+          flex-basis: 100%;
+          order: 3;
         }
       }
       @media (min-width: 900px) {
@@ -1236,26 +1761,49 @@ function renderHtml(
   <body data-owner-app-id=\"${escapeHtml(ownerAppId)}\">
     <div class=\"top\">
       <div class=\"top-inner\">
-        <a class=\"home-link\" href=\"/\">홈</a>
-        <input id=\"search\" type=\"search\" placeholder=\"검색 (앱명, 기능요청, 키워드, 원문)\" />
-        <div class=\"tabs\">
-          <button id=\"tabRaw\" class=\"tab-btn active\" type=\"button\">Raw 리뷰</button>
-          <button id=\"tabBacklog\" class=\"tab-btn\" type=\"button\">실행 백로그</button>
+        <div class=\"top-left\">
+          <a class=\"home-link\" href=\"/\">홈</a>
+          <div class=\"tabs\">
+            <button id=\"tabRaw\" class=\"tab-btn active\" type=\"button\">Raw 리뷰</button>
+            <button id=\"tabBacklog\" class=\"tab-btn\" type=\"button\">실행 백로그</button>
+          </div>
+          <div class=\"search-fixed\">
+            <input id=\"search\" type=\"search\" placeholder=\"검색 (앱명, 기능요청, 키워드, 원문)\" />
+          </div>
         </div>
-        <label class=\"toggle-all-label\"><input id=\"toggleAll\" type=\"checkbox\" /> 원어 전체 보기</label>
-        <label class=\"toggle-favorite-label\"><input id=\"favoritesOnly\" type=\"checkbox\" /> 즐겨찾기만</label>
-        <label class=\"toggle-excluded-label\"><input id=\"showExcluded\" type=\"checkbox\" /> 제외 항목 보기</label>
-        <button id=\"toggleEvidenceAll\" type=\"button\">근거 펼치기</button>
+        <div class=\"top-right\">
+          <div class=\"top-right-controls\">
+            <label class=\"toggle-all-label\"><input id=\"toggleAll\" type=\"checkbox\" /> 원어 전체 보기</label>
+            <label class=\"toggle-favorite-label\"><input id=\"favoritesOnly\" type=\"checkbox\" /> 즐겨찾기만</label>
+            <label class=\"toggle-length-label\"><input id=\"minLength100\" type=\"checkbox\" /> 100자 이상만</label>
+            <div id=\"excludeFilter\" class=\"exclude-filter\" role=\"group\" aria-label=\"제외 상태 필터\">
+              <button type=\"button\" class=\"exclude-filter-btn is-active\" data-exclude-filter=\"all\">전체</button>
+              <button type=\"button\" class=\"exclude-filter-btn\" data-exclude-filter=\"active\">활성만</button>
+              <button type=\"button\" class=\"exclude-filter-btn\" data-exclude-filter=\"excluded\">제외만</button>
+            </div>
+            <button id=\"toggleEvidenceAll\" type=\"button\">근거 펼치기</button>
+          </div>
+        </div>
       </div>
     </div>
 
     <main class=\"wrap\" id=\"root\">
       <h1>${escapeHtml(title)}</h1>
-      ${statsHtml}
-      <section class=\"meta\">
-        <ul>
-          ${metadataHtml}
-        </ul>
+      <section id=\"contextRaw\" class=\"context-panel active\">
+        ${rawStatsHtml}
+        <section class=\"meta\">
+          <ul>
+            ${rawMetadataHtml}
+          </ul>
+        </section>
+      </section>
+      <section id=\"contextBacklog\" class=\"context-panel\">
+        ${backlogStatsHtml}
+        <section class=\"meta\">
+          <ul>
+            ${backlogMetadataHtml}
+          </ul>
+        </section>
       </section>
 
       <section id=\"viewRaw\" class=\"view active\">
@@ -1274,17 +1822,24 @@ function renderHtml(
       const toggleAllLabel = toggleAll ? toggleAll.closest('.toggle-all-label') : null;
       const favoritesOnly = document.getElementById('favoritesOnly');
       const favoritesOnlyLabel = favoritesOnly ? favoritesOnly.closest('.toggle-favorite-label') : null;
-      const showExcluded = document.getElementById('showExcluded');
-      const showExcludedLabel = showExcluded ? showExcluded.closest('.toggle-excluded-label') : null;
+      const minLength100 = document.getElementById('minLength100');
+      const minLength100Label = minLength100 ? minLength100.closest('.toggle-length-label') : null;
+      const excludeFilter = document.getElementById('excludeFilter');
+      const excludeFilterButtons = excludeFilter
+        ? Array.from(excludeFilter.querySelectorAll('[data-exclude-filter]'))
+        : [];
       const toggleEvidenceAll = document.getElementById('toggleEvidenceAll');
       const tabRaw = document.getElementById('tabRaw');
       const tabBacklog = document.getElementById('tabBacklog');
       const viewRaw = document.getElementById('viewRaw');
       const viewBacklog = document.getElementById('viewBacklog');
+      const contextRaw = document.getElementById('contextRaw');
+      const contextBacklog = document.getElementById('contextBacklog');
       const rawCards = Array.from(viewRaw.querySelectorAll('.quote-card[data-review-id]'));
       const reviewState = Object.create(null);
       let saveStateTimer = null;
       let stateLoaded = false;
+      let excludeFilterMode = 'all';
 
       function resolveOwnerAppId() {
         const fromBody = (document.body && document.body.getAttribute('data-owner-app-id')) || '';
@@ -1293,15 +1848,16 @@ function renderHtml(
           return trimmedBody;
         }
 
-        const matched = window.location.pathname.match(/^\/r\/([^/]+)/);
-        if (!matched) {
+        const pathname = String(window.location.pathname || '');
+        const segments = pathname.split('/').filter((item) => item.length > 0);
+        if (segments.length < 2 || segments[0] !== 'r') {
           return '';
         }
 
         try {
-          return decodeURIComponent(matched[1]);
+          return decodeURIComponent(segments[1]);
         } catch {
-          return matched[1];
+          return segments[1];
         }
       }
 
@@ -1316,10 +1872,16 @@ function renderHtml(
         return (card && card.getAttribute && card.getAttribute('data-review-id') || '').trim();
       }
 
-      function readCardState(reviewId) {
+      function isCardDefaultExcluded(card) {
+        const raw = (card && card.getAttribute && card.getAttribute('data-default-excluded') || '').trim().toLowerCase();
+        return raw === 'true' || raw === '1' || raw === 'yes';
+      }
+
+      function readCardState(reviewId, card) {
+        const defaultExcluded = isCardDefaultExcluded(card);
         const row = reviewState[reviewId];
         if (!row || typeof row !== 'object') {
-          return { favorite: false, excluded: false };
+          return { favorite: false, excluded: defaultExcluded };
         }
 
         return {
@@ -1328,14 +1890,16 @@ function renderHtml(
         };
       }
 
-      function writeCardState(reviewId, next) {
+      function writeCardState(reviewId, next, card) {
+        const defaultExcluded = isCardDefaultExcluded(card);
+        const defaultFavorite = false;
         const cleaned = {
           favorite: Boolean(next.favorite),
           excluded: Boolean(next.excluded),
           updatedAt: new Date().toISOString()
         };
 
-        if (!cleaned.favorite && !cleaned.excluded) {
+        if (cleaned.favorite === defaultFavorite && cleaned.excluded === defaultExcluded) {
           delete reviewState[reviewId];
         } else {
           reviewState[reviewId] = cleaned;
@@ -1348,7 +1912,7 @@ function renderHtml(
           return;
         }
 
-        const state = readCardState(reviewId);
+        const state = readCardState(reviewId, card);
         card.classList.toggle('is-favorite', state.favorite);
         card.classList.toggle('is-excluded', state.excluded);
 
@@ -1365,9 +1929,23 @@ function renderHtml(
         }
       }
 
+      function setExcludeFilterMode(nextMode) {
+        const allowed = ['all', 'active', 'excluded'];
+        excludeFilterMode = allowed.includes(nextMode) ? nextMode : 'all';
+
+        excludeFilterButtons.forEach((button) => {
+          if (!(button instanceof HTMLElement)) {
+            return;
+          }
+
+          const mode = (button.getAttribute('data-exclude-filter') || '').trim();
+          button.classList.toggle('is-active', mode === excludeFilterMode);
+        });
+      }
+
       function applyRawStateFilters() {
         const favoritesOnlyChecked = favoritesOnly instanceof HTMLInputElement && favoritesOnly.checked;
-        const showExcludedChecked = showExcluded instanceof HTMLInputElement && showExcluded.checked;
+        const minLengthChecked = minLength100 instanceof HTMLInputElement && minLength100.checked;
 
         rawCards.forEach((card) => {
           const reviewId = getCardReviewId(card);
@@ -1375,10 +1953,14 @@ function renderHtml(
             return;
           }
 
-          const state = readCardState(reviewId);
+          const state = readCardState(reviewId, card);
+          const textLength = Number(card.getAttribute('data-text-length') || '0');
           const hideByFavorite = favoritesOnlyChecked && !state.favorite;
-          const hideByExcluded = !showExcludedChecked && state.excluded;
-          card.classList.toggle('hidden-by-state', hideByFavorite || hideByExcluded);
+          const hideByLength = minLengthChecked && textLength < 100;
+          const hideByExcluded =
+            (excludeFilterMode === 'active' && state.excluded) ||
+            (excludeFilterMode === 'excluded' && !state.excluded);
+          card.classList.toggle('hidden-by-state', hideByFavorite || hideByLength || hideByExcluded);
           syncCardStateVisual(card);
         });
       }
@@ -1514,11 +2096,15 @@ function renderHtml(
           tabBacklog.classList.remove('active');
           viewRaw.classList.add('active');
           viewBacklog.classList.remove('active');
+          contextRaw.classList.add('active');
+          contextBacklog.classList.remove('active');
         } else {
           tabRaw.classList.remove('active');
           tabBacklog.classList.add('active');
           viewRaw.classList.remove('active');
           viewBacklog.classList.add('active');
+          contextRaw.classList.remove('active');
+          contextBacklog.classList.add('active');
         }
 
         if (toggleAllLabel instanceof HTMLElement) {
@@ -1527,8 +2113,11 @@ function renderHtml(
         if (favoritesOnlyLabel instanceof HTMLElement) {
           favoritesOnlyLabel.classList.toggle('hidden-control', !raw);
         }
-        if (showExcludedLabel instanceof HTMLElement) {
-          showExcludedLabel.classList.toggle('hidden-control', !raw);
+        if (minLength100Label instanceof HTMLElement) {
+          minLength100Label.classList.toggle('hidden-control', !raw);
+        }
+        if (excludeFilter instanceof HTMLElement) {
+          excludeFilter.classList.toggle('hidden-control', !raw);
         }
         toggleEvidenceAll.classList.toggle('hidden-control', raw);
         syncEvidenceToggleText();
@@ -1588,9 +2177,9 @@ function renderHtml(
           const card = favoriteToggle.closest('.quote-card');
           const reviewId = getCardReviewId(card);
           if (!card || !reviewId) return;
-          const state = readCardState(reviewId);
+          const state = readCardState(reviewId, card);
           state.favorite = !state.favorite;
-          writeCardState(reviewId, state);
+          writeCardState(reviewId, state, card);
           applySearch();
           schedulePreviewStateSave();
           return;
@@ -1601,9 +2190,9 @@ function renderHtml(
           const card = excludeToggle.closest('.quote-card');
           const reviewId = getCardReviewId(card);
           if (!card || !reviewId) return;
-          const state = readCardState(reviewId);
+          const state = readCardState(reviewId, card);
           state.excluded = !state.excluded;
-          writeCardState(reviewId, state);
+          writeCardState(reviewId, state, card);
           applySearch();
           schedulePreviewStateSave();
         }
@@ -1618,8 +2207,20 @@ function renderHtml(
       });
 
       favoritesOnly.addEventListener('change', applySearch);
-      showExcluded.addEventListener('change', applySearch);
+      minLength100.addEventListener('change', applySearch);
+      excludeFilterButtons.forEach((button) => {
+        if (!(button instanceof HTMLElement)) {
+          return;
+        }
+
+        button.addEventListener('click', () => {
+          const mode = (button.getAttribute('data-exclude-filter') || '').trim();
+          setExcludeFilterMode(mode);
+          applySearch();
+        });
+      });
       searchInput.addEventListener('input', applySearch);
+      setExcludeFilterMode('all');
       setTab(true);
       loadPreviewState();
     </script>
@@ -1640,7 +2241,8 @@ async function main(): Promise<void> {
   const raw = await fs.readFile(inputPath, "utf8");
   const parsed = parseMarkdown(raw);
   const backlog = buildBacklog(parsed.apps);
-  const html = renderHtml(parsed.title, parsed.metadata, parsed.apps, backlog, ownerAppId);
+  const reviewPools = await loadReviewPools(ownerAppId);
+  const html = renderHtml(parsed.title, parsed.metadata, parsed.apps, backlog, ownerAppId, reviewPools);
 
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
   await fs.writeFile(outputPath, html, "utf8");
