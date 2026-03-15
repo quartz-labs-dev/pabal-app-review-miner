@@ -23,22 +23,22 @@ Output structure:
 npm install
 npm run build
 npm run setup:config
-npm run collect-reviews -- --my-app golden-horizon --apps apps.json --limit 200
-npm run collect-reviews -- --my-app golden-horizon --auto-top 5 --limit 200
-npm run collect-reviews -- --my-app golden-horizon --apps apps.json --platform ios --limit 200
-npm run collect-reviews-by-name -- --my-app golden-horizon --name "BJJBuddy"
-npm run translate-reviews -- --my-app golden-horizon
-npm run analyze-competitors -- --my-app golden-horizon
-npm run render-report-html -- --my-app golden-horizon
-npm run preview-report -- --my-app golden-horizon --port 4173
+npm run review:collect -- --my-app golden-horizon --apps apps.json --limit 200
+npm run review:collect -- --my-app golden-horizon --auto-top 5 --limit 200
+npm run review:collect -- --my-app golden-horizon --apps apps.json --platform ios --limit 200
+npm run review:collect-by-name -- --my-app golden-horizon --name "BJJBuddy"
+npm run report:translate -- --my-app golden-horizon
+npm run report:analyze -- --my-app golden-horizon
+npm run report:render-html -- --my-app golden-horizon
+npm run report:preview -- --my-app golden-horizon --port 4173
 ```
 
 ## Documentation Map
 
 - [Setup](./setup.md): prerequisites and `registered-apps.json` preparation
-- [collect-reviews](./collect-reviews.md): main competitor review collection flow
-- [collect-reviews-by-name](./collect-reviews-by-name.md): name-based id resolution and collection flow
-- [translate-reviews](./translate-reviews.md): Korean translation pipeline for collected reviews
-- [analyze-competitors](./analyze-competitors.md): Korean competitor insight report generation
-- [render-report-html](./render-report-html.md): interactive web view (Raw + actionable backlog)
-- [preview-report](./preview-report.md): local localhost preview server for rendered reports
+- [review:collect](./reviews/collect.md): main competitor review collection flow
+- [review:collect-by-name](./reviews/collect-by-name.md): name-based id resolution and collection flow
+- [report:translate](./reports/translate.md): Korean translation pipeline for collected reviews
+- [report:analyze](./reports/analyze.md): Korean competitor insight report generation
+- [report:render-html](./reports/render-html.md): interactive web view (Raw + actionable backlog)
+- [report:preview](./reports/preview.md): local localhost preview server for rendered reports

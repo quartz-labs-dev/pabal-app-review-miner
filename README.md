@@ -21,31 +21,31 @@ Output structure:
 npm install
 npm run build
 npm run setup:config
-npm run collect-reviews -- --my-app golden-horizon --apps apps.json --limit 200
+npm run review:collect -- --my-app golden-horizon --apps apps.json --limit 200
 
 # or auto-discover competitors (top 5 per available store by default)
-npm run collect-reviews -- --my-app golden-horizon --auto-top 5 --limit 200
+npm run review:collect -- --my-app golden-horizon --auto-top 5 --limit 200
 
 # platform filter (default: both, optional: ios | android)
-npm run collect-reviews -- --my-app golden-horizon --apps apps.json --platform ios --limit 200
+npm run review:collect -- --my-app golden-horizon --apps apps.json --platform ios --limit 200
 
 # add one app by name (searches both stores, then collects and saves reviews)
-npm run collect-reviews-by-name -- --my-app golden-horizon --name "BJJBuddy"
+npm run review:collect-by-name -- --my-app golden-horizon --name "BJJBuddy"
 
 # translate all collected reviews to Korean (output: data/{myAppId}/reviews-ko)
-npm run translate-reviews -- --my-app golden-horizon
+npm run report:translate -- --my-app golden-horizon
 
 # generate Korean competitor report (output: data/{myAppId}/reports)
-npm run analyze-competitors -- --my-app golden-horizon
+npm run report:analyze -- --my-app golden-horizon
 
 # render interactive HTML (Raw + Backlog tabs, Korean default with source toggle)
-npm run render-report-html -- --my-app golden-horizon
+npm run report:render-html -- --my-app golden-horizon
 
 # preview the rendered HTML on localhost
-npm run preview-report -- --my-app golden-horizon --port 4173
+npm run report:preview -- --my-app golden-horizon --port 4173
 
 # or start dashboard home (all apps) and click each generated report file
-npm run preview-report -- --port 4173
+npm run report:preview -- --port 4173
 ```
 
 ## Documentation
@@ -56,7 +56,7 @@ npm run preview-report -- --port 4173
 ## Development
 
 ```bash
-npm run dev:collect-reviews -- --my-app golden-horizon --apps apps.json --limit 200
+npm run dev -- --port 4173
 ```
 
 ## License

@@ -1,10 +1,10 @@
-# 사용법: `collect-reviews-by-name`
+# 사용법: `review:collect-by-name`
 
-사전 준비는 [셋업](./setup.md)을 먼저 확인하세요.
+사전 준비는 [셋업](../setup.md)을 먼저 확인하세요.
 
 이 문서는 이름 기반 수집 스크립트를 설명합니다.
 
-- `npm run collect-reviews-by-name -- --my-app <owner> --name "<query>" ...`
+- `npm run review:collect-by-name -- --my-app <owner> --name "<query>" ...`
 - `node dist/addByName.js ...`
 
 ## CLI 옵션
@@ -23,7 +23,7 @@
 ## 기본 실행
 
 ```bash
-npm run collect-reviews-by-name -- --my-app golden-horizon --name "BJJBuddy" --limit 200
+npm run review:collect-by-name -- --my-app golden-horizon --name "BJJBuddy" --limit 200
 ```
 
 ## 스토어 제한 실행
@@ -31,19 +31,19 @@ npm run collect-reviews-by-name -- --my-app golden-horizon --name "BJJBuddy" --l
 iOS만 수집:
 
 ```bash
-npm run collect-reviews-by-name -- --my-app golden-horizon --name "BJJBuddy" --platform ios
+npm run review:collect-by-name -- --my-app golden-horizon --name "BJJBuddy" --platform ios
 ```
 
 Android만 수집:
 
 ```bash
-npm run collect-reviews-by-name -- --my-app golden-horizon --name "BJJBuddy" --platform android
+npm run review:collect-by-name -- --my-app golden-horizon --name "BJJBuddy" --platform android
 ```
 
 ## ID 직접 지정
 
 ```bash
-npm run collect-reviews-by-name -- --my-app golden-horizon --name "BJJBuddy" \
+npm run review:collect-by-name -- --my-app golden-horizon --name "BJJBuddy" \
   --play-id com.bjja.buddy \
   --ios-id 123456789
 ```
@@ -51,7 +51,7 @@ npm run collect-reviews-by-name -- --my-app golden-horizon --name "BJJBuddy" \
 ## JSON 출력
 
 ```bash
-npm run collect-reviews-by-name -- --my-app golden-horizon --name "BJJBuddy" --output json
+npm run review:collect-by-name -- --my-app golden-horizon --name "BJJBuddy" --output json
 ```
 
 ## 출력

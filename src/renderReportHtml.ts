@@ -281,7 +281,7 @@ function resolveDefaultOutput(ownerAppId: string): string {
 
 async function parseArgs(): Promise<CliArgs> {
   const parsed = await yargs(hideBin(process.argv))
-    .scriptName("render-report-html")
+    .scriptName("report:render-html")
     .usage("$0 --my-app <owner> [options]")
     .option("my-app", {
       type: "string",

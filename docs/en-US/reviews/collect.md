@@ -1,10 +1,10 @@
-# Usage: `collect-reviews`
+# Usage: `review:collect`
 
-For prerequisites and registered app setup, see [Setup](./setup.md).
+For prerequisites and registered app setup, see [Setup](../setup.md).
 
 This guide documents the main collector script:
 
-- `npm run collect-reviews -- --my-app <owner> ...`
+- `npm run review:collect -- --my-app <owner> ...`
 - `node dist/cli.js ...`
 
 ## CLI Options
@@ -26,7 +26,7 @@ This guide documents the main collector script:
 ## Single Competitor
 
 ```bash
-npm run collect-reviews -- photopills \
+npm run review:collect -- photopills \
   --my-app golden-horizon \
   --play com.photopills.photopills \
   --ios 596027698 \
@@ -36,7 +36,7 @@ npm run collect-reviews -- photopills \
 iOS only:
 
 ```bash
-npm run collect-reviews -- photopills \
+npm run review:collect -- photopills \
   --my-app golden-horizon \
   --play com.photopills.photopills \
   --ios 596027698 \
@@ -47,7 +47,7 @@ npm run collect-reviews -- photopills \
 Android only:
 
 ```bash
-npm run collect-reviews -- photopills \
+npm run review:collect -- photopills \
   --my-app golden-horizon \
   --play com.photopills.photopills \
   --ios 596027698 \
@@ -58,25 +58,25 @@ npm run collect-reviews -- photopills \
 ## Multi Competitor (`apps.json`)
 
 ```bash
-npm run collect-reviews -- --my-app golden-horizon --apps apps.json --limit 200
+npm run review:collect -- --my-app golden-horizon --apps apps.json --limit 200
 ```
 
 ## Auto Discovery (`--my-app` only)
 
 ```bash
-npm run collect-reviews -- --my-app golden-horizon --auto-top 5 --limit 200
+npm run review:collect -- --my-app golden-horizon --auto-top 5 --limit 200
 ```
 
 Global sweep explicitly enabled:
 
 ```bash
-npm run collect-reviews -- --my-app golden-horizon --auto-top 5 --limit 200 --global
+npm run review:collect -- --my-app golden-horizon --auto-top 5 --limit 200 --global
 ```
 
 Global sweep disabled:
 
 ```bash
-npm run collect-reviews -- --my-app golden-horizon --auto-top 5 --limit 200 --no-global
+npm run review:collect -- --my-app golden-horizon --auto-top 5 --limit 200 --no-global
 ```
 
 - If no `--apps`, `--play`, `--ios`, or positional `appName` is provided, the CLI auto-discovers competitors.
@@ -95,17 +95,17 @@ npm run collect-reviews -- --my-app golden-horizon --auto-top 5 --limit 200 --no
 Machine-readable JSON report:
 
 ```bash
-npm run collect-reviews -- --my-app golden-horizon --apps apps.json --output json
+npm run review:collect -- --my-app golden-horizon --apps apps.json --output json
 ```
 
 Dry-run:
 
 ```bash
-npm run collect-reviews -- --my-app golden-horizon --apps apps.json --dry-run --output json
+npm run review:collect -- --my-app golden-horizon --apps apps.json --dry-run --output json
 ```
 
 Validate-only:
 
 ```bash
-npm run collect-reviews -- --my-app golden-horizon --apps apps.json --validate-only --output json
+npm run review:collect -- --my-app golden-horizon --apps apps.json --validate-only --output json
 ```

@@ -1,10 +1,10 @@
-# Usage: `analyze-competitors`
+# Usage: `report:analyze`
 
-For prerequisites and owner app resolution, see [Setup](./setup.md).
+For prerequisites and owner app resolution, see [Setup](../setup.md).
 
 This guide documents the competitor insight report generator:
 
-- `npm run analyze-competitors -- --my-app <owner> ...`
+- `npm run report:analyze -- --my-app <owner> ...`
 - `node dist/analyzeCompetitors.js ...`
 
 ## CLI Options
@@ -20,19 +20,19 @@ This guide documents the competitor insight report generator:
 ## Basic Run
 
 ```bash
-npm run analyze-competitors -- --my-app golden-horizon
+npm run report:analyze -- --my-app golden-horizon
 ```
 
 ## Include Self App Benchmark
 
 ```bash
-npm run analyze-competitors -- --my-app golden-horizon --include-self
+npm run report:analyze -- --my-app golden-horizon --include-self
 ```
 
 ## JSON Output
 
 ```bash
-npm run analyze-competitors -- --my-app golden-horizon --output json
+npm run report:analyze -- --my-app golden-horizon --output json
 ```
 
 ## Output

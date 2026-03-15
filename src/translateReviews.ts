@@ -118,7 +118,7 @@ function resolvePathOrDefault(ownerAppId: string, customPath: string | undefined
 
 async function parseArgs(): Promise<CliArgs> {
   const parsed = await yargs(hideBin(process.argv))
-    .scriptName("translate-reviews")
+    .scriptName("report:translate")
     .usage("$0 --my-app <owner> [options]")
     .option("my-app", {
       type: "string",

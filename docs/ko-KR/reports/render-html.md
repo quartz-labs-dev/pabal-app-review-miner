@@ -1,10 +1,10 @@
-# 사용법: `render-report-html`
+# 사용법: `report:render-html`
 
-사전 준비와 소유 앱 키 해석은 [셋업](./setup.md)을 먼저 확인하세요.
+사전 준비와 소유 앱 키 해석은 [셋업](../setup.md)을 먼저 확인하세요.
 
 이 스크립트는 actionable raw 마크다운 리포트를 인터랙티브 HTML로 변환합니다.
 
-- `npm run render-report-html -- --my-app <owner> ...`
+- `npm run report:render-html -- --my-app <owner> ...`
 - `node dist/renderReportHtml.js ...`
 
 ## CLI 옵션
@@ -19,7 +19,7 @@
 ## 기본 실행
 
 ```bash
-npm run render-report-html -- --my-app aurora-eos
+npm run report:render-html -- --my-app aurora-eos
 ```
 
 ## 출력

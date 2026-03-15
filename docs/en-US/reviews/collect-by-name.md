@@ -1,10 +1,10 @@
-# Usage: `collect-reviews-by-name`
+# Usage: `review:collect-by-name`
 
-For prerequisites and registered app setup, see [Setup](./setup.md).
+For prerequisites and registered app setup, see [Setup](../setup.md).
 
 This guide documents the name-based collector script:
 
-- `npm run collect-reviews-by-name -- --my-app <owner> --name "<query>" ...`
+- `npm run review:collect-by-name -- --my-app <owner> --name "<query>" ...`
 - `node dist/addByName.js ...`
 
 ## CLI Options
@@ -23,7 +23,7 @@ This guide documents the name-based collector script:
 ## Basic Run
 
 ```bash
-npm run collect-reviews-by-name -- --my-app golden-horizon --name "BJJBuddy" --limit 200
+npm run review:collect-by-name -- --my-app golden-horizon --name "BJJBuddy" --limit 200
 ```
 
 ## Store-Scoped Run
@@ -31,19 +31,19 @@ npm run collect-reviews-by-name -- --my-app golden-horizon --name "BJJBuddy" --l
 iOS only:
 
 ```bash
-npm run collect-reviews-by-name -- --my-app golden-horizon --name "BJJBuddy" --platform ios
+npm run review:collect-by-name -- --my-app golden-horizon --name "BJJBuddy" --platform ios
 ```
 
 Android only:
 
 ```bash
-npm run collect-reviews-by-name -- --my-app golden-horizon --name "BJJBuddy" --platform android
+npm run review:collect-by-name -- --my-app golden-horizon --name "BJJBuddy" --platform android
 ```
 
 ## Explicit Id Override
 
 ```bash
-npm run collect-reviews-by-name -- --my-app golden-horizon --name "BJJBuddy" \
+npm run review:collect-by-name -- --my-app golden-horizon --name "BJJBuddy" \
   --play-id com.bjja.buddy \
   --ios-id 123456789
 ```
@@ -51,7 +51,7 @@ npm run collect-reviews-by-name -- --my-app golden-horizon --name "BJJBuddy" \
 ## JSON Output
 
 ```bash
-npm run collect-reviews-by-name -- --my-app golden-horizon --name "BJJBuddy" --output json
+npm run review:collect-by-name -- --my-app golden-horizon --name "BJJBuddy" --output json
 ```
 
 ## Output

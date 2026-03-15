@@ -1,10 +1,10 @@
-# Usage: `render-report-html`
+# Usage: `report:render-html`
 
-For prerequisites and owner app resolution, see [Setup](./setup.md).
+For prerequisites and owner app resolution, see [Setup](../setup.md).
 
 This script renders the actionable raw markdown report into an interactive HTML page:
 
-- `npm run render-report-html -- --my-app <owner> ...`
+- `npm run report:render-html -- --my-app <owner> ...`
 - `node dist/renderReportHtml.js ...`
 
 ## CLI Options
@@ -19,7 +19,7 @@ This script renders the actionable raw markdown report into an interactive HTML 
 ## Basic Run
 
 ```bash
-npm run render-report-html -- --my-app aurora-eos
+npm run report:render-html -- --my-app aurora-eos
 ```
 
 ## Output

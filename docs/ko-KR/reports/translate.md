@@ -1,10 +1,10 @@
-# 사용법: `translate-reviews`
+# 사용법: `report:translate`
 
-사전 준비와 소유 앱 키 해석은 [셋업](./setup.md)을 먼저 확인하세요.
+사전 준비와 소유 앱 키 해석은 [셋업](../setup.md)을 먼저 확인하세요.
 
 이 문서는 수집된 리뷰 JSON을 한국어로 번역하는 스크립트를 설명합니다.
 
-- `npm run translate-reviews -- --my-app <owner> ...`
+- `npm run report:translate -- --my-app <owner> ...`
 - `node dist/translateReviews.js ...`
 
 ## CLI 옵션
@@ -22,19 +22,19 @@
 ## 기본 실행
 
 ```bash
-npm run translate-reviews -- --my-app golden-horizon
+npm run report:translate -- --my-app golden-horizon
 ```
 
 ## 기존 번역 덮어쓰기
 
 ```bash
-npm run translate-reviews -- --my-app golden-horizon --overwrite
+npm run report:translate -- --my-app golden-horizon --overwrite
 ```
 
 ## JSON 출력
 
 ```bash
-npm run translate-reviews -- --my-app golden-horizon --output json
+npm run report:translate -- --my-app golden-horizon --output json
 ```
 
 ## 출력

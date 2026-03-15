@@ -6,11 +6,11 @@ This repository has two user-facing CLI features. Keep implementation and docs s
 
 ## Current Implementation Blueprint
 
-### Feature 1: `collect-reviews`
+### Feature 1: `review:collect`
 
 - Entry file: `src/cli.ts`
 - Build output: `dist/cli.js`
-- NPM scripts: `collect-reviews`, `dev:collect-reviews`
+- NPM scripts: `review:collect`
 - Main behavior:
 - Resolves owner app from `registered-apps.json`
 - Collects competitor reviews from explicit ids, `apps.json`, or auto-discovery
@@ -19,11 +19,11 @@ This repository has two user-facing CLI features. Keep implementation and docs s
 - Supports `--dry-run`, `--validate-only`, and JSON output mode
 - Output path pattern: `data/{myAppId}/reviews/{competitor}.json`
 
-### Feature 2: `collect-reviews-by-name`
+### Feature 2: `review:collect-by-name`
 
 - Entry file: `src/addByName.ts`
 - Build output: `dist/addByName.js`
-- NPM scripts: `collect-reviews-by-name`, `dev:collect-reviews-by-name`
+- NPM scripts: `review:collect-by-name`
 - Main behavior:
 - Resolves store ids by app name search
 - Optional id overrides: `--play-id`, `--ios-id`
@@ -45,16 +45,16 @@ This repository has two user-facing CLI features. Keep implementation and docs s
 - Korean root: `docs/ko-KR/README.md`
 - Setup docs: `docs/en-US/setup.md`, `docs/ko-KR/setup.md`
 - Feature docs:
-- `docs/en-US/collect-reviews.md`
-- `docs/en-US/collect-reviews-by-name.md`
-- `docs/ko-KR/collect-reviews.md`
-- `docs/ko-KR/collect-reviews-by-name.md`
+- `docs/en-US/reviews/collect.md`
+- `docs/en-US/reviews/collect-by-name.md`
+- `docs/ko-KR/reviews/collect.md`
+- `docs/ko-KR/reviews/collect-by-name.md`
 
 ## Mandatory Doc Sync Rules
 
 1. If code behavior changes, update relevant docs in both English and Korean in the same change.
 2. If CLI options/flags/defaults/output schema change, update:
-- corresponding feature doc files (`collect-reviews*.md`)
+- corresponding feature doc files (`reviews/*.md`, `reports/*.md`)
 - both locale README doc maps when links/titles change
 3. If a new script/feature is added, create both docs files immediately:
 - `docs/en-US/<script-name>.md`

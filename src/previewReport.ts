@@ -52,7 +52,7 @@ function extPriority(fileName: string): number {
 
 async function parseArgs(): Promise<CliArgs> {
   const parsed = await yargs(hideBin(process.argv))
-    .scriptName("preview-report")
+    .scriptName("report:preview")
     .usage("$0 [options]")
     .option("my-app", {
       type: "string",
@@ -249,7 +249,7 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
     <div class=\"empty\">
       <p>리포트를 찾지 못했습니다.</p>
       <p>먼저 아래 명령으로 리포트를 생성하세요:</p>
-      <pre>npm run render-report-html -- --my-app &lt;owner&gt;</pre>
+      <pre>npm run report:render-html -- --my-app &lt;owner&gt;</pre>
     </div>
   `;
 
@@ -458,7 +458,7 @@ async function ensureReportExists(filePath: string): Promise<void> {
   if (hasMd) {
     throw new Error(
       `Report HTML not found: ${filePath}\n` +
-        `Run: npm run render-report-html -- --my-app <owner>`
+        `Run: npm run report:render-html -- --my-app <owner>`
     );
   }
 

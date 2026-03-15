@@ -1,10 +1,10 @@
-# 사용법: `analyze-competitors`
+# 사용법: `report:analyze`
 
-사전 준비와 소유 앱 키 해석은 [셋업](./setup.md)을 먼저 확인하세요.
+사전 준비와 소유 앱 키 해석은 [셋업](../setup.md)을 먼저 확인하세요.
 
 이 문서는 경쟁앱 인사이트 리포트를 생성하는 스크립트를 설명합니다.
 
-- `npm run analyze-competitors -- --my-app <owner> ...`
+- `npm run report:analyze -- --my-app <owner> ...`
 - `node dist/analyzeCompetitors.js ...`
 
 ## CLI 옵션
@@ -20,19 +20,19 @@
 ## 기본 실행
 
 ```bash
-npm run analyze-competitors -- --my-app golden-horizon
+npm run report:analyze -- --my-app golden-horizon
 ```
 
 ## 내 앱(self) 포함 벤치마크
 
 ```bash
-npm run analyze-competitors -- --my-app golden-horizon --include-self
+npm run report:analyze -- --my-app golden-horizon --include-self
 ```
 
 ## JSON 출력
 
 ```bash
-npm run analyze-competitors -- --my-app golden-horizon --output json
+npm run report:analyze -- --my-app golden-horizon --output json
 ```
 
 ## 출력

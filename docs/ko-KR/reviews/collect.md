@@ -1,10 +1,10 @@
-# 사용법: `collect-reviews`
+# 사용법: `review:collect`
 
-사전 준비는 [셋업](./setup.md)을 먼저 확인하세요.
+사전 준비는 [셋업](../setup.md)을 먼저 확인하세요.
 
 이 문서는 메인 수집 스크립트를 설명합니다.
 
-- `npm run collect-reviews -- --my-app <owner> ...`
+- `npm run review:collect -- --my-app <owner> ...`
 - `node dist/cli.js ...`
 
 ## CLI 옵션
@@ -26,7 +26,7 @@
 ## 단일 경쟁 앱
 
 ```bash
-npm run collect-reviews -- photopills \
+npm run review:collect -- photopills \
   --my-app golden-horizon \
   --play com.photopills.photopills \
   --ios 596027698 \
@@ -36,7 +36,7 @@ npm run collect-reviews -- photopills \
 iOS만 수집:
 
 ```bash
-npm run collect-reviews -- photopills \
+npm run review:collect -- photopills \
   --my-app golden-horizon \
   --play com.photopills.photopills \
   --ios 596027698 \
@@ -47,7 +47,7 @@ npm run collect-reviews -- photopills \
 Android만 수집:
 
 ```bash
-npm run collect-reviews -- photopills \
+npm run review:collect -- photopills \
   --my-app golden-horizon \
   --play com.photopills.photopills \
   --ios 596027698 \
@@ -58,25 +58,25 @@ npm run collect-reviews -- photopills \
 ## 멀티 경쟁 앱 (`apps.json`)
 
 ```bash
-npm run collect-reviews -- --my-app golden-horizon --apps apps.json --limit 200
+npm run review:collect -- --my-app golden-horizon --apps apps.json --limit 200
 ```
 
 ## 자동 탐색 (`--my-app`만 사용)
 
 ```bash
-npm run collect-reviews -- --my-app golden-horizon --auto-top 5 --limit 200
+npm run review:collect -- --my-app golden-horizon --auto-top 5 --limit 200
 ```
 
 글로벌 순회 명시:
 
 ```bash
-npm run collect-reviews -- --my-app golden-horizon --auto-top 5 --limit 200 --global
+npm run review:collect -- --my-app golden-horizon --auto-top 5 --limit 200 --global
 ```
 
 기본 마켓만 실행:
 
 ```bash
-npm run collect-reviews -- --my-app golden-horizon --auto-top 5 --limit 200 --no-global
+npm run review:collect -- --my-app golden-horizon --auto-top 5 --limit 200 --no-global
 ```
 
 - `--apps`, `--play`, `--ios`, positional `appName`이 없으면 자동 경쟁앱 탐색 모드로 동작합니다.
@@ -96,17 +96,17 @@ npm run collect-reviews -- --my-app golden-horizon --auto-top 5 --limit 200 --no
 머신 리더블 JSON 보고서:
 
 ```bash
-npm run collect-reviews -- --my-app golden-horizon --apps apps.json --output json
+npm run review:collect -- --my-app golden-horizon --apps apps.json --output json
 ```
 
 Dry-run:
 
 ```bash
-npm run collect-reviews -- --my-app golden-horizon --apps apps.json --dry-run --output json
+npm run review:collect -- --my-app golden-horizon --apps apps.json --dry-run --output json
 ```
 
 Validate-only:
 
 ```bash
-npm run collect-reviews -- --my-app golden-horizon --apps apps.json --validate-only --output json
+npm run review:collect -- --my-app golden-horizon --apps apps.json --validate-only --output json
 ```

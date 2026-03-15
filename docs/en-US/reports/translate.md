@@ -1,10 +1,10 @@
-# Usage: `translate-reviews`
+# Usage: `report:translate`
 
-For prerequisites and owner app resolution, see [Setup](./setup.md).
+For prerequisites and owner app resolution, see [Setup](../setup.md).
 
 This guide documents the Korean translation script for collected review files:
 
-- `npm run translate-reviews -- --my-app <owner> ...`
+- `npm run report:translate -- --my-app <owner> ...`
 - `node dist/translateReviews.js ...`
 
 ## CLI Options
@@ -22,19 +22,19 @@ This guide documents the Korean translation script for collected review files:
 ## Basic Run
 
 ```bash
-npm run translate-reviews -- --my-app golden-horizon
+npm run report:translate -- --my-app golden-horizon
 ```
 
 ## Re-translate Existing Files
 
 ```bash
-npm run translate-reviews -- --my-app golden-horizon --overwrite
+npm run report:translate -- --my-app golden-horizon --overwrite
 ```
 
 ## JSON Output
 
 ```bash
-npm run translate-reviews -- --my-app golden-horizon --output json
+npm run report:translate -- --my-app golden-horizon --output json
 ```
 
 ## Output
