@@ -44,22 +44,20 @@ This repository has two user-facing CLI features. Keep implementation and docs s
 - English root: `docs/en-US/README.md`
 - Korean root: `docs/ko-KR/README.md`
 - Setup docs: `docs/en-US/setup.md`, `docs/ko-KR/setup.md`
-- Feature docs:
-- `docs/en-US/reviews/collect.md`
-- `docs/en-US/reviews/collect-by-name.md`
-- `docs/ko-KR/reviews/collect.md`
-- `docs/ko-KR/reviews/collect-by-name.md`
+- Unified command docs:
+- `docs/en-US/reports.md`
+- `docs/ko-KR/reports.md`
 
 ## Mandatory Doc Sync Rules
 
 1. If code behavior changes, update relevant docs in both English and Korean in the same change.
 2. If CLI options/flags/defaults/output schema change, update:
-- corresponding feature doc files (`reviews/*.md`, `reports/*.md`)
+- `docs/en-US/reports.md` and `docs/ko-KR/reports.md`
 - both locale README doc maps when links/titles change
 3. If a new script/feature is added, create both docs files immediately:
-- `docs/en-US/<script-name>.md`
-- `docs/ko-KR/<script-name>.md`
-4. Do not merge multiple script usages into one doc file. Keep one file per script feature.
+- add a new section in `docs/en-US/reports.md`
+- add a matching section in `docs/ko-KR/reports.md`
+4. Keep command docs consolidated in `reports.md` with clear per-script sections.
 5. If command names are renamed, update all of:
 - `package.json` scripts
 - yargs `.scriptName(...)`

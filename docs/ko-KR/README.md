@@ -36,9 +36,4 @@ npm run report:preview -- --my-app golden-horizon --port 4173
 ## 문서 안내
 
 - [셋업](./setup.md): 사전 준비 및 `registered-apps.json` 설정
-- [review:collect](./reviews/collect.md): 메인 경쟁앱 리뷰 수집 흐름
-- [review:collect-by-name](./reviews/collect-by-name.md): 앱 이름 기반 ID 탐색 + 수집 흐름
-- [report:translate](./reports/translate.md): 수집 리뷰 한국어 번역 파이프라인
-- [report:analyze](./reports/analyze.md): 경쟁앱 한글 분석 리포트 생성
-- [report:render-html](./reports/render-html.md): Raw+백로그 웹 뷰어 생성
-- [report:preview](./reports/preview.md): 생성된 리포트 localhost 미리보기 서버
+- [리포트 가이드](./reports.md): 모든 리뷰/리포트 명령을 하나의 문서에서 섹션별로 안내

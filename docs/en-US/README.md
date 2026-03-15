@@ -36,9 +36,4 @@ npm run report:preview -- --my-app golden-horizon --port 4173
 ## Documentation Map
 
 - [Setup](./setup.md): prerequisites and `registered-apps.json` preparation
-- [review:collect](./reviews/collect.md): main competitor review collection flow
-- [review:collect-by-name](./reviews/collect-by-name.md): name-based id resolution and collection flow
-- [report:translate](./reports/translate.md): Korean translation pipeline for collected reviews
-- [report:analyze](./reports/analyze.md): Korean competitor insight report generation
-- [report:render-html](./reports/render-html.md): interactive web view (Raw + actionable backlog)
-- [report:preview](./reports/preview.md): local localhost preview server for rendered reports
+- [Reports Guide](./reports.md): all review/report commands in one document (sectioned)
