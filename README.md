@@ -43,6 +43,9 @@ npm run render-report-html -- --my-app golden-horizon
 
 # preview the rendered HTML on localhost
 npm run preview-report -- --my-app golden-horizon --port 4173
+
+# or start dashboard home (all apps) and click each generated report file
+npm run preview-report -- --port 4173
 ```
 
 ## Documentation
