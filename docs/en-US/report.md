@@ -69,6 +69,8 @@ Render actionable markdown report to interactive HTML.
 - `node dist/renderReportHtml.js ...`
 - Generated HTML top bar includes a `Home` button (`/`) at the top-left.
 - In top controls, `Show all original text` appears only in `Raw Reviews` tab, and `Expand evidence` appears only in `Actionable Backlog` tab.
+- Raw review cards include `Favorite` and `Exclude/Restore` actions.
+- In preview mode, card states are persisted to `data/{myAppId}/reports/preview-state.json`.
 
 ### CLI Options
 
@@ -93,6 +95,10 @@ Run localhost preview server.
 
 - Dashboard mode: home lists app ids and generated report files (`.html`, `.md`, `.json`)
 - Single-file mode: serve one HTML file with `--file`
+- Serves preview state API for raw-review card management:
+  - `GET /api/preview-state/:appId`
+  - `PUT /api/preview-state/:appId`
+  - persistence file: `data/{myAppId}/reports/preview-state.json`
 
 - `npm run report:preview -- [options]`
 - `node dist/previewReport.js ...`

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { promises as fs } from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
@@ -20,6 +21,7 @@ type Impact = "high" | "medium" | "low";
 type Effort = "high" | "medium" | "low";
 
 interface QuoteItem {
+  reviewId: string;
   meta: string;
   kr: string;
   org: string;
@@ -298,6 +300,26 @@ function parseReviewCount(line: string): string | undefined {
   return undefined;
 }
 
+function hashToken(input: string): string {
+  return createHash("sha1").update(input).digest("hex").slice(0, 20);
+}
+
+function createQuoteReviewId(
+  appTitle: string,
+  categoryKey: CategoryKey,
+  quote: Pick<QuoteItem, "meta" | "kr" | "org">
+): string {
+  const fingerprint = [
+    normalizeText(appTitle).toLowerCase(),
+    categoryKey,
+    normalizeText(quote.meta).toLowerCase(),
+    normalizeText(quote.kr).toLowerCase(),
+    normalizeText(quote.org).toLowerCase()
+  ].join("::");
+
+  return `rq_${hashToken(fingerprint)}`;
+}
+
 function resolveDefaultInput(ownerAppId: string): string {
   return path.resolve(process.cwd(), "data", ownerAppId, "reports", "competitor-raw-actionable.ko.md");
 }
@@ -432,7 +454,7 @@ function parseMarkdown(input: string): { title: string; metadata: string[]; apps
 
   let currentApp: AppSection | undefined;
   let currentCategory: CategoryKey | undefined;
-  let currentQuote: QuoteItem | undefined;
+  let currentQuote: Omit<QuoteItem, "reviewId"> | undefined;
 
   function flushQuote() {
     if (!currentApp || !currentCategory || !currentQuote) {
@@ -447,6 +469,11 @@ function parseMarkdown(input: string): { title: string; metadata: string[]; apps
     }
 
     currentApp.categories[currentCategory].push({
+      reviewId: createQuoteReviewId(currentApp.title, currentCategory, {
+        meta: normalizeText(currentQuote.meta),
+        kr,
+        org
+      }),
       meta: normalizeText(currentQuote.meta),
       kr,
       org
@@ -668,7 +695,13 @@ function renderLevel(level: Impact | Effort): string {
   return "Low";
 }
 
-function renderHtml(title: string, metadata: string[], apps: AppSection[], backlogs: AppBacklog[]): string {
+function renderHtml(
+  title: string,
+  metadata: string[],
+  apps: AppSection[],
+  backlogs: AppBacklog[],
+  ownerAppId: string
+): string {
   const rawAppSections = apps
     .map((app) => {
       const categoryBlocks = (Object.keys(app.categories) as CategoryKey[])
@@ -681,15 +714,20 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
                   .map((item) => {
                     const kr = escapeHtml(item.kr || "(한국어 번역 없음)");
                     const org = escapeHtml(item.org || "(원문 없음)");
+                    const reviewId = escapeHtml(item.reviewId);
 
                     return `
-                      <article class=\"quote-card searchable\" data-search=\"${escapeHtml(
+                      <article class=\"quote-card searchable\" data-review-id=\"${reviewId}\" data-search=\"${escapeHtml(
                         `${app.title} ${renderCategoryTitle(categoryKey)} ${item.meta} ${item.kr} ${item.org}`
                       ).toLowerCase()}\">
                         <div class=\"quote-meta\">${escapeHtml(item.meta)}</div>
                         <div class=\"quote-kr\">${kr}</div>
                         <div class=\"quote-org org-text\">${org}</div>
-                        <button class=\"toggle-one\" type=\"button\">원어 보기</button>
+                        <div class=\"quote-actions\">
+                          <button class=\"toggle-one\" type=\"button\">원어 보기</button>
+                          <button class=\"favorite-toggle\" type=\"button\">즐겨찾기</button>
+                          <button class=\"exclude-toggle\" type=\"button\">제외</button>
+                        </div>
                       </article>
                     `;
                   })
@@ -882,7 +920,7 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
         margin: 0 auto;
         padding: 10px 14px;
         display: grid;
-        grid-template-columns: auto minmax(320px, 1fr) auto auto auto;
+        grid-template-columns: auto minmax(320px, 1fr) auto auto auto auto auto;
         gap: 10px;
         align-items: center;
       }
@@ -966,7 +1004,7 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
         border-radius: 10px;
         font-size: 14px;
       }
-      button, .toggle-all-label {
+      button, .toggle-all-label, .toggle-favorite-label, .toggle-excluded-label {
         border: 1px solid var(--line);
         background: var(--panel);
         color: var(--ink);
@@ -982,7 +1020,9 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
         color: #94a3b8;
         background: #f8fafc;
       }
-      .toggle-all-label {
+      .toggle-all-label,
+      .toggle-favorite-label,
+      .toggle-excluded-label {
         display: inline-flex;
         align-items: center;
         gap: 8px;
@@ -1048,12 +1088,23 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
         display: grid;
         grid-template-columns: 1fr;
         gap: 8px;
+        align-items: stretch;
       }
       .quote-card {
         border: 1px solid var(--line);
         border-radius: 12px;
         padding: 10px 12px;
         background: #fff;
+        display: flex;
+        flex-direction: column;
+        min-height: 100%;
+      }
+      .quote-card.is-favorite {
+        border-color: #eab308;
+        box-shadow: 0 0 0 2px rgba(234, 179, 8, 0.15);
+      }
+      .quote-card.is-excluded {
+        opacity: 0.6;
       }
       .quote-meta { color: var(--sub); font-size: 12px; margin-bottom: 8px; }
       .quote-kr { font-size: 14px; line-height: 1.45; }
@@ -1070,14 +1121,39 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
       .quote-card.show-one-original .org-text {
         display: block;
       }
-      .toggle-one {
-        margin-top: 8px;
+      .quote-actions {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-top: auto;
+        padding-top: 10px;
+        justify-content: flex-end;
+        align-items: flex-end;
+      }
+      .toggle-one,
+      .favorite-toggle,
+      .exclude-toggle {
         font-size: 12px;
         padding: 6px 8px;
         cursor: pointer;
       }
+      .favorite-toggle.is-active {
+        border-color: #eab308;
+        color: #a16207;
+        background: #fef9c3;
+      }
+      .exclude-toggle.is-active {
+        border-color: #ef4444;
+        color: #b91c1c;
+        background: #fee2e2;
+      }
+      .toggle-one {
+        margin-top: 0;
+        margin-left: auto;
+      }
       .empty { margin: 0; color: var(--sub); font-size: 13px; }
       .hidden-by-search { display: none !important; }
+      .hidden-by-state { display: none !important; }
       .view { display: none; }
       .view.active { display: block; }
       .table-wrap { overflow-x: auto; }
@@ -1141,7 +1217,7 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
       .example-org { margin-top: 6px; }
       @media (max-width: 1100px) {
         .top-inner {
-          grid-template-columns: auto minmax(220px, 1fr) auto auto;
+          grid-template-columns: auto minmax(220px, 1fr) auto auto auto;
         }
       }
       @media (max-width: 900px) {
@@ -1157,7 +1233,7 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
       }
     </style>
   </head>
-  <body>
+  <body data-owner-app-id=\"${escapeHtml(ownerAppId)}\">
     <div class=\"top\">
       <div class=\"top-inner\">
         <a class=\"home-link\" href=\"/\">홈</a>
@@ -1167,6 +1243,8 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
           <button id=\"tabBacklog\" class=\"tab-btn\" type=\"button\">실행 백로그</button>
         </div>
         <label class=\"toggle-all-label\"><input id=\"toggleAll\" type=\"checkbox\" /> 원어 전체 보기</label>
+        <label class=\"toggle-favorite-label\"><input id=\"favoritesOnly\" type=\"checkbox\" /> 즐겨찾기만</label>
+        <label class=\"toggle-excluded-label\"><input id=\"showExcluded\" type=\"checkbox\" /> 제외 항목 보기</label>
         <button id=\"toggleEvidenceAll\" type=\"button\">근거 펼치기</button>
       </div>
     </div>
@@ -1194,14 +1272,195 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
       const searchInput = document.getElementById('search');
       const toggleAll = document.getElementById('toggleAll');
       const toggleAllLabel = toggleAll ? toggleAll.closest('.toggle-all-label') : null;
+      const favoritesOnly = document.getElementById('favoritesOnly');
+      const favoritesOnlyLabel = favoritesOnly ? favoritesOnly.closest('.toggle-favorite-label') : null;
+      const showExcluded = document.getElementById('showExcluded');
+      const showExcludedLabel = showExcluded ? showExcluded.closest('.toggle-excluded-label') : null;
       const toggleEvidenceAll = document.getElementById('toggleEvidenceAll');
       const tabRaw = document.getElementById('tabRaw');
       const tabBacklog = document.getElementById('tabBacklog');
       const viewRaw = document.getElementById('viewRaw');
       const viewBacklog = document.getElementById('viewBacklog');
+      const rawCards = Array.from(viewRaw.querySelectorAll('.quote-card[data-review-id]'));
+      const reviewState = Object.create(null);
+      let saveStateTimer = null;
+      let stateLoaded = false;
+
+      function resolveOwnerAppId() {
+        const fromBody = (document.body && document.body.getAttribute('data-owner-app-id')) || '';
+        const trimmedBody = fromBody.trim();
+        if (trimmedBody) {
+          return trimmedBody;
+        }
+
+        const matched = window.location.pathname.match(/^\/r\/([^/]+)/);
+        if (!matched) {
+          return '';
+        }
+
+        try {
+          return decodeURIComponent(matched[1]);
+        } catch {
+          return matched[1];
+        }
+      }
+
+      const ownerAppId = resolveOwnerAppId();
+      const previewStateApiUrl = ownerAppId ? '/api/preview-state/' + encodeURIComponent(ownerAppId) : '';
 
       function currentViewElement() {
         return viewRaw.classList.contains('active') ? viewRaw : viewBacklog;
+      }
+
+      function getCardReviewId(card) {
+        return (card && card.getAttribute && card.getAttribute('data-review-id') || '').trim();
+      }
+
+      function readCardState(reviewId) {
+        const row = reviewState[reviewId];
+        if (!row || typeof row !== 'object') {
+          return { favorite: false, excluded: false };
+        }
+
+        return {
+          favorite: Boolean(row.favorite),
+          excluded: Boolean(row.excluded)
+        };
+      }
+
+      function writeCardState(reviewId, next) {
+        const cleaned = {
+          favorite: Boolean(next.favorite),
+          excluded: Boolean(next.excluded),
+          updatedAt: new Date().toISOString()
+        };
+
+        if (!cleaned.favorite && !cleaned.excluded) {
+          delete reviewState[reviewId];
+        } else {
+          reviewState[reviewId] = cleaned;
+        }
+      }
+
+      function syncCardStateVisual(card) {
+        const reviewId = getCardReviewId(card);
+        if (!reviewId) {
+          return;
+        }
+
+        const state = readCardState(reviewId);
+        card.classList.toggle('is-favorite', state.favorite);
+        card.classList.toggle('is-excluded', state.excluded);
+
+        const favoriteButton = card.querySelector('.favorite-toggle');
+        if (favoriteButton instanceof HTMLElement) {
+          favoriteButton.classList.toggle('is-active', state.favorite);
+          favoriteButton.textContent = state.favorite ? '즐겨찾기 해제' : '즐겨찾기';
+        }
+
+        const excludeButton = card.querySelector('.exclude-toggle');
+        if (excludeButton instanceof HTMLElement) {
+          excludeButton.classList.toggle('is-active', state.excluded);
+          excludeButton.textContent = state.excluded ? '복원' : '제외';
+        }
+      }
+
+      function applyRawStateFilters() {
+        const favoritesOnlyChecked = favoritesOnly instanceof HTMLInputElement && favoritesOnly.checked;
+        const showExcludedChecked = showExcluded instanceof HTMLInputElement && showExcluded.checked;
+
+        rawCards.forEach((card) => {
+          const reviewId = getCardReviewId(card);
+          if (!reviewId) {
+            return;
+          }
+
+          const state = readCardState(reviewId);
+          const hideByFavorite = favoritesOnlyChecked && !state.favorite;
+          const hideByExcluded = !showExcludedChecked && state.excluded;
+          card.classList.toggle('hidden-by-state', hideByFavorite || hideByExcluded);
+          syncCardStateVisual(card);
+        });
+      }
+
+      async function savePreviewState() {
+        if (!previewStateApiUrl) {
+          return;
+        }
+
+        try {
+          await fetch(previewStateApiUrl, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              reviews: reviewState
+            })
+          });
+        } catch {
+          // Keep UI behavior even when persistence fails.
+        }
+      }
+
+      function schedulePreviewStateSave() {
+        if (!previewStateApiUrl) {
+          return;
+        }
+
+        if (saveStateTimer) {
+          window.clearTimeout(saveStateTimer);
+        }
+
+        saveStateTimer = window.setTimeout(() => {
+          savePreviewState();
+        }, 200);
+      }
+
+      async function loadPreviewState() {
+        if (!previewStateApiUrl || stateLoaded) {
+          applyRawStateFilters();
+          return;
+        }
+
+        stateLoaded = true;
+
+        try {
+          const response = await fetch(previewStateApiUrl, {
+            method: 'GET'
+          });
+
+          if (!response.ok) {
+            applyRawStateFilters();
+            return;
+          }
+
+          const payload = await response.json();
+          const rows = payload && typeof payload === 'object' && payload.reviews && typeof payload.reviews === 'object'
+            ? payload.reviews
+            : {};
+
+          Object.keys(reviewState).forEach((key) => {
+            delete reviewState[key];
+          });
+
+          Object.entries(rows).forEach(([reviewId, row]) => {
+            if (!reviewId) return;
+            if (!row || typeof row !== 'object') return;
+            const favorite = Boolean(row.favorite);
+            const excluded = Boolean(row.excluded);
+            if (!favorite && !excluded) return;
+            reviewState[reviewId] = {
+              favorite,
+              excluded,
+              updatedAt: typeof row.updatedAt === 'string' ? row.updatedAt : new Date().toISOString()
+            };
+          });
+        } catch {
+          // Keep UI behavior even when loading persistence fails.
+        }
+
+        applyRawStateFilters();
       }
 
       function visibleEvidenceRows() {
@@ -1245,6 +1504,7 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
           }
         });
 
+        applyRawStateFilters();
         syncEvidenceToggleText();
       }
 
@@ -1263,6 +1523,12 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
 
         if (toggleAllLabel instanceof HTMLElement) {
           toggleAllLabel.classList.toggle('hidden-control', !raw);
+        }
+        if (favoritesOnlyLabel instanceof HTMLElement) {
+          favoritesOnlyLabel.classList.toggle('hidden-control', !raw);
+        }
+        if (showExcludedLabel instanceof HTMLElement) {
+          showExcludedLabel.classList.toggle('hidden-control', !raw);
         }
         toggleEvidenceAll.classList.toggle('hidden-control', raw);
         syncEvidenceToggleText();
@@ -1308,13 +1574,39 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
         }
 
         const toggleOne = target.closest('.toggle-one');
-        if (!(toggleOne instanceof HTMLElement)) return;
+        if (toggleOne instanceof HTMLElement) {
+          const card = toggleOne.closest('.quote-card');
+          if (!card) return;
 
-        const card = toggleOne.closest('.quote-card');
-        if (!card) return;
+          card.classList.toggle('show-one-original');
+          toggleOne.textContent = card.classList.contains('show-one-original') ? '원어 숨기기' : '원어 보기';
+          return;
+        }
 
-        card.classList.toggle('show-one-original');
-        toggleOne.textContent = card.classList.contains('show-one-original') ? '원어 숨기기' : '원어 보기';
+        const favoriteToggle = target.closest('.favorite-toggle');
+        if (favoriteToggle instanceof HTMLElement) {
+          const card = favoriteToggle.closest('.quote-card');
+          const reviewId = getCardReviewId(card);
+          if (!card || !reviewId) return;
+          const state = readCardState(reviewId);
+          state.favorite = !state.favorite;
+          writeCardState(reviewId, state);
+          applySearch();
+          schedulePreviewStateSave();
+          return;
+        }
+
+        const excludeToggle = target.closest('.exclude-toggle');
+        if (excludeToggle instanceof HTMLElement) {
+          const card = excludeToggle.closest('.quote-card');
+          const reviewId = getCardReviewId(card);
+          if (!card || !reviewId) return;
+          const state = readCardState(reviewId);
+          state.excluded = !state.excluded;
+          writeCardState(reviewId, state);
+          applySearch();
+          schedulePreviewStateSave();
+        }
       });
 
       toggleAll.addEventListener('change', () => {
@@ -1325,8 +1617,11 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
         }
       });
 
+      favoritesOnly.addEventListener('change', applySearch);
+      showExcluded.addEventListener('change', applySearch);
       searchInput.addEventListener('input', applySearch);
       setTab(true);
+      loadPreviewState();
     </script>
   </body>
 </html>`;
@@ -1345,7 +1640,7 @@ async function main(): Promise<void> {
   const raw = await fs.readFile(inputPath, "utf8");
   const parsed = parseMarkdown(raw);
   const backlog = buildBacklog(parsed.apps);
-  const html = renderHtml(parsed.title, parsed.metadata, parsed.apps, backlog);
+  const html = renderHtml(parsed.title, parsed.metadata, parsed.apps, backlog, ownerAppId);
 
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
   await fs.writeFile(outputPath, html, "utf8");

@@ -16,7 +16,8 @@ function mapPlayReview(row: IReviewsItem): ReviewItem {
     rating: Number(row.score ?? 0),
     text: normalizeText(row.text),
     date: toIsoString(row.date),
-    user: normalizeText(row.userName) || "anonymous"
+    user: normalizeText(row.userName) || "anonymous",
+    storeReviewId: normalizeText(row.id)
   };
 }
 

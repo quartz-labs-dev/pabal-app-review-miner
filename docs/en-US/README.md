@@ -10,6 +10,7 @@
 - Supports single competitor and multi competitor workflows
 - Auto-discovers top competitors when only `--my-app` is provided
 - Saves raw JSON per competitor under your app scope
+- Adds stable `reviewId` (and optional `storeReviewId`) per review item for dedupe/linking
 - Translates collected reviews to Korean under `reviews-ko/`
 - Generates Korean competitor analysis reports under `reports/`
 
@@ -24,9 +25,11 @@ npm install
 npm run build
 npm run setup:config
 npm run review:collect -- --my-app golden-horizon --apps apps.json --limit 200
+npm run review:collect -- --my-app golden-horizon --apps apps.json --limit 200 --append-existing
 npm run review:collect -- --my-app golden-horizon --auto-top 5 --limit 200
 npm run review:collect -- --my-app golden-horizon --apps apps.json --platform ios --limit 200
 npm run review:collect-by-name -- --my-app golden-horizon --name "BJJBuddy"
+npm run review:backfill-ids -- --my-app golden-horizon
 npm run report:translate -- --my-app golden-horizon
 npm run report:analyze -- --my-app golden-horizon
 npm run report:render-html -- --my-app golden-horizon

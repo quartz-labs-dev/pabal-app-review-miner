@@ -13,6 +13,7 @@ interface AppStoreEntry {
   updated?: { label?: string };
   author?: { name?: { label?: string } };
   "im:rating"?: { label?: string };
+  id?: { label?: string };
 }
 
 interface AppStoreFeed {
@@ -51,7 +52,8 @@ function parseEntry(entry: AppStoreEntry): ReviewItem | null {
     rating: Number(ratingRaw),
     text,
     date: toIsoString(entry.updated?.label),
-    user: normalizeText(entry.author?.name?.label) || "anonymous"
+    user: normalizeText(entry.author?.name?.label) || "anonymous",
+    storeReviewId: normalizeText(entry.id?.label)
   };
 }
 

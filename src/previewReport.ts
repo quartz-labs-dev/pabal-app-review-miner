@@ -28,12 +28,29 @@ interface AppReports {
   reports: ReportEntry[];
 }
 
+interface PreviewStateEntry {
+  excluded?: boolean;
+  favorite?: boolean;
+  updatedAt: string;
+}
+
+interface PreviewStateFile {
+  version: 1;
+  ownerAppId: string;
+  updatedAt: string;
+  reviews: Record<string, PreviewStateEntry>;
+}
+
 const REPORT_FILE_EXTENSIONS = new Set([".html", ".md", ".json"]);
 const REPORT_EXT_ORDER: Record<string, number> = {
   ".html": 0,
   ".md": 1,
   ".json": 2
 };
+const PREVIEW_STATE_FILE_NAME = "preview-state.json";
+const PREVIEW_STATE_API_PREFIX = "/api/preview-state/";
+const PREVIEW_STATE_MAX_BODY_BYTES = 1_000_000;
+const PREVIEW_STATE_MAX_REVIEWS = 200_000;
 
 function toAbsolutePath(input: string): string {
   return path.resolve(process.cwd(), input);
@@ -147,6 +164,19 @@ function sendHtml(res: ServerResponse, html: string): void {
   res.end(html);
 }
 
+function sendJson(res: ServerResponse, payload: unknown, statusCode = 200): void {
+  res.statusCode = statusCode;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.end(JSON.stringify(payload, null, 2));
+}
+
+function sendMethodNotAllowed(res: ServerResponse, allow: string[]): void {
+  res.statusCode = 405;
+  res.setHeader("Allow", allow.join(", "));
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.end("Method Not Allowed");
+}
+
 function serveFile(res: ServerResponse, filePath: string): void {
   try {
     const stat = statSync(filePath);
@@ -165,6 +195,188 @@ function serveFile(res: ServerResponse, filePath: string): void {
 
 function isSafeAppId(appId: string): boolean {
   return /^[a-z0-9._-]+$/i.test(appId);
+}
+
+function isSafeReviewId(reviewId: string): boolean {
+  return /^[a-z0-9._:-]+$/i.test(reviewId) && reviewId.length <= 180;
+}
+
+function createDefaultPreviewState(ownerAppId: string): PreviewStateFile {
+  return {
+    version: 1,
+    ownerAppId,
+    updatedAt: new Date().toISOString(),
+    reviews: {}
+  };
+}
+
+function normalizePreviewStateEntry(value: unknown): PreviewStateEntry | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const row = value as Record<string, unknown>;
+  const excluded = Boolean(row.excluded);
+  const favorite = Boolean(row.favorite);
+
+  if (!excluded && !favorite) {
+    return undefined;
+  }
+
+  return {
+    excluded: excluded || undefined,
+    favorite: favorite || undefined,
+    updatedAt: normalizeText(typeof row.updatedAt === "string" ? row.updatedAt : new Date().toISOString())
+  };
+}
+
+function normalizePreviewState(ownerAppId: string, value: unknown): PreviewStateFile {
+  const fallback = createDefaultPreviewState(ownerAppId);
+  if (!value || typeof value !== "object") {
+    return fallback;
+  }
+
+  const source = value as Record<string, unknown>;
+  const rawReviews =
+    source.reviews && typeof source.reviews === "object" ? (source.reviews as Record<string, unknown>) : {};
+  const reviews: Record<string, PreviewStateEntry> = {};
+  const pairs = Object.entries(rawReviews).slice(0, PREVIEW_STATE_MAX_REVIEWS);
+
+  for (const [reviewIdRaw, reviewStateRaw] of pairs) {
+    const reviewId = normalizeText(reviewIdRaw);
+    if (!reviewId || !isSafeReviewId(reviewId)) {
+      continue;
+    }
+
+    const normalized = normalizePreviewStateEntry(reviewStateRaw);
+    if (!normalized) {
+      continue;
+    }
+
+    reviews[reviewId] = normalized;
+  }
+
+  return {
+    version: 1,
+    ownerAppId,
+    updatedAt: normalizeText(typeof source.updatedAt === "string" ? source.updatedAt : new Date().toISOString()),
+    reviews
+  };
+}
+
+function previewStatePath(dataRoot: string, ownerAppId: string): string {
+  return path.resolve(dataRoot, ownerAppId, "reports", PREVIEW_STATE_FILE_NAME);
+}
+
+async function readPreviewState(dataRoot: string, ownerAppId: string): Promise<PreviewStateFile> {
+  const statePath = previewStatePath(dataRoot, ownerAppId);
+
+  try {
+    const raw = await fs.readFile(statePath, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    return normalizePreviewState(ownerAppId, parsed);
+  } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException;
+    if (nodeError?.code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  return createDefaultPreviewState(ownerAppId);
+}
+
+async function writePreviewState(dataRoot: string, state: PreviewStateFile): Promise<void> {
+  const statePath = previewStatePath(dataRoot, state.ownerAppId);
+  await fs.mkdir(path.dirname(statePath), { recursive: true });
+  await fs.writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
+}
+
+async function readRequestBody(req: IncomingMessage, maxBytes: number): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let total = 0;
+
+    req.on("data", (chunk: Buffer) => {
+      total += chunk.length;
+      if (total > maxBytes) {
+        reject(new Error(`Request body too large (>${maxBytes} bytes)`));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+
+    req.on("end", () => {
+      resolve(Buffer.concat(chunks).toString("utf8"));
+    });
+
+    req.on("error", (error) => reject(error));
+  });
+}
+
+function resolveAppIdFromStatePath(pathname: string): string | undefined {
+  if (!pathname.startsWith(PREVIEW_STATE_API_PREFIX)) {
+    return undefined;
+  }
+
+  const tail = pathname.slice(PREVIEW_STATE_API_PREFIX.length);
+  if (!tail || tail.includes("/")) {
+    return undefined;
+  }
+
+  return normalizeText(decodeURIComponent(tail));
+}
+
+async function handlePreviewStateApi(
+  req: IncomingMessage,
+  res: ServerResponse,
+  pathname: string,
+  dataRoot: string,
+  filterAppId?: string
+): Promise<boolean> {
+  if (!pathname.startsWith(PREVIEW_STATE_API_PREFIX)) {
+    return false;
+  }
+
+  const ownerAppId = resolveAppIdFromStatePath(pathname);
+  if (!ownerAppId || !isSafeAppId(ownerAppId)) {
+    sendNotFound(res);
+    return true;
+  }
+
+  if (filterAppId && ownerAppId !== filterAppId) {
+    sendNotFound(res);
+    return true;
+  }
+
+  if (req.method === "GET") {
+    const state = await readPreviewState(dataRoot, ownerAppId);
+    sendJson(res, state);
+    return true;
+  }
+
+  if (req.method !== "PUT") {
+    sendMethodNotAllowed(res, ["GET", "PUT"]);
+    return true;
+  }
+
+  try {
+    const bodyRaw = await readRequestBody(req, PREVIEW_STATE_MAX_BODY_BYTES);
+    const payload = bodyRaw ? (JSON.parse(bodyRaw) as unknown) : {};
+    const normalized = normalizePreviewState(ownerAppId, payload);
+    const nextState: PreviewStateFile = {
+      ...normalized,
+      ownerAppId,
+      updatedAt: new Date().toISOString()
+    };
+    await writePreviewState(dataRoot, nextState);
+    sendJson(res, nextState);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    sendJson(res, { ok: false, error: message }, 400);
+  }
+
+  return true;
 }
 
 async function loadAppReports(dataRoot: string, filterAppId?: string): Promise<AppReports[]> {
@@ -441,16 +653,21 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
 </html>`;
 }
 
-function createSingleFileHandler(baseDir: string, indexPath: string) {
+function createSingleFileHandler(baseDir: string, indexPath: string, dataRoot: string, filterAppId?: string) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-    const urlPath = normalizeText(req.url) || "/";
+    const rawUrl = normalizeText(req.url) || "/";
+    const pathname = rawUrl.split("?")[0];
 
-    if (urlPath === "/") {
+    if (await handlePreviewStateApi(req, res, pathname, dataRoot, filterAppId)) {
+      return;
+    }
+
+    if (pathname === "/") {
       serveFile(res, indexPath);
       return;
     }
 
-    const target = safeJoin(baseDir, urlPath);
+    const target = safeJoin(baseDir, pathname);
     if (!target) {
       sendNotFound(res);
       return;
@@ -464,6 +681,10 @@ function createDashboardHandler(dataRoot: string, filterAppId?: string) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const rawUrl = normalizeText(req.url) || "/";
     const pathname = rawUrl.split("?")[0];
+
+    if (await handlePreviewStateApi(req, res, pathname, dataRoot, filterAppId)) {
+      return;
+    }
 
     if (pathname === "/") {
       const apps = await loadAppReports(dataRoot, filterAppId);
@@ -540,18 +761,17 @@ async function main(): Promise<void> {
   }
 
   const singleFilePath = normalizeText(argv.file) ? toAbsolutePath(String(argv.file)) : undefined;
+  const dataRoot = normalizeText(argv.dataDir)
+    ? path.resolve(process.cwd(), String(argv.dataDir))
+    : path.resolve(process.cwd(), "data");
 
   let server: http.Server;
 
   if (singleFilePath) {
     await ensureReportExists(singleFilePath);
     const baseDir = path.dirname(singleFilePath);
-    server = http.createServer(createSingleFileHandler(baseDir, singleFilePath));
+    server = http.createServer(createSingleFileHandler(baseDir, singleFilePath, dataRoot, ownerAppId));
   } else {
-    const dataRoot = normalizeText(argv.dataDir)
-      ? path.resolve(process.cwd(), String(argv.dataDir))
-      : path.resolve(process.cwd(), "data");
-
     server = http.createServer(createDashboardHandler(dataRoot, ownerAppId));
   }
 
@@ -565,7 +785,7 @@ async function main(): Promise<void> {
       console.log(`- file: ${singleFilePath}`);
     } else {
       console.log(`- mode: dashboard`);
-      console.log(`- route: / (apps list), /r/:app/:file (report file)`);
+      console.log(`- route: / (apps list), /r/:app/:file (report file), /api/preview-state/:appId`);
     }
     console.log(`- url: http://${argv.host}:${argv.port}/`);
     console.log(`Press Ctrl+C to stop.`);

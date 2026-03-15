@@ -69,6 +69,8 @@ npm run report:analyze -- --my-app golden-horizon --include-self
 - `node dist/renderReportHtml.js ...`
 - 생성되는 HTML 상단 왼쪽에는 홈으로 이동하는 `Home` 버튼(`/`)이 포함됩니다.
 - 상단 컨트롤은 탭에 따라 표시됩니다: `Raw 리뷰`에서는 `원어 전체 보기`, `실행 백로그`에서는 `근거 펼치기`만 노출됩니다.
+- Raw 리뷰 카드에서 `즐겨찾기`, `제외/복원`을 직접 관리할 수 있습니다.
+- preview 모드에서는 카드 상태가 `data/{myAppId}/reports/preview-state.json`에 저장됩니다.
 
 ### CLI 옵션
 
@@ -93,6 +95,10 @@ localhost 프리뷰 서버를 실행합니다.
 
 - 대시보드 모드: 앱 목록 + 생성된 리포트 파일(`.html`, `.md`, `.json`) 표시
 - 단일 파일 모드: `--file`로 HTML 1개 서빙
+- Raw 리뷰 카드 상태 관리를 위한 API를 제공합니다.
+  - `GET /api/preview-state/:appId`
+  - `PUT /api/preview-state/:appId`
+  - 저장 파일: `data/{myAppId}/reports/preview-state.json`
 
 - `npm run report:preview -- [options]`
 - `node dist/previewReport.js ...`

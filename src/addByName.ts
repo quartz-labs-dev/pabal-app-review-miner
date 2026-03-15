@@ -22,6 +22,7 @@ import {
   DEFAULT_REVIEW_LIMIT,
   fetchJsonWithRetry,
   normalizeText,
+  readJsonFile,
   ReviewsOutput,
   safeFileName,
   UnifiedReview,
@@ -39,6 +40,7 @@ interface CliArgs {
   platform: PlatformMode;
   limit: number;
   global: boolean;
+  appendExisting: boolean;
   output: OutputMode;
 }
 
@@ -319,6 +321,12 @@ async function parseArgs(): Promise<CliArgs> {
       default: true,
       describe: "Collect reviews across global market/country lists"
     })
+    .option("append-existing", {
+      type: "boolean",
+      default: false,
+      describe:
+        "Merge newly fetched reviews with existing output file and dedupe by reviewId. Useful for incremental accumulation across runs."
+    })
     .option("output", {
       choices: ["text", "json"] as const,
       default: "text",
@@ -361,6 +369,20 @@ async function run(): Promise<void> {
 
   const reviews = await collectReviews(target, args.limit, Boolean(args.global), logger);
   const outputPath = createOutputPaths(process.cwd(), owner.ownerAppId, target.name).reviewsPath;
+  let mergedReviews = dedupeReviews(reviews);
+
+  if (args.appendExisting) {
+    try {
+      const existing = await readJsonFile<Partial<ReviewsOutput>>(outputPath);
+      const existingReviews = Array.isArray(existing.reviews) ? (existing.reviews as UnifiedReview[]) : [];
+      mergedReviews = dedupeReviews([...mergedReviews, ...existingReviews]);
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException;
+      if (nodeError?.code !== "ENOENT") {
+        logger.warn(`[append] failed to read existing output: ${nodeError.message}`);
+      }
+    }
+  }
 
   const payload: ReviewsOutput = {
     ownerAppId: owner.ownerAppId,
@@ -377,11 +399,11 @@ async function run(): Promise<void> {
       ios: createAppStoreAppUrl(target.ios)
     },
     counts: {
-      play: reviews.filter((review) => review.source === "play").length,
-      ios: reviews.filter((review) => review.source === "ios").length,
-      total: reviews.length
+      play: mergedReviews.filter((review) => review.source === "play").length,
+      ios: mergedReviews.filter((review) => review.source === "ios").length,
+      total: mergedReviews.length
     },
-    reviews
+    reviews: mergedReviews
   };
 
   await writeJsonFile(outputPath, payload);
@@ -395,6 +417,7 @@ async function run(): Promise<void> {
           query: term,
           target,
           outputPath,
+          appendExisting: args.appendExisting,
           counts: payload.counts
         },
         null,

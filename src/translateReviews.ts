@@ -29,6 +29,8 @@ interface TranslatedReview {
   date: string;
   user: string;
   source: "play" | "ios";
+  reviewId?: string;
+  storeReviewId?: string;
   detectedLang?: string;
   translatedAt: string;
 }

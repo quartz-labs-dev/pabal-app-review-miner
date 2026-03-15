@@ -8,6 +8,7 @@ CLI tool for collecting raw competitor reviews from Google Play and App Store, o
 - Supports single-app and multi-app competitor input
 - Auto-discovers top competitors when only `--my-app` is provided
 - Saves raw JSON per competitor under your app scope
+- Adds stable `reviewId` (and optional `storeReviewId`) per review item for dedupe/linking
 - Translates collected reviews into Korean
 - Generates competitor analysis reports from translated reviews
 
@@ -22,6 +23,7 @@ npm install
 npm run build
 npm run setup:config
 npm run review:collect -- --my-app golden-horizon --apps apps.json --limit 200
+npm run review:collect -- --my-app golden-horizon --apps apps.json --limit 200 --append-existing
 
 # or auto-discover competitors (top 5 per available store by default)
 npm run review:collect -- --my-app golden-horizon --auto-top 5 --limit 200
@@ -31,6 +33,9 @@ npm run review:collect -- --my-app golden-horizon --apps apps.json --platform io
 
 # add one app by name (searches both stores, then collects and saves reviews)
 npm run review:collect-by-name -- --my-app golden-horizon --name "BJJBuddy"
+
+# backfill missing reviewId in existing saved JSON (no re-download)
+npm run review:backfill-ids -- --my-app golden-horizon
 
 # translate all collected reviews to Korean (output: data/{myAppId}/reviews-ko)
 npm run report:translate -- --my-app golden-horizon

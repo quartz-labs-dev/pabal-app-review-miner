@@ -45,6 +45,7 @@ interface CliArgs {
   output: OutputMode;
   platform: PlatformMode;
   global?: boolean;
+  appendExisting?: boolean;
   dryRun?: boolean;
   validateOnly?: boolean;
 }
@@ -75,6 +76,7 @@ interface RunReport {
   dryRun: boolean;
   validateOnly: boolean;
   global: boolean;
+  appendExisting: boolean;
   platform: PlatformMode;
   limit: number;
   summary: RunSummary;
@@ -202,6 +204,12 @@ async function parseArgs(): Promise<CliArgs> {
       default: true,
       describe:
         "Collect reviews market-by-market using store-specific global market lists (Play country+lang, App Store country). In global mode, --limit applies per market."
+    })
+    .option("append-existing", {
+      type: "boolean",
+      default: false,
+      describe:
+        "Merge newly fetched reviews with existing output file and dedupe by reviewId. Useful for incremental accumulation across runs."
     })
     .option("dry-run", {
       type: "boolean",
@@ -423,10 +431,28 @@ async function saveReviews(
   ownerAppId: string,
   target: AppTarget,
   limit: number,
-  reviews: UnifiedReview[]
+  reviews: UnifiedReview[],
+  options: {
+    appendExisting: boolean;
+    logger?: ReturnType<typeof createLogger>;
+  }
 ): Promise<string> {
   const paths = createOutputPaths(baseDir, ownerAppId, target.name);
   const appName = target.displayName || target.name;
+  let mergedReviews = dedupeReviews(reviews);
+
+  if (options.appendExisting) {
+    try {
+      const existing = await readJsonFile<Partial<ReviewsOutput>>(paths.reviewsPath);
+      const existingReviews = Array.isArray(existing.reviews) ? (existing.reviews as UnifiedReview[]) : [];
+      mergedReviews = dedupeReviews([...mergedReviews, ...existingReviews]);
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException;
+      if (nodeError?.code !== "ENOENT") {
+        options.logger?.warn(`[${appName}] failed to read existing output for append: ${nodeError.message}`);
+      }
+    }
+  }
 
   const payload: ReviewsOutput = {
     ownerAppId,
@@ -443,11 +469,11 @@ async function saveReviews(
       ios: createAppStoreAppUrl(target.ios)
     },
     counts: {
-      play: reviews.filter((review) => review.source === "play").length,
-      ios: reviews.filter((review) => review.source === "ios").length,
-      total: reviews.length
+      play: mergedReviews.filter((review) => review.source === "play").length,
+      ios: mergedReviews.filter((review) => review.source === "ios").length,
+      total: mergedReviews.length
     },
-    reviews
+    reviews: mergedReviews
   };
 
   await writeJsonFile(paths.reviewsPath, payload);
@@ -463,6 +489,7 @@ async function processApp(
     dryRun: boolean;
     validateOnly: boolean;
     globalMode: boolean;
+    appendExisting: boolean;
     minReviewsExclusive?: number;
     logger: ReturnType<typeof createLogger>;
   }
@@ -549,7 +576,10 @@ async function processApp(
       };
     }
 
-    await saveReviews(baseDir, ownerAppId, target, limit, reviews);
+    await saveReviews(baseDir, ownerAppId, target, limit, reviews, {
+      appendExisting: options.appendExisting,
+      logger
+    });
 
     logger.info(`${prefix} Saved ${reviews.length} reviews -> ${outputPath}`);
 
@@ -601,6 +631,7 @@ function printTextSummary(ownerAppId: string, summary: RunSummary, argv: CliArgs
   console.log(`- autoDiscoveryUsed: ${autoDiscoveryUsed}`);
   console.log(`- platform: ${argv.platform}`);
   console.log(`- global: ${Boolean(argv.global)}`);
+  console.log(`- appendExisting: ${Boolean(argv.appendExisting)}`);
   console.log(`- succeeded: ${summary.succeeded}`);
   console.log(`- failed: ${summary.failed}`);
   console.log(`- skipped: ${summary.skipped}`);
@@ -721,6 +752,7 @@ async function run(): Promise<void> {
         validateOnly: false,
         globalMode,
         minReviewsExclusive: autoPlan.minReviewsExclusive,
+        appendExisting: Boolean(argv.appendExisting),
         logger
       });
 
@@ -770,6 +802,7 @@ async function run(): Promise<void> {
           dryRun: false,
           validateOnly: false,
           globalMode,
+          appendExisting: Boolean(argv.appendExisting),
           logger
         });
 
@@ -806,6 +839,7 @@ async function run(): Promise<void> {
         dryRun: Boolean(argv.dryRun),
         validateOnly: Boolean(argv.validateOnly),
         globalMode,
+        appendExisting: Boolean(argv.appendExisting),
         logger
       });
 
@@ -824,6 +858,7 @@ async function run(): Promise<void> {
       dryRun: Boolean(argv.dryRun),
       validateOnly: Boolean(argv.validateOnly),
       global: globalMode,
+      appendExisting: Boolean(argv.appendExisting),
       platform: argv.platform,
       limit: argv.limit,
       summary,

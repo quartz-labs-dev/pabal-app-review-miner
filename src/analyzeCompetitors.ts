@@ -26,6 +26,8 @@ interface ReviewRecord {
   date: string;
   user: string;
   source: "play" | "ios";
+  reviewId?: string;
+  storeReviewId?: string;
 }
 
 interface ReviewFilePayload {

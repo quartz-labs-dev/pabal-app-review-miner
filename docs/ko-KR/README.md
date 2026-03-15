@@ -10,6 +10,7 @@
 - 단일 경쟁 앱, 멀티 경쟁 앱 수집 지원
 - `--my-app`만으로 스토어별 상위 경쟁 앱 자동 탐색 지원
 - 내 앱 기준 스코프로 경쟁 앱별 JSON 저장
+- 리뷰 항목별 안정 `reviewId`(및 가능 시 `storeReviewId`) 자동 부여
 - 수집된 리뷰를 한국어로 번역해 `reviews-ko/`에 저장
 - 번역 리뷰 기반 경쟁앱 인사이트 리포트 생성 (`reports/`)
 
@@ -24,9 +25,11 @@ npm install
 npm run build
 npm run setup:config
 npm run review:collect -- --my-app golden-horizon --apps apps.json --limit 200
+npm run review:collect -- --my-app golden-horizon --apps apps.json --limit 200 --append-existing
 npm run review:collect -- --my-app golden-horizon --auto-top 5 --limit 200
 npm run review:collect -- --my-app golden-horizon --apps apps.json --platform ios --limit 200
 npm run review:collect-by-name -- --my-app golden-horizon --name "BJJBuddy"
+npm run review:backfill-ids -- --my-app golden-horizon
 npm run report:translate -- --my-app golden-horizon
 npm run report:analyze -- --my-app golden-horizon
 npm run report:render-html -- --my-app golden-horizon
