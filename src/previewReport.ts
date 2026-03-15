@@ -28,9 +28,12 @@ interface AppReports {
   reports: ReportEntry[];
 }
 
-function defaultHtmlPath(ownerAppId: string): string {
-  return path.resolve(process.cwd(), "data", ownerAppId, "reports", "competitor-raw-actionable.ko.html");
-}
+const REPORT_FILE_EXTENSIONS = new Set([".html", ".md", ".json"]);
+const REPORT_EXT_ORDER: Record<string, number> = {
+  ".html": 0,
+  ".md": 1,
+  ".json": 2
+};
 
 function toAbsolutePath(input: string): string {
   return path.resolve(process.cwd(), input);
@@ -38,16 +41,11 @@ function toAbsolutePath(input: string): string {
 
 function extPriority(fileName: string): number {
   const ext = path.extname(fileName).toLowerCase();
-  if (ext === ".html") {
-    return 0;
-  }
-  if (ext === ".md") {
-    return 1;
-  }
-  if (ext === ".json") {
-    return 2;
-  }
-  return 9;
+  return REPORT_EXT_ORDER[ext] ?? 9;
+}
+
+function isReportFile(fileName: string): boolean {
+  return REPORT_FILE_EXTENSIONS.has(path.extname(fileName).toLowerCase());
 }
 
 async function parseArgs(): Promise<CliArgs> {
@@ -186,7 +184,7 @@ async function loadAppReports(dataRoot: string, filterAppId?: string): Promise<A
     const files = reportEntries
       .filter((fileEntry) => fileEntry.isFile())
       .map((fileEntry) => fileEntry.name)
-      .filter((name) => [".md", ".html", ".json"].includes(path.extname(name).toLowerCase()))
+      .filter(isReportFile)
       .sort((a, b) => {
         const priority = extPriority(a) - extPriority(b);
         if (priority !== 0) {
@@ -242,19 +240,19 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
     .join("\n");
 
   const infoLine = filterAppId
-    ? `필터: <code>${escapeHtml(filterAppId)}</code>`
-    : "전체 앱 리포트";
+    ? `Filter: <code>${escapeHtml(filterAppId)}</code>`
+    : "All App Reports";
 
   const emptyState = `
     <div class=\"empty\">
-      <p>리포트를 찾지 못했습니다.</p>
-      <p>먼저 아래 명령으로 리포트를 생성하세요:</p>
+      <p>No reports found.</p>
+      <p>Generate a report first with:</p>
       <pre>npm run report:render-html -- --my-app &lt;owner&gt;</pre>
     </div>
   `;
 
   return `<!doctype html>
-<html lang=\"ko\">
+<html lang=\"en\">
   <head>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
@@ -271,7 +269,7 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
       * { box-sizing: border-box; }
       body {
         margin: 0;
-        font-family: "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+        font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
         color: var(--ink);
         background: var(--bg);
       }
@@ -351,10 +349,10 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
   </head>
   <body>
     <main class=\"wrap\">
-      <h1>리포트 프리뷰 대시보드</h1>
-      <p class=\"sub\">${infoLine} · 기본은 로컬 파일 열기 링크입니다.</p>
+      <h1>Report Preview Dashboard</h1>
+      <p class=\"sub\">${infoLine} · Click a file to open it from local storage.</p>
       <div class=\"toolbar\">
-        <input id=\"search\" type=\"search\" placeholder=\"앱 ID 또는 파일명 검색\" />
+        <input id=\"search\" type=\"search\" placeholder=\"Search by app ID or file name\" />
       </div>
       ${apps.length ? `<section class=\"grid\" id=\"grid\">${cards}</section>` : emptyState}
     </main>

@@ -59,7 +59,7 @@ interface AppBacklog {
 const THEMES: ThemeDefinition[] = [
   {
     id: "reliability_performance",
-    title: "핵심 플로우 안정화 (로딩/크래시/동기화)",
+    title: "Core Flow Reliability (Loading/Crash/Sync)",
     keywords: [
       "crash",
       "freeze",
@@ -80,11 +80,11 @@ const THEMES: ThemeDefinition[] = [
     ],
     impact: "high",
     effort: "high",
-    action: "로그인/재생/알림/지도 진입 등 핵심 사용자 여정의 안정성 이슈를 우선 해결"
+    action: "Prioritize stability fixes in core journeys such as login, playback, alerts, and map entry."
   },
   {
     id: "multi_location_planning",
-    title: "다중 위치/여행 계획 지원",
+    title: "Multi-Location and Trip Planning Support",
     keywords: [
       "choose location",
       "select location",
@@ -102,11 +102,11 @@ const THEMES: ThemeDefinition[] = [
     ],
     impact: "high",
     effort: "medium",
-    action: "현재 위치 외에 저장 위치/원격 위치를 등록해 비교·계획 가능한 UX 제공"
+    action: "Let users save remote locations beyond current GPS location for comparison and trip planning."
   },
   {
     id: "alert_relevance",
-    title: "알림 관련성 개선 (주간/구름/현지 조건 필터)",
+    title: "Alert Relevance Improvements (Daylight/Cloud/Local Filters)",
     keywords: [
       "daylight",
       "dawn",
@@ -127,11 +127,11 @@ const THEMES: ThemeDefinition[] = [
     ],
     impact: "high",
     effort: "medium",
-    action: "지역 일출/일몰·구름량·사용자 임계값을 반영한 알림 정책으로 노이즈를 축소"
+    action: "Reduce alert noise by applying local sunrise/sunset, cloud cover, and user-defined thresholds."
   },
   {
     id: "advanced_alert_logic",
-    title: "고급 알림 규칙 (복합 조건 트리거)",
+    title: "Advanced Alert Rules (Multi-Condition Triggers)",
     keywords: [
       "bz",
       "bt",
@@ -148,11 +148,11 @@ const THEMES: ThemeDefinition[] = [
     ],
     impact: "high",
     effort: "high",
-    action: "단일 기준이 아닌 복합 조건(Bz+속도 등) 기반의 고급 알림 룰 제공"
+    action: "Support advanced triggers based on combined conditions (for example Bz + solar wind speed)."
   },
   {
     id: "forecast_transparency",
-    title: "예보 신뢰성/출처 투명화",
+    title: "Forecast Reliability and Source Transparency",
     keywords: [
       "model",
       "source",
@@ -170,11 +170,11 @@ const THEMES: ThemeDefinition[] = [
     ],
     impact: "high",
     effort: "medium",
-    action: "예보 모델/출처를 명시하고 다중 모델 비교 또는 보정 가이드를 제공"
+    action: "Disclose forecast models/sources and provide multi-model comparison or calibration guidance."
   },
   {
     id: "notification_controls",
-    title: "알림 제어권 강화",
+    title: "Notification Control Granularity",
     keywords: [
       "notification",
       "alert",
@@ -187,11 +187,11 @@ const THEMES: ThemeDefinition[] = [
     ],
     impact: "medium",
     effort: "medium",
-    action: "알림 빈도/시간대/조건/채널을 세분화해 개인화된 제어 옵션 제공"
+    action: "Provide personalized control across notification frequency, time window, trigger, and channel."
   },
   {
     id: "widget_watch_screen",
-    title: "위젯/워치/대화면 최적화",
+    title: "Widget/Watch/Large-Screen Optimization",
     keywords: [
       "widget",
       "apple watch",
@@ -207,11 +207,11 @@ const THEMES: ThemeDefinition[] = [
     ],
     impact: "medium",
     effort: "medium",
-    action: "위젯, Apple Watch, 태블릿/가로모드 등 기기별 사용 맥락 최적화"
+    action: "Optimize usage context per device, including widgets, Apple Watch, tablets, and landscape mode."
   },
   {
     id: "pricing_paywall",
-    title: "가격/유료화 명확성 개선",
+    title: "Pricing and Paywall Clarity",
     keywords: [
       "price",
       "paid",
@@ -227,11 +227,11 @@ const THEMES: ThemeDefinition[] = [
     ],
     impact: "medium",
     effort: "low",
-    action: "유료 기능/가격/환불/체험 조건을 초반 화면에서 명확하게 고지"
+    action: "Clearly communicate paid features, pricing, refund policy, and trial conditions up front."
   },
   {
     id: "offline_playback",
-    title: "오프라인 다운로드/재생 품질",
+    title: "Offline Download and Playback Quality",
     keywords: [
       "download",
       "offline",
@@ -250,11 +250,11 @@ const THEMES: ThemeDefinition[] = [
     ],
     impact: "high",
     effort: "high",
-    action: "다운로드 큐, 재개, 챕터 탐색, 캐스팅/전체화면 안정성 중심으로 미디어 스택 개선"
+    action: "Improve media reliability around download queue/resume, chapter navigation, casting, and fullscreen."
   },
   {
     id: "timezone_localization",
-    title: "시간대/지역화 정확성",
+    title: "Timezone and Localization Accuracy",
     keywords: [
       "timezone",
       "time zone",
@@ -267,9 +267,31 @@ const THEMES: ThemeDefinition[] = [
     ],
     impact: "medium",
     effort: "low",
-    action: "시간대 표기 및 계산 로직을 명확화하고 사용자 선택 옵션 제공"
+    action: "Clarify timezone display/calculation logic and offer user-selectable timezone options."
   }
 ];
+
+const PRIORITY_BOOST_THEME_IDS = new Set([
+  "reliability_performance",
+  "offline_playback",
+  "alert_relevance",
+  "multi_location_planning"
+]);
+
+const REVIEW_COUNT_PREFIXES = ["- 전체 리뷰 수:", "- Total review count:"];
+
+function includesAny(text: string, terms: string[]): boolean {
+  return terms.some((term) => text.includes(term));
+}
+
+function parseReviewCount(line: string): string | undefined {
+  for (const prefix of REVIEW_COUNT_PREFIXES) {
+    if (line.startsWith(prefix)) {
+      return normalizeText(line.slice(prefix.length));
+    }
+  }
+  return undefined;
+}
 
 function resolveDefaultInput(ownerAppId: string): string {
   return path.resolve(process.cwd(), "data", ownerAppId, "reports", "competitor-raw-actionable.ko.md");
@@ -317,13 +339,14 @@ function escapeHtml(input: string): string {
 }
 
 function mapCategory(heading: string): CategoryKey | undefined {
-  if (heading.includes("만족")) {
+  const normalized = heading.toLowerCase();
+  if (includesAny(heading, ["만족"]) || includesAny(normalized, ["satisfaction"])) {
     return "satisfaction";
   }
-  if (heading.includes("불만")) {
+  if (includesAny(heading, ["불만"]) || includesAny(normalized, ["dissatisfaction"])) {
     return "dissatisfaction";
   }
-  if (heading.includes("요청") || heading.includes("개선")) {
+  if (includesAny(heading, ["요청", "개선"]) || includesAny(normalized, ["request", "improvement"])) {
     return "requests";
   }
   return undefined;
@@ -331,7 +354,7 @@ function mapCategory(heading: string): CategoryKey | undefined {
 
 function parseMarkdown(input: string): { title: string; metadata: string[]; apps: AppSection[] } {
   const lines = input.split(/\r?\n/);
-  let title = "Raw 리뷰 리포트";
+  let title = "Raw Review Report";
   const metadata: string[] = [];
   const apps: AppSection[] = [];
 
@@ -400,8 +423,9 @@ function parseMarkdown(input: string): { title: string; metadata: string[]; apps
       continue;
     }
 
-    if (line.startsWith("- 전체 리뷰 수:")) {
-      currentApp.reviewCount = normalizeText(line.replace("- 전체 리뷰 수:", ""));
+    const reviewCount = parseReviewCount(line);
+    if (reviewCount !== undefined) {
+      currentApp.reviewCount = reviewCount;
       continue;
     }
 
@@ -437,12 +461,12 @@ function parseMarkdown(input: string): { title: string; metadata: string[]; apps
 
 function renderCategoryTitle(key: CategoryKey): string {
   if (key === "satisfaction") {
-    return "만족 (구체 사례)";
+    return "Satisfaction (Concrete Examples)";
   }
   if (key === "dissatisfaction") {
-    return "불만족 (구체 문제)";
+    return "Dissatisfaction (Concrete Problems)";
   }
-  return "요청 기능 / 개선 제안";
+  return "Requested Features / Improvement Suggestions";
 }
 
 function priorityOrder(priority: Priority): number {
@@ -462,7 +486,7 @@ function calculatePriority(themeId: string, reqCount: number, negCount: number, 
     return "must";
   }
 
-  if (["reliability_performance", "offline_playback", "alert_relevance", "multi_location_planning"].includes(themeId) && score >= 6) {
+  if (PRIORITY_BOOST_THEME_IDS.has(themeId) && score >= 6) {
     return "must";
   }
 
@@ -562,21 +586,11 @@ function renderPriorityBadge(priority: Priority): string {
   return `<span class=\"badge badge-${priority}\">${label}</span>`;
 }
 
-function renderImpact(impact: Impact): string {
-  if (impact === "high") {
+function renderLevel(level: Impact | Effort): string {
+  if (level === "high") {
     return "High";
   }
-  if (impact === "medium") {
-    return "Medium";
-  }
-  return "Low";
-}
-
-function renderEffort(effort: Effort): string {
-  if (effort === "high") {
-    return "High";
-  }
-  if (effort === "medium") {
+  if (level === "medium") {
     return "Medium";
   }
   return "Low";
@@ -590,11 +604,11 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
           const items = app.categories[categoryKey];
           const cards =
             items.length === 0
-              ? `<p class=\"empty\">해당 항목 없음</p>`
+              ? `<p class=\"empty\">No items in this section.</p>`
               : items
                   .map((item) => {
-                    const kr = escapeHtml(item.kr || "(한국어 번역 없음)");
-                    const org = escapeHtml(item.org || "(원문 없음)");
+                    const kr = escapeHtml(item.kr || "(No Korean translation)");
+                    const org = escapeHtml(item.org || "(No original text)");
 
                     return `
                       <article class=\"quote-card searchable\" data-search=\"${escapeHtml(
@@ -603,7 +617,7 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
                         <div class=\"quote-meta\">${escapeHtml(item.meta)}</div>
                         <div class=\"quote-kr\">${kr}</div>
                         <div class=\"quote-org org-text\">${org}</div>
-                        <button class=\"toggle-one\" type=\"button\">원어 보기</button>
+                        <button class=\"toggle-one\" type=\"button\">Show Original</button>
                       </article>
                     `;
                   })
@@ -624,7 +638,7 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
         <details class=\"app\" open>
           <summary>
             <span class=\"app-title\">${escapeHtml(app.title)}</span>
-            <span class=\"app-count\">리뷰 ${escapeHtml(app.reviewCount ?? "-")}</span>
+            <span class=\"app-count\">Reviews ${escapeHtml(app.reviewCount ?? "-")}</span>
           </summary>
           <div class=\"app-body\">
             ${categoryBlocks}
@@ -644,7 +658,7 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
 
       const rows =
         appBacklog.items.length === 0
-          ? `<tr><td colspan=\"6\" class=\"empty\">추출된 실행 백로그 없음</td></tr>`
+          ? `<tr><td colspan=\"6\" class=\"empty\">No actionable backlog items extracted.</td></tr>`
           : appBacklog.items
               .map((item) => {
                 const examples = item.examples
@@ -669,12 +683,12 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
                       <div class=\"item-title\">${escapeHtml(item.title)}</div>
                       <div class=\"item-action\">${escapeHtml(item.action)}</div>
                     </td>
-                    <td>${renderImpact(item.impact)}</td>
-                    <td>${renderEffort(item.effort)}</td>
+                    <td>${renderLevel(item.impact)}</td>
+                    <td>${renderLevel(item.effort)}</td>
                     <td>${item.evidenceCount}</td>
                     <td>
                       <details>
-                        <summary>근거 보기</summary>
+                        <summary>View Evidence</summary>
                         <ul class=\"evidence-list\">${examples}</ul>
                       </details>
                     </td>
@@ -687,7 +701,7 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
         <details class=\"app\" open>
           <summary>
             <span class=\"app-title\">${escapeHtml(appBacklog.appTitle)}</span>
-            <span class=\"app-count\">리뷰 ${escapeHtml(appBacklog.reviewCount)} / MUST ${counts.must} · SHOULD ${counts.should} · COULD ${counts.could}</span>
+            <span class=\"app-count\">Reviews ${escapeHtml(appBacklog.reviewCount)} / MUST ${counts.must} · SHOULD ${counts.should} · COULD ${counts.could}</span>
           </summary>
           <div class=\"app-body\">
             <div class=\"table-wrap\">
@@ -695,11 +709,11 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
                 <thead>
                   <tr>
                     <th>Priority</th>
-                    <th>백로그 항목</th>
+                    <th>Backlog Item</th>
                     <th>Impact</th>
                     <th>Effort</th>
-                    <th>근거 수</th>
-                    <th>근거</th>
+                    <th>Evidence Count</th>
+                    <th>Evidence</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -716,7 +730,7 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
   const metadataHtml = metadata.map((line) => `<li>${escapeHtml(line)}</li>`).join("\n");
 
   return `<!doctype html>
-<html lang=\"ko\">
+<html lang=\"en\">
   <head>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
@@ -736,7 +750,7 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
       * { box-sizing: border-box; }
       body {
         margin: 0;
-        font-family: "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+        font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
         color: var(--ink);
         background: radial-gradient(circle at top right, #e0f2fe 0%, var(--bg) 45%);
       }
@@ -908,13 +922,13 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
   <body>
     <div class=\"top\">
       <div class=\"top-inner\">
-        <input id=\"search\" type=\"search\" placeholder=\"검색 (앱명, 기능요청, 키워드, 원문)\" />
+        <input id=\"search\" type=\"search\" placeholder=\"Search (app name, request, keyword, original text)\" />
         <div class=\"tabs\">
-          <button id=\"tabRaw\" class=\"tab-btn active\" type=\"button\">Raw 리뷰</button>
-          <button id=\"tabBacklog\" class=\"tab-btn\" type=\"button\">실행 백로그</button>
+          <button id=\"tabRaw\" class=\"tab-btn active\" type=\"button\">Raw Reviews</button>
+          <button id=\"tabBacklog\" class=\"tab-btn\" type=\"button\">Actionable Backlog</button>
         </div>
-        <label class=\"toggle-all-label\"><input id=\"toggleAll\" type=\"checkbox\" /> 원어 전체 보기</label>
-        <button id=\"expandAll\" type=\"button\">모두 펼치기</button>
+        <label class=\"toggle-all-label\"><input id=\"toggleAll\" type=\"checkbox\" /> Show all original text</label>
+        <button id=\"expandAll\" type=\"button\">Expand all</button>
       </div>
     </div>
 
@@ -992,7 +1006,7 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
         if (!card) return;
 
         card.classList.toggle('show-one-original');
-        target.textContent = card.classList.contains('show-one-original') ? '원어 숨기기' : '원어 보기';
+        target.textContent = card.classList.contains('show-one-original') ? 'Hide Original' : 'Show Original';
       });
 
       toggleAll.addEventListener('change', () => {
@@ -1009,7 +1023,7 @@ function renderHtml(title: string, metadata: string[], apps: AppSection[], backl
         details.forEach((app) => {
           app.open = !allOpen;
         });
-        expandAll.textContent = allOpen ? '모두 펼치기' : '모두 접기';
+        expandAll.textContent = allOpen ? 'Expand all' : 'Collapse all';
       });
 
       searchInput.addEventListener('input', applySearch);
