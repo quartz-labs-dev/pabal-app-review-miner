@@ -74,7 +74,13 @@ Render actionable markdown report to interactive HTML.
 - On narrow screens, the filter panel opens as a bottom sheet.
 - On narrow screens, the notes panel also opens as a bottom sheet instead of a right drawer.
 - Search is shown as a `🔎` button by default and expands to the input field on tap/click.
-- Top controls are tab-scoped: `Reviews` shows `Filter` and `Notes`, while `Reports` shows `Expand evidence`.
+- Top controls are tab-scoped: `Reviews` shows `Filter` and `Notes`, while `Reports` shows `Expand evidence`, `Priority` filter, and the same `Notes` button/sidebar.
+- In `Reports`, the secondary status row is hidden so the navigation area stays single-row (the `Reports N/N` count label is not shown).
+- `Reports` shows one unified backlog table across all apps (not per-app grouped sections).
+- In `Reports`, identical backlog items are merged into a single row even when they come from different apps.
+- The app list in each backlog row is rendered as a single-line text with ellipsis (`...`) when it overflows.
+- In `Reports`, you can filter rows by priority (`All / MUST / SHOULD / COULD`).
+- In the `Reports` table, there is no separate `Evidence` column; use the chevron button next to `Evidence count` to expand/collapse evidence rows.
 - In `Reviews`, hashtag filter supports multi-select (`#❤️`, `#Satisfaction`, `#Dissatisfaction`), and `All tags` clears tag filters.
 - In `Reviews`, state filter is tri-state: `All` / `Active` / `Inactive` (default: `All`).
 - In `Reviews`, you can toggle `100+ chars` to focus on longer reviews.
@@ -82,9 +88,11 @@ Render actionable markdown report to interactive HTML.
 - In the filter panel, `Reset all to inactive` sets every review to `Inactive` in bulk and clears all hashtags.
 - `Reviews` tab supports pagination with a fixed page size of `100 items/page`.
 - Pagination is applied to the current search/filter result set, and `total reviews` is shown in the pagination area.
-- The summary/stat block below the title also switches by tab, so each tab shows only relevant context.
+- The context block below the title switches by tab, so each tab shows only relevant context.
+- In the `Reports` tab context, a compact text summary is shown (backlog counts, generated time, and priority rule) without stat/meta cards.
 - In the `Reviews` tab context block, the `Raw quotes` card and generated-at/criteria/classification meta list are not shown.
 - Review cards include `#❤️ / #Satisfaction / #Dissatisfaction` hashtag toggles and `Inactive/Active`.
+- In review cards, `Original` text open/close uses a smooth expand/collapse animation.
 - Hashtags can be edited only when the card is `Active`.
 - Top-right controls include a `Notes` button; in the right sidebar you can switch the app selector to manage app-level notes.
 - In the notes panel, use the app selector to switch the currently active app for note editing.

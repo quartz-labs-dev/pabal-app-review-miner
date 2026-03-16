@@ -58,6 +58,10 @@ interface AppBacklog {
   items: BacklogItem[];
 }
 
+interface UnifiedBacklogItem extends BacklogItem {
+  appNames: string[];
+}
+
 interface StoreLink {
   label: "App Store" | "Google Play";
   href: string;
@@ -1248,105 +1252,174 @@ function renderHtml(
     .join("");
   const appNoteAppsJson = toInlineJson(appNoteApps);
 
-  const backlogSections = backlogs
-    .map((appBacklog, appIndex) => {
-      const counts = {
-        must: appBacklog.items.filter((item) => item.priority === "must").length,
-        should: appBacklog.items.filter((item) => item.priority === "should").length,
-        could: appBacklog.items.filter((item) => item.priority === "could").length
-      };
+  const groupedBacklog = new Map<
+    string,
+    {
+      priority: Priority;
+      title: string;
+      impact: Impact;
+      effort: Effort;
+      action: string;
+      evidenceCount: number;
+      examples: QuoteItem[];
+      appNames: Set<string>;
+      exampleKeys: Set<string>;
+    }
+  >();
 
-      const rows =
-        appBacklog.items.length === 0
-          ? `<tr><td colspan=\"6\" class=\"empty\">추출된 리포트 없음</td></tr>`
-          : appBacklog.items
-              .map((item, itemIndex) => {
-                const evidenceId = `evidence-${appIndex}-${itemIndex}`;
-                const examples = item.examples
-                  .map(
-                    (q) => `
+  for (const appBacklog of backlogs) {
+    const parsedAppTitle = parseAppTitle(appBacklog.appTitle);
+    const appName = normalizeText(parsedAppTitle.displayName);
+
+    for (const item of appBacklog.items) {
+      const groupKey = `${normalizeText(item.title).toLowerCase()}||${normalizeText(item.action).toLowerCase()}`;
+      const existing = groupedBacklog.get(groupKey);
+
+      if (!existing) {
+        const exampleKeys = new Set<string>();
+        const examples: QuoteItem[] = [];
+        for (const quote of item.examples) {
+          const quoteKey = `${normalizeText(quote.kr).toLowerCase()}||${normalizeText(quote.org).toLowerCase()}`;
+          if (exampleKeys.has(quoteKey)) {
+            continue;
+          }
+          exampleKeys.add(quoteKey);
+          examples.push(quote);
+        }
+
+        groupedBacklog.set(groupKey, {
+          priority: item.priority,
+          title: item.title,
+          impact: item.impact,
+          effort: item.effort,
+          action: item.action,
+          evidenceCount: item.evidenceCount,
+          examples,
+          appNames: new Set<string>(appName ? [appName] : []),
+          exampleKeys
+        });
+        continue;
+      }
+
+      existing.evidenceCount += item.evidenceCount;
+      if (appName) {
+        existing.appNames.add(appName);
+      }
+      if (priorityOrder(item.priority) < priorityOrder(existing.priority)) {
+        existing.priority = item.priority;
+      }
+      for (const quote of item.examples) {
+        const quoteKey = `${normalizeText(quote.kr).toLowerCase()}||${normalizeText(quote.org).toLowerCase()}`;
+        if (existing.exampleKeys.has(quoteKey)) {
+          continue;
+        }
+        existing.exampleKeys.add(quoteKey);
+        existing.examples.push(quote);
+      }
+    }
+  }
+
+  const unifiedBacklogItems: UnifiedBacklogItem[] = [...groupedBacklog.values()]
+    .map((item) => ({
+      priority: item.priority,
+      title: item.title,
+      impact: item.impact,
+      effort: item.effort,
+      action: item.action,
+      evidenceCount: item.evidenceCount,
+      examples: item.examples,
+      appNames: [...item.appNames].sort((a, b) => a.localeCompare(b))
+    }))
+    .sort((a, b) => {
+      if (priorityOrder(a.priority) !== priorityOrder(b.priority)) {
+        return priorityOrder(a.priority) - priorityOrder(b.priority);
+      }
+      return b.evidenceCount - a.evidenceCount;
+    });
+
+  const backlogRows =
+    unifiedBacklogItems.length === 0
+      ? `<tr><td colspan=\"5\" class=\"empty\">추출된 리포트 없음</td></tr>`
+      : unifiedBacklogItems
+          .map((item, itemIndex) => {
+            const evidenceId = `evidence-${itemIndex}`;
+            const examples = item.examples
+              .map(
+                (q) => `
                     <li>
                       <div class=\"example-kr\">KR: ${escapeHtml(q.kr || q.org)}</div>
                       <div class=\"example-org org-text\">ORG: ${escapeHtml(q.org || "")}</div>
                     </li>
                   `
-                  )
-                  .join("\n");
+              )
+              .join("\n");
+            const appLabel = item.appNames.join(", ");
 
-                return `
-                  <tr class=\"backlog-item main-row searchable\" data-search=\"${escapeHtml(
-                    `${appBacklog.appTitle} ${item.priority} ${item.title} ${item.action} ${item.examples
-                      .map((q) => `${q.kr} ${q.org}`)
-                      .join(" ")}`
-                  ).toLowerCase()}\" data-evidence-id=\"${escapeHtml(evidenceId)}\">
+            return `
+                  <tr class=\"backlog-item main-row searchable\" data-priority=\"${escapeHtml(
+                    item.priority
+                  )}\" data-search=\"${escapeHtml(
+              `${appLabel} ${item.priority} ${item.title} ${item.action} ${item.examples
+                .map((q) => `${q.kr} ${q.org}`)
+                .join(" ")}`
+            ).toLowerCase()}\" data-evidence-id=\"${escapeHtml(evidenceId)}\">
                     <td>${renderPriorityBadge(item.priority)}</td>
                     <td>
                       <div class=\"item-title\">${escapeHtml(item.title)}</div>
                       <div class=\"item-action\">${escapeHtml(item.action)}</div>
+                      <div class=\"item-app\" title=\"${escapeHtml(appLabel)}\">앱: ${escapeHtml(appLabel)}</div>
                     </td>
                     <td>${renderLevel(item.impact)}</td>
                     <td>${renderLevel(item.effort)}</td>
-                    <td>${item.evidenceCount}</td>
                     <td>
-                      <button class=\"evidence-toggle\" type=\"button\" data-evidence-id=\"${escapeHtml(
-                        evidenceId
-                      )}\" aria-expanded=\"false\">근거 보기</button>
+                      <div class=\"evidence-count-cell\">
+                        <span class=\"evidence-count-value\">${item.evidenceCount}</span>
+                        <button class=\"evidence-toggle\" type=\"button\" data-evidence-id=\"${escapeHtml(
+                          evidenceId
+                        )}\" aria-expanded=\"false\" aria-label=\"근거 보기\" title=\"근거 보기\">
+                          <span class=\"evidence-toggle-icon\" aria-hidden=\"true\">▾</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                   <tr id=\"${escapeHtml(evidenceId)}\" class=\"evidence-row\">
-                    <td colspan=\"6\">
+                    <td colspan=\"5\">
                       <div class=\"evidence-panel\">
                         <ul class=\"evidence-list\">${examples}</ul>
                       </div>
                     </td>
                   </tr>
                 `;
-              })
-              .join("\n");
+          })
+          .join("\n");
 
-      return `
-        <details class=\"app\" open>
-          <summary>
-            ${renderAppHeading(appBacklog.appTitle)}
-            <span class=\"app-count\">리뷰 ${escapeHtml(appBacklog.reviewCount)} / MUST ${counts.must} · SHOULD ${counts.should} · COULD ${counts.could}</span>
-          </summary>
-          <div class=\"app-body\">
-            <div class=\"table-wrap\">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Priority</th>
-                    <th>백로그 항목</th>
-                    <th>Impact</th>
-                    <th>Effort</th>
-                    <th>근거 수</th>
-                    <th>근거</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${rows}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </details>
-      `;
-    })
-    .join("\n");
+  const backlogSections = `
+    <section class=\"app backlog-unified\">
+      <div class=\"app-body\">
+        <div class=\"table-wrap\">
+          <table>
+            <thead>
+              <tr>
+                <th>Priority</th>
+                <th>백로그 항목</th>
+                <th>Impact</th>
+                <th>Effort</th>
+                <th>근거 수</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${backlogRows}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  `;
 
-  const totalBacklogItems = backlogs.reduce((sum, appBacklog) => sum + appBacklog.items.length, 0);
-  const totalMustItems = backlogs.reduce(
-    (sum, appBacklog) => sum + appBacklog.items.filter((item) => item.priority === "must").length,
-    0
-  );
-  const totalShouldItems = backlogs.reduce(
-    (sum, appBacklog) => sum + appBacklog.items.filter((item) => item.priority === "should").length,
-    0
-  );
-  const totalCouldItems = backlogs.reduce(
-    (sum, appBacklog) => sum + appBacklog.items.filter((item) => item.priority === "could").length,
-    0
-  );
+  const totalBacklogItems = unifiedBacklogItems.length;
+  const totalMustItems = unifiedBacklogItems.filter((item) => item.priority === "must").length;
+  const totalShouldItems = unifiedBacklogItems.filter((item) => item.priority === "should").length;
+  const totalCouldItems = unifiedBacklogItems.filter((item) => item.priority === "could").length;
   function renderStatsSection(stats: Array<{ label: string; value: string | number; hint?: string }>): string {
     const rows = stats
       .map(
@@ -1372,21 +1445,16 @@ function renderHtml(
       hint: "추가 검토/반영 대상이면 활성, 보류·중복이면 비활성"
     }
   ]);
-  const backlogStatsHtml = renderStatsSection([
-    { label: "앱 수", value: apps.length },
-    { label: "백로그 항목", value: totalBacklogItems },
-    { label: "MUST", value: totalMustItems },
-    { label: "SHOULD / COULD", value: `${totalShouldItems} / ${totalCouldItems}` }
-  ]);
   const generatedAtLine =
     metadata.find((line) => line.includes("생성 시각")) ??
     metadata.find((line) => line.toLowerCase().includes("generated at"));
-  const backlogMetaLines = [
-    generatedAtLine || "생성 시각: -",
-    "우선순위 규칙: score = 요청×3 + 불만×2 + 만족×1",
-    "테마 키워드 매칭 기반으로 리포트를 구성"
-  ];
-  const backlogMetadataHtml = backlogMetaLines.map((line) => `<li>${escapeHtml(line)}</li>`).join("\n");
+  const backlogSummaryHtml = `
+    <section class=\"backlog-summary\">
+      <p><strong>백로그 항목 ${totalBacklogItems}</strong> · MUST ${totalMustItems} · SHOULD ${totalShouldItems} · COULD ${totalCouldItems}</p>
+      <p>${escapeHtml(generatedAtLine || "생성 시각: -")}</p>
+      <p>우선순위 규칙: 요청×3 + 불만×2 + 만족×1</p>
+    </section>
+  `;
   const ownerAppIconHref = ownerAppId ? `/assets/app-icons/${encodeURIComponent(ownerAppId)}.png` : "";
   const ownerAppIdentityHtml = ownerAppId
     ? `<div class=\"owner-app\" aria-label=\"Owner app\">
@@ -1679,20 +1747,27 @@ function renderHtml(
         font-size: 12px;
         line-height: 1.35;
       }
-      .meta {
-        margin: 0 0 18px;
-        padding: 12px 16px;
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        background: var(--panel);
-      }
       .context-panel {
         display: none;
       }
       .context-panel.active {
         display: block;
       }
-      .meta ul { margin: 0; padding-left: 18px; }
+      .backlog-summary {
+        margin: 0 0 14px;
+        color: var(--sub);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+      .backlog-summary p {
+        margin: 0 0 4px;
+      }
+      .backlog-summary p:last-child {
+        margin-bottom: 0;
+      }
+      .backlog-summary strong {
+        color: var(--ink);
+      }
       input[type="search"] {
         width: 100%;
         padding: 10px 12px;
@@ -1816,6 +1891,32 @@ function renderHtml(
         border-color: #eab308;
         color: #92400e;
         background: #fef9c3;
+      }
+      .priority-filter {
+        display: inline-flex;
+        align-items: center;
+        flex-wrap: wrap;
+        padding: 5px;
+        gap: 5px;
+        border: 1px solid #c7d6e8;
+        border-radius: 12px;
+        background: #ffffff;
+        box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
+      }
+      .priority-filter-btn {
+        border: 1px solid transparent;
+        background: transparent;
+        border-radius: 10px;
+        padding: 6px 10px;
+        min-height: 32px;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--sub);
+      }
+      .priority-filter-btn.is-active {
+        border-color: #0ea5e9;
+        color: #075985;
+        background: #e0f2fe;
       }
       .clear-filters-btn {
         border-color: #c7d6e8;
@@ -1998,16 +2099,37 @@ function renderHtml(
       }
       .org-text {
         display: none;
-        margin-top: 8px;
-        padding-top: 8px;
-        border-top: 1px dashed var(--line);
         color: #334155;
         font-size: 13px;
         line-height: 1.4;
       }
-      body.show-all-original #viewRaw .org-text,
-      .quote-card.show-one-original .org-text {
+      .quote-card .quote-org {
         display: block;
+        margin-top: 0;
+        padding-top: 0;
+        border-top: 1px dashed transparent;
+        max-height: 0;
+        opacity: 0;
+        overflow: hidden;
+        transform: translateY(-4px);
+        pointer-events: none;
+        transition:
+          max-height 300ms cubic-bezier(0.22, 1, 0.36, 1),
+          opacity 220ms ease,
+          transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+          margin-top 260ms ease,
+          padding-top 260ms ease,
+          border-color 220ms ease;
+      }
+      body.show-all-original #viewRaw .quote-card .quote-org,
+      .quote-card.show-one-original .quote-org {
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top-color: var(--line);
+        max-height: 1600px;
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
       }
       .quote-actions {
         display: flex;
@@ -2090,6 +2212,11 @@ function renderHtml(
         width: 16px;
         justify-content: center;
         color: #0ea5e9;
+        transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      body.show-all-original #viewRaw .quote-card .toggle-icon,
+      .quote-card.show-one-original .toggle-icon {
+        transform: rotate(180deg);
       }
       .exclude-toggle {
         color: #ffffff;
@@ -2400,6 +2527,16 @@ function renderHtml(
         color: #334155;
         line-height: 1.4;
       }
+      .item-app {
+        margin-top: 6px;
+        color: #64748b;
+        font-size: 12px;
+        display: block;
+        max-width: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
       .badge {
         display: inline-block;
         border-radius: 999px;
@@ -2411,25 +2548,71 @@ function renderHtml(
       .badge-must { background: var(--must); }
       .badge-should { background: var(--should); }
       .badge-could { background: var(--could); }
+      .evidence-count-cell {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .evidence-count-value {
+        font-weight: 600;
+      }
       .evidence-toggle {
         cursor: pointer;
-        font-size: 12px;
-        padding: 6px 8px;
-        white-space: nowrap;
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        border: 1px solid #cbd5e1;
+        background: #fff;
+        color: #0f172a;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
       }
-      .evidence-row {
-        display: none;
+      .evidence-toggle:hover {
+        background: #f8fafc;
+        border-color: #94a3b8;
       }
-      .evidence-row.open {
-        display: table-row;
+      .evidence-toggle-icon {
+        display: inline-block;
+        font-size: 14px;
+        line-height: 1;
+        transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .evidence-toggle[aria-expanded="true"] .evidence-toggle-icon {
+        transform: rotate(180deg);
       }
       .evidence-row td {
         padding: 0;
         background: #f8fbff;
+        border-bottom: 0;
+      }
+      .evidence-row.hidden-by-search {
+        display: none;
       }
       .evidence-panel {
+        padding: 0 12px;
+        border-top: 1px dashed transparent;
+        overflow: hidden;
+        max-height: 0;
+        opacity: 0;
+        transform: translateY(-3px);
+        transition:
+          max-height 280ms cubic-bezier(0.22, 1, 0.36, 1),
+          opacity 220ms ease,
+          transform 280ms cubic-bezier(0.22, 1, 0.36, 1),
+          padding 280ms cubic-bezier(0.22, 1, 0.36, 1),
+          border-color 220ms ease;
+      }
+      .evidence-row.open td {
+        border-bottom: 1px solid var(--line);
+      }
+      .evidence-row.open .evidence-panel {
         padding: 12px;
-        border-top: 1px dashed var(--line);
+        border-top-color: var(--line);
+        max-height: 360px;
+        opacity: 1;
+        transform: translateY(0);
       }
       .evidence-list { margin: 0; padding-left: 16px; }
       .evidence-list li { margin-bottom: 8px; }
@@ -2549,8 +2732,13 @@ function renderHtml(
           border-radius: 12px;
           justify-content: center;
         }
-        .raw-pagination {
+        .priority-filter {
           order: 3;
+          width: auto;
+          max-width: 100%;
+        }
+        .raw-pagination {
+          order: 4;
           margin-left: 0;
           width: auto;
           min-width: 260px;
@@ -2716,6 +2904,12 @@ function renderHtml(
           <button id=\"openNoteSidebar\" type=\"button\">노트</button>
           <button id=\"openFilterPanel\" class=\"open-filter-panel-btn\" type=\"button\">필터</button>
           <button id=\"toggleEvidenceAll\" type=\"button\">근거 펼치기</button>
+          <div id=\"priorityFilter\" class=\"priority-filter hidden-control\" role=\"group\" aria-label=\"우선순위 필터\">
+            <button type=\"button\" class=\"priority-filter-btn is-active\" data-priority-filter=\"all\">전체</button>
+            <button type=\"button\" class=\"priority-filter-btn\" data-priority-filter=\"must\">MUST</button>
+            <button type=\"button\" class=\"priority-filter-btn\" data-priority-filter=\"should\">SHOULD</button>
+            <button type=\"button\" class=\"priority-filter-btn\" data-priority-filter=\"could\">COULD</button>
+          </div>
         </div>
       </div>
       <div class=\"top-inner top-status-row\">
@@ -2736,12 +2930,7 @@ function renderHtml(
         ${rawStatsHtml}
       </section>
       <section id=\"contextBacklog\" class=\"context-panel\">
-        ${backlogStatsHtml}
-        <section class=\"meta\">
-          <ul>
-            ${backlogMetadataHtml}
-          </ul>
-        </section>
+        ${backlogSummaryHtml}
       </section>
 
       <section id=\"viewRaw\" class=\"view active\">
@@ -2825,6 +3014,7 @@ function renderHtml(
       const searchInput = document.getElementById('search');
       const openSearchInputButton = document.getElementById('openSearchInput');
       const searchFixed = document.querySelector('.search-fixed');
+      const topStatusRow = document.querySelector('.top-status-row');
       const openFilterPanelButton = document.getElementById('openFilterPanel');
       const toggleAll = document.getElementById('toggleAll');
       const tagFilter = document.getElementById('tagFilter');
@@ -2842,6 +3032,10 @@ function renderHtml(
       const rawPagePrev = document.getElementById('rawPagePrev');
       const rawPageNext = document.getElementById('rawPageNext');
       const rawPageInfo = document.getElementById('rawPageInfo');
+      const priorityFilter = document.getElementById('priorityFilter');
+      const priorityFilterButtons = priorityFilter
+        ? Array.from(priorityFilter.querySelectorAll('[data-priority-filter]'))
+        : [];
       const excludeFilterButtons = excludeFilter
         ? Array.from(excludeFilter.querySelectorAll('[data-exclude-filter]'))
         : [];
@@ -2891,21 +3085,19 @@ function renderHtml(
       let rawFilteredCount = rawCards.length;
       let rawTotalPages = 1;
       let excludeFilterMode = 'all';
+      let backlogPriorityFilterMode = 'all';
       let noteDirty = false;
       const selectedTagFilters = new Set();
       let activeNoteAppKey = '';
       let activeNoteAppTitle = '';
       const EXCLUDE_FILTER_MODES = new Set(['all', 'active', 'excluded']);
+      const PRIORITY_FILTER_MODES = new Set(['all', 'must', 'should', 'could']);
       const REVIEW_TAGS = ['heart', 'satisfaction', 'dissatisfaction'];
       const TAG_FILTER_MODES = new Set(['all', 'heart', 'satisfaction', 'dissatisfaction']);
       const TAG_LABELS = {
         heart: '❤️',
         satisfaction: '만족',
         dissatisfaction: '불만족'
-      };
-      const VIEW_LABELS = {
-        raw: '리뷰',
-        backlog: '리포트'
       };
 
       function escapeInlineHtml(input) {
@@ -3098,7 +3290,7 @@ function renderHtml(
 
         const icon = toggleOne.querySelector('.toggle-icon');
         if (icon instanceof HTMLElement) {
-          icon.textContent = opened ? '▴' : '▾';
+          icon.textContent = '▾';
         }
       }
 
@@ -3146,6 +3338,23 @@ function renderHtml(
             return;
           }
           button.classList.toggle('is-active', selectedTagFilters.has(mode));
+        });
+      }
+
+      function setBacklogPriorityFilterMode(mode) {
+        const normalized = String(mode || '').trim().toLowerCase();
+        backlogPriorityFilterMode = PRIORITY_FILTER_MODES.has(normalized) ? normalized : 'all';
+        syncPriorityFilterButtons();
+      }
+
+      function syncPriorityFilterButtons() {
+        priorityFilterButtons.forEach((button) => {
+          if (!(button instanceof HTMLElement)) {
+            return;
+          }
+
+          const mode = (button.getAttribute('data-priority-filter') || '').trim().toLowerCase();
+          button.classList.toggle('is-active', mode === backlogPriorityFilterMode);
         });
       }
 
@@ -3318,19 +3527,15 @@ function renderHtml(
           return;
         }
 
+        filterSummary.classList.add('hidden-control');
+
         if (viewRaw.classList.contains('active')) {
-          filterSummary.classList.add('hidden-control');
           syncActiveFilterChips();
           syncFilterPanelTrigger();
           syncRawPaginationUi();
           return;
         }
 
-        filterSummary.classList.remove('hidden-control');
-        const visibleBacklogCount = backlogItems.filter(
-          (item) => !item.classList.contains('hidden-by-search')
-        ).length;
-        filterSummary.textContent = VIEW_LABELS.backlog + ' ' + visibleBacklogCount + '/' + backlogItems.length + ' 표시';
         syncActiveFilterChips();
         syncFilterPanelTrigger();
         syncRawPaginationUi();
@@ -3806,10 +4011,19 @@ function renderHtml(
         const opened = evidenceRow.classList.toggle('open');
         const button = viewBacklog.querySelector('.evidence-toggle[data-evidence-id=\"' + evidenceId + '\"]');
         if (button instanceof HTMLElement) {
-          button.setAttribute('aria-expanded', opened ? 'true' : 'false');
-          button.textContent = opened ? '근거 숨기기' : '근거 보기';
+          setEvidenceToggleButtonState(button, opened);
         }
         syncEvidenceToggleText();
+      }
+
+      function setEvidenceToggleButtonState(button, opened) {
+        if (!(button instanceof HTMLElement)) {
+          return;
+        }
+        const label = opened ? '근거 숨기기' : '근거 보기';
+        button.setAttribute('aria-expanded', opened ? 'true' : 'false');
+        button.setAttribute('aria-label', label);
+        button.setAttribute('title', label);
       }
 
       function syncEvidenceToggleText() {
@@ -3823,7 +4037,9 @@ function renderHtml(
         const query = String(searchQuery || '');
 
         backlogItems.forEach((item) => {
-          const visible = !query || getSearchableText(item).includes(query);
+          const rowPriority = (item.getAttribute('data-priority') || '').trim().toLowerCase();
+          const hideByPriority = backlogPriorityFilterMode !== 'all' && rowPriority !== backlogPriorityFilterMode;
+          const visible = (!query || getSearchableText(item).includes(query)) && !hideByPriority;
           item.classList.toggle('hidden-by-search', !visible);
 
           const evidenceId = item.getAttribute('data-evidence-id');
@@ -3840,10 +4056,7 @@ function renderHtml(
           if (!visible) {
             evidenceRow.classList.remove('open');
             const evidenceToggle = item.querySelector('.evidence-toggle');
-            if (evidenceToggle instanceof HTMLElement) {
-              evidenceToggle.setAttribute('aria-expanded', 'false');
-              evidenceToggle.textContent = '근거 보기';
-            }
+            setEvidenceToggleButtonState(evidenceToggle, false);
           }
         });
       }
@@ -3895,12 +4108,14 @@ function renderHtml(
         if (openFilterPanelButton instanceof HTMLElement) {
           openFilterPanelButton.classList.toggle('hidden-control', !raw);
         }
-        if (openNoteSidebarButton instanceof HTMLElement) {
-          openNoteSidebarButton.classList.toggle('hidden-control', !raw);
+        if (topStatusRow instanceof HTMLElement) {
+          topStatusRow.classList.toggle('hidden-control', !raw);
+        }
+        if (priorityFilter instanceof HTMLElement) {
+          priorityFilter.classList.toggle('hidden-control', raw);
         }
         if (!raw) {
           closeFilterPanel();
-          closeAppNoteSidebar();
         }
         toggleEvidenceAll.classList.toggle('hidden-control', raw);
         syncEvidenceToggleText();
@@ -3920,9 +4135,7 @@ function renderHtml(
           const evidenceId = row.getAttribute('id');
           if (!evidenceId) return;
           const button = viewBacklog.querySelector('.evidence-toggle[data-evidence-id=\"' + evidenceId + '\"]');
-          if (!(button instanceof HTMLElement)) return;
-          button.setAttribute('aria-expanded', openAll ? 'true' : 'false');
-          button.textContent = openAll ? '근거 숨기기' : '근거 보기';
+          setEvidenceToggleButtonState(button, openAll);
         });
 
         syncEvidenceToggleText();
@@ -4102,6 +4315,17 @@ function renderHtml(
           applySearch();
         });
       });
+      priorityFilterButtons.forEach((button) => {
+        if (!(button instanceof HTMLElement)) {
+          return;
+        }
+
+        button.addEventListener('click', () => {
+          const mode = (button.getAttribute('data-priority-filter') || '').trim();
+          setBacklogPriorityFilterMode(mode);
+          applySearch();
+        });
+      });
       searchInput.addEventListener('input', () => {
         rawCurrentPage = 1;
         setSearchExpanded(true);
@@ -4143,6 +4367,7 @@ function renderHtml(
         });
       }
       setExcludeFilterMode('all');
+      setBacklogPriorityFilterMode('all');
       syncTagFilterButtons();
       syncActiveFilterChips();
       setSearchExpanded(getSearchQuery().length > 0);
