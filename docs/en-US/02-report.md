@@ -1,6 +1,4 @@
-# Report Commands (en-US)
-
-For prerequisites and registered app setup, see [README](./README.md).
+# Report Commands
 
 ## `report:translate`
 

@@ -1,6 +1,4 @@
-# 리뷰 명령 (ko-KR)
-
-사전 준비와 `registered-apps.json` 설정은 [README](./README.md)를 참고하세요.
+# 리뷰 명령
 
 ## `review:collect`
 

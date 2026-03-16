@@ -1,6 +1,4 @@
-# Review Commands (en-US)
-
-For prerequisites and registered app setup, see [README](./README.md).
+# Review Commands
 
 ## `review:collect`
 

@@ -44,21 +44,21 @@ This repository has two user-facing CLI features. Keep implementation and docs s
 - English root: `docs/en-US/README.md`
 - Korean root: `docs/ko-KR/README.md`
 - Setup docs are merged into locale README files.
-- Review docs: `docs/en-US/review.md`, `docs/ko-KR/review.md`
-- Report docs: `docs/en-US/report.md`, `docs/ko-KR/report.md`
+- Review docs: `docs/en-US/01-review.md`, `docs/ko-KR/01-review.md`
+- Report docs: `docs/en-US/02-report.md`, `docs/ko-KR/02-report.md`
 
 ## Mandatory Doc Sync Rules
 
 1. If code behavior changes, update relevant docs in both English and Korean in the same change.
 2. If CLI options/flags/defaults/output schema change, update:
-- `docs/en-US/review.md` and `docs/ko-KR/review.md` for `review:*`
-- `docs/en-US/report.md` and `docs/ko-KR/report.md` for `report:*`
+- `docs/en-US/01-review.md` and `docs/ko-KR/01-review.md` for `review:*`
+- `docs/en-US/02-report.md` and `docs/ko-KR/02-report.md` for `report:*`
 - both locale README doc maps when links/titles change
 3. If a new script/feature is added, create both docs files immediately:
-- add a new section in the matching English/Korean command document (`review.md` or `report.md`)
+- add a new section in the matching English/Korean command document (`01-review.md` or `02-report.md`)
 4. Keep command docs separated by command family:
-- `review:*` in `review.md`
-- `report:*` in `report.md`
+- `review:*` in `01-review.md`
+- `report:*` in `02-report.md`
 5. If command names are renamed, update all of:
 - `package.json` scripts
 - yargs `.scriptName(...)`
