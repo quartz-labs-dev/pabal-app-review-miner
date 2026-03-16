@@ -2168,15 +2168,6 @@ function renderHtml(
         border-color: #eab308;
         box-shadow: 0 0 0 2px rgba(234, 179, 8, 0.15);
       }
-      .quote-card.has-satisfaction-tag {
-        border-left: 4px solid #16a34a;
-      }
-      .quote-card.has-dissatisfaction-tag {
-        border-left: 4px solid #dc2626;
-      }
-      .quote-card.has-requests-tag {
-        border-left: 4px solid #2563eb;
-      }
       .quote-card.is-excluded {
         opacity: 0.62;
       }
