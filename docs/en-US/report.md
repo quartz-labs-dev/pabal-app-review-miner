@@ -67,6 +67,7 @@ npm run report:analyze -- --my-app golden-horizon --include-self
 Render actionable markdown report to interactive HTML.
 
 - `npm run report:render-html -- --my-app <owner> ...`
+- `npm run report:render-html -- --all`
 - `node dist/renderReportHtml.js ...`
 - HTML document title (`<title>` and H1) is fixed to `{myAppId} 리뷰 리포트` (or `{myAppId} Review Report` for English reports).
 - Generated HTML top bar includes a `Home` button (`/`) at the top-left.
@@ -75,28 +76,34 @@ Render actionable markdown report to interactive HTML.
 - On narrow screens, the notes panel also opens as a bottom sheet instead of a right drawer.
 - Search is shown as a `🔎` button by default and expands to the input field on tap/click.
 - Top controls are tab-scoped: `Reviews` shows `Filter` and `Notes`, while `Reports` shows `Expand evidence`, `Priority` filter, and the same `Notes` button/sidebar.
+- Tab state is synced to query parameter `?tab=reviews|reports` (aliases `review/raw`, `report/backlog` are accepted), so refresh keeps the selected tab.
 - In `Reports`, the secondary status row is hidden so the navigation area stays single-row (the `Reports N/N` count label is not shown).
 - `Reports` shows one unified backlog table across all apps (not per-app grouped sections).
 - In `Reports`, identical backlog items are merged into a single row even when they come from different apps.
 - The app list in each backlog row is rendered as a single-line text with ellipsis (`...`) when it overflows.
 - In `Reports`, you can filter rows by priority (`All / MUST / SHOULD / COULD`).
 - In the `Reports` table, there is no separate `Evidence` column; use the chevron button next to `Evidence count` to expand/collapse evidence rows.
+- `Evidence count` is calculated as the number of unique reviews (`reviewId`-based dedupe), not raw quote line count.
+- In expanded evidence rows, the Korean sentence is shown by default (without `KR:` prefix), and `See details` reveals the review ID, metadata, and original text.
+- Expanded evidence rows render all matched evidence reviews for that backlog row (not a sampled subset).
 - In `Reviews`, hashtag filter supports multi-select (`#❤️`, `#Satisfaction`, `#Dissatisfaction`), and `All tags` clears tag filters.
 - In `Reviews`, state filter is tri-state: `All` / `Active` / `Inactive` (default: `All`).
 - In `Reviews`, you can toggle `100+ chars` to focus on longer reviews.
 - `Reset filters` clears search/state/tag/length filters in one click.
 - In the filter panel, `Reset all to inactive` sets every review to `Inactive` in bulk and clears all hashtags.
+- The review filter sidebar/bottom sheet header shows `filtered reviews / total reviews` in real time.
 - `Reviews` tab supports pagination with a fixed page size of `100 items/page`.
-- Pagination is applied to the current search/filter result set, and `total reviews` is shown in the pagination area.
+- Pagination is applied to the current search/filter result set, and the pagination area shows `filtered reviews / total reviews`.
+- Each app row in the `Reviews` tab also shows `filtered reviews / total reviews` on the right.
 - The context block below the title switches by tab, so each tab shows only relevant context.
-- In the `Reports` tab context, a compact text summary is shown (backlog counts, generated time, and priority rule) without stat/meta cards.
-- In the `Reviews` tab context block, the `Raw quotes` card and generated-at/criteria/classification meta list are not shown.
+- In the `Reports` tab context, a compact text summary is shown (backlog counts and priority rule) without stat/meta cards.
+- In the `Reviews` tab context block, a plain text summary is shown (app count, hashtag definition, active-state definition) without cards.
 - Review cards include `#❤️ / #Satisfaction / #Dissatisfaction` hashtag toggles and `Inactive/Active`.
 - In review cards, `Original` text open/close uses a smooth expand/collapse animation.
 - Hashtags can be edited only when the card is `Active`.
 - Top-right controls include a `Notes` button; in the right sidebar you can switch the app selector to manage app-level notes.
 - In the notes panel, use the app selector to switch the currently active app for note editing.
-- The notes sidebar shows the selected app name and store links (App Store / Google Play).
+- The notes sidebar shows only store links (App Store / Google Play) for the selected app.
 - Notes are not auto-saved; use `Save` (or `Ctrl/Cmd + S`) to persist note changes.
 - Reviews view is hydrated from full review datasets (`data/{myAppId}/reviews-ko/*.json`, fallback `reviews/*.json`) per app:
   - preselected report quotes start as `Active`
@@ -107,15 +114,18 @@ Render actionable markdown report to interactive HTML.
 
 ### CLI Options
 
-- `--my-app` (required)
+- `--my-app` (required unless `--all` is set)
+- `--all` (default `false`): batch render all apps that have `data/{appId}/reports/competitor-raw-actionable.ko.md`
 - `--registered-apps-path`
 - `--input` (default: `data/{myAppId}/reports/competitor-raw-actionable.ko.md`)
 - `--output` (default: `data/{myAppId}/reports/competitor-raw-actionable.ko.html`)
+- `--all` cannot be combined with `--my-app`, `--input`, or `--output`
 
 ### Example
 
 ```bash
 npm run report:render-html -- --my-app aurora-eos
+npm run report:render-html -- --all
 ```
 
 ### Output

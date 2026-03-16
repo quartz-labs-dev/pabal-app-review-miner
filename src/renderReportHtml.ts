@@ -13,6 +13,7 @@ interface CliArgs {
   registeredAppsPath?: string;
   input?: string;
   output?: string;
+  all: boolean;
 }
 
 type CategoryKey = "satisfaction" | "dissatisfaction" | "requests";
@@ -22,6 +23,7 @@ type Effort = "high" | "medium" | "low";
 
 interface QuoteItem {
   reviewId: string;
+  evidenceKey?: string;
   meta: string;
   kr: string;
   org: string;
@@ -49,6 +51,7 @@ interface BacklogItem {
   effort: Effort;
   action: string;
   evidenceCount: number;
+  evidenceReviewIds: string[];
   examples: QuoteItem[];
 }
 
@@ -58,7 +61,14 @@ interface AppBacklog {
   items: BacklogItem[];
 }
 
-interface UnifiedBacklogItem extends BacklogItem {
+interface UnifiedBacklogItem {
+  priority: Priority;
+  title: string;
+  impact: Impact;
+  effort: Effort;
+  action: string;
+  evidenceCount: number;
+  examples: QuoteItem[];
   appNames: string[];
 }
 
@@ -318,6 +328,10 @@ const PRIORITY_BOOST_THEME_IDS = new Set([
 ]);
 
 const REVIEW_COUNT_PREFIXES = ["- 전체 리뷰 수:", "- Total review count:"];
+const BACKLOG_CATEGORY_ORDER: CategoryKey[] = ["dissatisfaction", "requests", "satisfaction"];
+const REPORTS_DIR_NAME = "reports";
+const DEFAULT_REPORT_MARKDOWN_FILE = "competitor-raw-actionable.ko.md";
+const DEFAULT_REPORT_HTML_FILE = "competitor-raw-actionable.ko.html";
 
 function includesAny(text: string, terms: string[]): boolean {
   return terms.some((term) => text.includes(term));
@@ -338,12 +352,10 @@ function hashToken(input: string): string {
 
 function createQuoteReviewId(
   appTitle: string,
-  categoryKey: CategoryKey,
   quote: Pick<QuoteItem, "meta" | "kr" | "org">
 ): string {
   const fingerprint = [
     normalizeText(appTitle).toLowerCase(),
-    categoryKey,
     normalizeText(quote.meta).toLowerCase(),
     normalizeText(quote.kr).toLowerCase(),
     normalizeText(quote.org).toLowerCase()
@@ -384,21 +396,26 @@ function parseQuoteMeta(meta: string): {
 }
 
 function resolveDefaultInput(ownerAppId: string): string {
-  return path.resolve(process.cwd(), "data", ownerAppId, "reports", "competitor-raw-actionable.ko.md");
+  return path.resolve(process.cwd(), "data", ownerAppId, REPORTS_DIR_NAME, DEFAULT_REPORT_MARKDOWN_FILE);
 }
 
 function resolveDefaultOutput(ownerAppId: string): string {
-  return path.resolve(process.cwd(), "data", ownerAppId, "reports", "competitor-raw-actionable.ko.html");
+  return path.resolve(process.cwd(), "data", ownerAppId, REPORTS_DIR_NAME, DEFAULT_REPORT_HTML_FILE);
 }
 
 async function parseArgs(): Promise<CliArgs> {
   const parsed = await yargs(hideBin(process.argv))
     .scriptName("report:render-html")
-    .usage("$0 --my-app <owner> [options]")
+    .usage("$0 (--my-app <owner> | --all) [options]")
     .option("my-app", {
       type: "string",
-      describe: "Owner app key used to resolve app slug",
-      demandOption: true
+      describe: "Owner app key used to resolve app slug"
+    })
+    .option("all", {
+      type: "boolean",
+      default: false,
+      describe:
+        "Render HTML for all apps that have data/{appId}/reports/competitor-raw-actionable.ko.md"
     })
     .option("registered-apps-path", {
       type: "string",
@@ -417,6 +434,35 @@ async function parseArgs(): Promise<CliArgs> {
     .parse();
 
   return parsed as unknown as CliArgs;
+}
+
+async function findOwnerAppIdsForBatchRender(): Promise<string[]> {
+  const dataRoot = path.resolve(process.cwd(), "data");
+  const entries = await fs.readdir(dataRoot, { withFileTypes: true }).catch(() => []);
+  const appIds: string[] = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const appId = normalizeText(entry.name);
+    if (!appId) {
+      continue;
+    }
+
+    const markdownPath = path.resolve(dataRoot, appId, REPORTS_DIR_NAME, DEFAULT_REPORT_MARKDOWN_FILE);
+    try {
+      const stat = await fs.stat(markdownPath);
+      if (stat.isFile()) {
+        appIds.push(appId);
+      }
+    } catch {
+      // Skip apps without a default markdown report.
+    }
+  }
+
+  return appIds.sort((a, b) => a.localeCompare(b));
 }
 
 function escapeHtml(input: string): string {
@@ -778,11 +824,11 @@ function renderAppHeading(rawTitle: string): string {
 
 function mapCategory(heading: string): CategoryKey | undefined {
   const normalized = heading.toLowerCase();
-  if (includesAny(heading, ["만족"]) || includesAny(normalized, ["satisfaction"])) {
-    return "satisfaction";
-  }
   if (includesAny(heading, ["불만"]) || includesAny(normalized, ["dissatisfaction"])) {
     return "dissatisfaction";
+  }
+  if (includesAny(heading, ["만족"]) || includesAny(normalized, ["satisfaction"])) {
+    return "satisfaction";
   }
   if (includesAny(heading, ["요청", "개선"]) || includesAny(normalized, ["request", "improvement"])) {
     return "requests";
@@ -813,7 +859,7 @@ function parseMarkdown(input: string): { title: string; metadata: string[]; apps
     }
 
     currentApp.categories[currentCategory].push({
-      reviewId: createQuoteReviewId(currentApp.title, currentCategory, {
+      reviewId: createQuoteReviewId(currentApp.title, {
         meta: normalizeText(currentQuote.meta),
         kr,
         org
@@ -940,8 +986,9 @@ function calculatePriority(themeId: string, reqCount: number, negCount: number, 
   return "could";
 }
 
-function buildBacklog(apps: AppSection[]): AppBacklog[] {
+function buildBacklog(apps: AppSection[], reviewPools: ReviewPools): AppBacklog[] {
   return apps.map((app) => {
+    const appPool = resolvePoolForApp(app.title, reviewPools);
     const buckets = new Map<
       string,
       {
@@ -949,11 +996,14 @@ function buildBacklog(apps: AppSection[]): AppBacklog[] {
         reqCount: number;
         negCount: number;
         posCount: number;
+        evidenceReviewIds: Set<string>;
+        evidenceQuoteById: Map<string, QuoteItem>;
         examples: QuoteItem[];
       }
     >();
 
-    for (const categoryKey of Object.keys(app.categories) as CategoryKey[]) {
+    const appScope = normalizeText(app.title).toLowerCase();
+    for (const categoryKey of BACKLOG_CATEGORY_ORDER) {
       for (const quote of app.categories[categoryKey]) {
         const text = `${quote.kr} ${quote.org} ${quote.meta}`.toLowerCase();
 
@@ -969,8 +1019,24 @@ function buildBacklog(apps: AppSection[]): AppBacklog[] {
               reqCount: 0,
               negCount: 0,
               posCount: 0,
+              evidenceReviewIds: new Set<string>(),
+              evidenceQuoteById: new Map<string, QuoteItem>(),
               examples: []
             };
+
+          const baseReviewId =
+            normalizeText(findPoolReviewIdForQuote(quote, appPool)) ||
+            normalizeText(quote.reviewId) ||
+            createQuoteReviewId(app.title, {
+              meta: quote.meta,
+              kr: quote.kr,
+              org: quote.org
+            });
+          const scopedReviewId = `${appScope}::${baseReviewId}`.toLowerCase();
+          if (bucket.evidenceReviewIds.has(scopedReviewId)) {
+            continue;
+          }
+          bucket.evidenceReviewIds.add(scopedReviewId);
 
           if (categoryKey === "requests") {
             bucket.reqCount += 1;
@@ -980,9 +1046,16 @@ function buildBacklog(apps: AppSection[]): AppBacklog[] {
             bucket.posCount += 1;
           }
 
-          if (bucket.examples.length < 4) {
-            bucket.examples.push(quote);
-          }
+          bucket.examples.push({
+            ...quote,
+            reviewId: baseReviewId,
+            evidenceKey: scopedReviewId
+          });
+          bucket.evidenceQuoteById.set(scopedReviewId, {
+            ...quote,
+            reviewId: baseReviewId,
+            evidenceKey: scopedReviewId
+          });
 
           buckets.set(theme.id, bucket);
         }
@@ -991,7 +1064,11 @@ function buildBacklog(apps: AppSection[]): AppBacklog[] {
 
     const items: BacklogItem[] = [...buckets.values()]
       .map((bucket) => {
-        const evidenceCount = bucket.reqCount + bucket.negCount + bucket.posCount;
+        const evidenceReviewIds = [...bucket.evidenceReviewIds];
+        const evidenceCount = evidenceReviewIds.length;
+        const examples = evidenceReviewIds
+          .map((reviewId) => bucket.evidenceQuoteById.get(reviewId))
+          .filter((quote): quote is QuoteItem => Boolean(quote));
         const priority = calculatePriority(
           bucket.theme.id,
           bucket.reqCount,
@@ -1006,7 +1083,8 @@ function buildBacklog(apps: AppSection[]): AppBacklog[] {
           effort: bucket.theme.effort,
           action: bucket.theme.action,
           evidenceCount,
-          examples: bucket.examples.slice(0, 2)
+          evidenceReviewIds,
+          examples
         };
       })
       .sort((a, b) => {
@@ -1051,7 +1129,6 @@ function renderMetaChip(className: string, content: string | undefined, title?: 
 
 function renderHtml(
   title: string,
-  metadata: string[],
   apps: AppSection[],
   backlogs: AppBacklog[],
   ownerAppId: string,
@@ -1225,6 +1302,10 @@ function renderHtml(
         </section>
       `;
       const defaultOpenAttr = appIndex < 2 ? " open" : "";
+      const appReviewCountLabel = normalizeText(String(app.reviewCount ?? ""));
+      const initialAppCountText = appReviewCountLabel
+        ? `${appReviewCountLabel}/${appReviewCountLabel}`
+        : "0/0";
 
       return `
         <details class=\"app\" data-app-key=\"${escapeHtml(appKey)}\" data-app-title=\"${escapeHtml(
@@ -1233,7 +1314,7 @@ function renderHtml(
           <summary>
             ${renderAppHeading(app.title)}
             <span class=\"app-summary-right\">
-              <span class=\"app-count\">리뷰 ${escapeHtml(app.reviewCount ?? "-")}</span>
+              <span class=\"app-count\">리뷰 ${escapeHtml(initialAppCountText)}</span>
             </span>
           </summary>
           <div class=\"app-body\">
@@ -1260,10 +1341,9 @@ function renderHtml(
       impact: Impact;
       effort: Effort;
       action: string;
-      evidenceCount: number;
-      examples: QuoteItem[];
+      evidenceReviewIds: Set<string>;
+      evidenceQuoteById: Map<string, QuoteItem>;
       appNames: Set<string>;
-      exampleKeys: Set<string>;
     }
   >();
 
@@ -1276,15 +1356,16 @@ function renderHtml(
       const existing = groupedBacklog.get(groupKey);
 
       if (!existing) {
-        const exampleKeys = new Set<string>();
-        const examples: QuoteItem[] = [];
+        const evidenceQuoteById = new Map<string, QuoteItem>();
         for (const quote of item.examples) {
-          const quoteKey = `${normalizeText(quote.kr).toLowerCase()}||${normalizeText(quote.org).toLowerCase()}`;
-          if (exampleKeys.has(quoteKey)) {
+          const quoteKey =
+            normalizeText(quote.evidenceKey).toLowerCase() ||
+            normalizeText(quote.reviewId).toLowerCase() ||
+            `${normalizeText(quote.kr).toLowerCase()}||${normalizeText(quote.org).toLowerCase()}`;
+          if (!quoteKey || evidenceQuoteById.has(quoteKey)) {
             continue;
           }
-          exampleKeys.add(quoteKey);
-          examples.push(quote);
+          evidenceQuoteById.set(quoteKey, quote);
         }
 
         groupedBacklog.set(groupKey, {
@@ -1293,15 +1374,16 @@ function renderHtml(
           impact: item.impact,
           effort: item.effort,
           action: item.action,
-          evidenceCount: item.evidenceCount,
-          examples,
+          evidenceReviewIds: new Set<string>(item.evidenceReviewIds),
+          evidenceQuoteById,
           appNames: new Set<string>(appName ? [appName] : []),
-          exampleKeys
         });
         continue;
       }
 
-      existing.evidenceCount += item.evidenceCount;
+      for (const reviewId of item.evidenceReviewIds) {
+        existing.evidenceReviewIds.add(reviewId);
+      }
       if (appName) {
         existing.appNames.add(appName);
       }
@@ -1309,27 +1391,36 @@ function renderHtml(
         existing.priority = item.priority;
       }
       for (const quote of item.examples) {
-        const quoteKey = `${normalizeText(quote.kr).toLowerCase()}||${normalizeText(quote.org).toLowerCase()}`;
-        if (existing.exampleKeys.has(quoteKey)) {
+        const quoteKey =
+          normalizeText(quote.evidenceKey).toLowerCase() ||
+          normalizeText(quote.reviewId).toLowerCase() ||
+          `${normalizeText(quote.kr).toLowerCase()}||${normalizeText(quote.org).toLowerCase()}`;
+        if (!quoteKey || existing.evidenceQuoteById.has(quoteKey)) {
           continue;
         }
-        existing.exampleKeys.add(quoteKey);
-        existing.examples.push(quote);
+        existing.evidenceQuoteById.set(quoteKey, quote);
       }
     }
   }
 
   const unifiedBacklogItems: UnifiedBacklogItem[] = [...groupedBacklog.values()]
-    .map((item) => ({
-      priority: item.priority,
-      title: item.title,
-      impact: item.impact,
-      effort: item.effort,
-      action: item.action,
-      evidenceCount: item.evidenceCount,
-      examples: item.examples,
-      appNames: [...item.appNames].sort((a, b) => a.localeCompare(b))
-    }))
+    .map((item) => {
+      const evidenceIds = [...item.evidenceReviewIds];
+      const examples = evidenceIds
+        .map((reviewId) => item.evidenceQuoteById.get(reviewId))
+        .filter((quote): quote is QuoteItem => Boolean(quote));
+
+      return {
+        priority: item.priority,
+        title: item.title,
+        impact: item.impact,
+        effort: item.effort,
+        action: item.action,
+        evidenceCount: item.evidenceReviewIds.size,
+        examples,
+        appNames: [...item.appNames].sort((a, b) => a.localeCompare(b))
+      };
+    })
     .sort((a, b) => {
       if (priorityOrder(a.priority) !== priorityOrder(b.priority)) {
         return priorityOrder(a.priority) - priorityOrder(b.priority);
@@ -1344,14 +1435,37 @@ function renderHtml(
           .map((item, itemIndex) => {
             const evidenceId = `evidence-${itemIndex}`;
             const examples = item.examples
-              .map(
-                (q) => `
+              .map((q, quoteIndex) => {
+                const detailId = `evidence-detail-${itemIndex}-${quoteIndex}`;
+                const parsed = parseQuoteMeta(q.meta);
+                const detailMeta = [
+                  q.reviewId ? `리뷰 ID: ${q.reviewId}` : "",
+                  parsed.platform ? `플랫폼: ${parsed.platform}` : "",
+                  parsed.rating ? `평점: ${parsed.rating}` : "",
+                  parsed.date ? `날짜: ${parsed.date}` : ""
+                ]
+                  .filter(Boolean)
+                  .join(" · ");
+                const detailFallback = detailMeta || (parsed.raw ? `메타: ${parsed.raw}` : "메타: -");
+
+                return `
                     <li>
-                      <div class=\"example-kr\">KR: ${escapeHtml(q.kr || q.org)}</div>
-                      <div class=\"example-org org-text\">ORG: ${escapeHtml(q.org || "")}</div>
+                      <div class=\"example-kr\">${escapeHtml(q.kr || q.org)}</div>
+                      <div class=\"evidence-detail-actions\">
+                        <button
+                          class=\"evidence-detail-toggle\"
+                          type=\"button\"
+                          data-evidence-detail-id=\"${escapeHtml(detailId)}\"
+                          aria-expanded=\"false\"
+                        >자세히보기</button>
+                      </div>
+                      <div id=\"${escapeHtml(detailId)}\" class=\"evidence-detail\">
+                        <div class=\"evidence-detail-meta\">${escapeHtml(detailFallback)}</div>
+                        <div class=\"example-org\">원문: ${escapeHtml(q.org || "(원문 없음)")}</div>
+                      </div>
                     </li>
-                  `
-              )
+                  `;
+              })
               .join("\n");
             const appLabel = item.appNames.join(", ");
 
@@ -1397,7 +1511,14 @@ function renderHtml(
     <section class=\"app backlog-unified\">
       <div class=\"app-body\">
         <div class=\"table-wrap\">
-          <table>
+          <table class=\"backlog-table\">
+            <colgroup>
+              <col class=\"col-priority\" />
+              <col class=\"col-item\" />
+              <col class=\"col-impact\" />
+              <col class=\"col-effort\" />
+              <col class=\"col-evidence\" />
+            </colgroup>
             <thead>
               <tr>
                 <th>Priority</th>
@@ -1420,38 +1541,18 @@ function renderHtml(
   const totalMustItems = unifiedBacklogItems.filter((item) => item.priority === "must").length;
   const totalShouldItems = unifiedBacklogItems.filter((item) => item.priority === "should").length;
   const totalCouldItems = unifiedBacklogItems.filter((item) => item.priority === "could").length;
-  function renderStatsSection(stats: Array<{ label: string; value: string | number; hint?: string }>): string {
-    const rows = stats
-      .map(
-        (row) =>
-          `<article class=\"stat\"><span class=\"label\">${escapeHtml(row.label)}</span><strong>${escapeHtml(
-            String(row.value)
-          )}</strong>${row.hint ? `<span class=\"stat-hint\">${escapeHtml(row.hint)}</span>` : ""}</article>`
-      )
-      .join("\n");
-    return `<section class=\"stats\">${rows}</section>`;
-  }
-
-  const rawStatsHtml = renderStatsSection([
-    { label: "앱 수", value: apps.length },
-    {
-      label: "해시태그 정의",
-      value: "#만족 · #불만족 · #❤️",
-      hint: "활성 리뷰를 성격별로 분류하고 필터링할 때 사용"
-    },
-    {
-      label: "활성 상태 정의",
-      value: "리포트 반영 후보 여부",
-      hint: "추가 검토/반영 대상이면 활성, 보류·중복이면 비활성"
-    }
-  ]);
-  const generatedAtLine =
-    metadata.find((line) => line.includes("생성 시각")) ??
-    metadata.find((line) => line.toLowerCase().includes("generated at"));
+  const rawSummaryHtml = `
+    <section class=\"review-summary\">
+      <p><strong>앱 수 ${apps.length}</strong></p>
+      <p><strong>해시태그 정의:</strong> #만족 · #불만족 · #❤️</p>
+      <p>활성 리뷰를 성격별로 분류하고 필터링할 때 사용</p>
+      <p><strong>활성 상태 정의:</strong> 리포트 반영 후보 여부</p>
+      <p>추가 검토/반영 대상이면 활성, 보류·중복이면 비활성</p>
+    </section>
+  `;
   const backlogSummaryHtml = `
     <section class=\"backlog-summary\">
       <p><strong>백로그 항목 ${totalBacklogItems}</strong> · MUST ${totalMustItems} · SHOULD ${totalShouldItems} · COULD ${totalCouldItems}</p>
-      <p>${escapeHtml(generatedAtLine || "생성 시각: -")}</p>
       <p>우선순위 규칙: 요청×3 + 불만×2 + 만족×1</p>
     </section>
   `;
@@ -1716,36 +1817,20 @@ function renderHtml(
         font-size: 1.78rem;
         letter-spacing: -0.02em;
       }
-      .stats {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 10px;
+      .review-summary {
         margin: 0 0 14px;
-      }
-      .stat {
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        padding: 10px 12px;
-        background: linear-gradient(180deg, #ffffff, #f6fbff);
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
-      }
-      .stat .label {
         color: var(--sub);
-        font-size: 12px;
+        font-size: 13px;
+        line-height: 1.45;
       }
-      .stat strong {
-        font-size: 1.05rem;
-        line-height: 1.2;
+      .review-summary p {
+        margin: 0 0 4px;
       }
-      .stat-hint {
-        display: block;
-        margin-top: 4px;
-        color: var(--sub);
-        font-size: 12px;
-        line-height: 1.35;
+      .review-summary p:last-child {
+        margin-bottom: 0;
+      }
+      .review-summary strong {
+        color: var(--ink);
       }
       .context-panel {
         display: none;
@@ -2280,15 +2365,27 @@ function renderHtml(
         padding: 12px 14px;
         border-bottom: 1px solid var(--line);
         display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        justify-content: flex-start;
+        gap: 8px;
+        background: #ffffff;
+      }
+      .filter-panel-head-top {
+        display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 8px;
-        background: #ffffff;
       }
       .filter-panel-head h2 {
         margin: 0;
         font-size: 1rem;
         line-height: 1.2;
+      }
+      .filter-panel-head-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
       }
       .filter-panel-head button {
         border-radius: 10px;
@@ -2302,6 +2399,21 @@ function renderHtml(
       .filter-panel-head button:hover {
         border-color: #9db0c6;
         background: #f8fbff;
+      }
+      .filter-panel-summary {
+        margin: 0;
+        align-self: flex-start;
+      }
+      .filter-panel-icon-btn {
+        width: 34px;
+        height: 34px;
+        min-height: 34px;
+        padding: 0;
+        font-size: 16px;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
       }
       .filter-panel-body {
         padding: 10px 14px 14px;
@@ -2446,15 +2558,8 @@ function renderHtml(
         border-bottom: 1px dashed var(--line);
         background: #ffffff;
       }
-      .note-app-name {
-        margin: 0;
-        color: #0f172a;
-        font-size: 14px;
-        font-weight: 700;
-        line-height: 1.3;
-      }
       .note-app-links {
-        margin-top: 6px;
+        margin-top: 0;
         display: inline-flex;
         align-items: center;
         gap: 6px;
@@ -2510,6 +2615,22 @@ function renderHtml(
         border-radius: 10px;
         overflow: hidden;
         background: #ffffff;
+      }
+      .backlog-table {
+        table-layout: fixed;
+      }
+      .backlog-table col.col-priority {
+        width: 112px;
+      }
+      .backlog-table col.col-impact,
+      .backlog-table col.col-effort {
+        width: 118px;
+      }
+      .backlog-table col.col-evidence {
+        width: 120px;
+      }
+      .backlog-table td:nth-child(2) {
+        min-width: 0;
       }
       th, td {
         padding: 9px 10px;
@@ -2610,7 +2731,7 @@ function renderHtml(
       .evidence-row.open .evidence-panel {
         padding: 12px;
         border-top-color: var(--line);
-        max-height: 360px;
+        max-height: 3200px;
         opacity: 1;
         transform: translateY(0);
       }
@@ -2618,6 +2739,48 @@ function renderHtml(
       .evidence-list li { margin-bottom: 8px; }
       .example-kr { line-height: 1.35; }
       .example-org { margin-top: 6px; }
+      .evidence-detail-actions {
+        margin-top: 4px;
+        display: flex;
+        justify-content: flex-end;
+      }
+      .evidence-detail-toggle {
+        border: 0;
+        background: transparent;
+        padding: 0;
+        color: #2563eb;
+        font-size: 12px;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        cursor: pointer;
+      }
+      .evidence-detail {
+        margin-top: 0;
+        max-height: 0;
+        opacity: 0;
+        overflow: hidden;
+        transform: translateY(-3px);
+        transition:
+          max-height 260ms cubic-bezier(0.22, 1, 0.36, 1),
+          opacity 200ms ease,
+          transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+          margin-top 220ms ease;
+      }
+      .evidence-detail.open {
+        margin-top: 6px;
+        max-height: 400px;
+        opacity: 1;
+        transform: translateY(0);
+      }
+      .evidence-detail-meta {
+        color: #64748b;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+      .evidence-detail .example-org {
+        margin-top: 6px;
+        padding-bottom: 10px;
+      }
       a:focus-visible,
       button:focus-visible,
       input:focus-visible,
@@ -2686,7 +2849,6 @@ function renderHtml(
         .tabs {
           margin-left: auto;
         }
-        .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       }
       @media (max-width: 780px) {
         .top-inner {
@@ -2876,9 +3038,6 @@ function renderHtml(
           font-size: 12px;
           padding: 0 9px;
         }
-        .stats {
-          grid-template-columns: 1fr;
-        }
       }
       @media (min-width: 900px) {
         .cards { grid-template-columns: 1fr 1fr; }
@@ -2916,7 +3075,7 @@ function renderHtml(
         <div id=\"activeFilterChips\" class=\"active-filter-chips\"></div>
         <p id=\"filterSummary\" class=\"filter-summary page-filter-summary\">리뷰 0/0 표시</p>
         <div id=\"rawPagination\" class=\"raw-pagination\">
-          <span id=\"rawTotalCount\" class=\"raw-total-count\">리뷰 전체 0</span>
+          <span id=\"rawTotalCount\" class=\"raw-total-count\">리뷰 0/0</span>
           <button id=\"rawPagePrev\" type=\"button\">이전</button>
           <span id=\"rawPageInfo\" class=\"raw-page-info\">1/1</span>
           <button id=\"rawPageNext\" type=\"button\">다음</button>
@@ -2927,7 +3086,7 @@ function renderHtml(
     <main class=\"wrap\" id=\"root\">
       <h1>${escapeHtml(reportTitle)}</h1>
       <section id=\"contextRaw\" class=\"context-panel active\">
-        ${rawStatsHtml}
+        ${rawSummaryHtml}
       </section>
       <section id=\"contextBacklog\" class=\"context-panel\">
         ${backlogSummaryHtml}
@@ -2961,7 +3120,6 @@ function renderHtml(
           </select>
         </div>
         <div class=\"note-app-meta\">
-          <p id=\"noteSidebarAppName\" class=\"note-app-name\">앱을 선택하세요</p>
           <div id=\"noteSidebarAppLinks\" class=\"note-app-links\"></div>
         </div>
         <textarea id=\"noteSidebarText\" placeholder=\"예) 반복 불만 키워드, 다음 비교 포인트, 액션 아이템\"></textarea>
@@ -2973,8 +3131,14 @@ function renderHtml(
       <button id=\"filterPanelBackdrop\" class=\"filter-panel-backdrop\" type=\"button\" aria-label=\"필터 닫기\"></button>
       <aside class=\"filter-panel\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"filterPanelTitle\">
         <div class=\"filter-panel-head\">
-          <h2 id=\"filterPanelTitle\">리뷰 필터</h2>
-          <button id=\"filterPanelClose\" type=\"button\">닫기</button>
+          <div class=\"filter-panel-head-top\">
+            <h2 id=\"filterPanelTitle\">리뷰 필터</h2>
+            <div class=\"filter-panel-head-actions\">
+              <button id=\"clearFilters\" class=\"filter-panel-icon-btn\" type=\"button\" aria-label=\"필터 초기화\" title=\"초기화\">↻</button>
+              <button id=\"filterPanelClose\" type=\"button\">닫기</button>
+            </div>
+          </div>
+          <p id=\"filterPanelCount\" class=\"filter-summary filter-panel-summary\">리뷰 0/0</p>
         </div>
         <div id=\"topFiltersLeft\" class=\"filter-panel-body\">
           <div class=\"filter-field\">
@@ -3001,7 +3165,6 @@ function renderHtml(
             </div>
           </div>
           <div class=\"filter-panel-foot\">
-            <button id=\"clearFilters\" class=\"clear-filters-btn\" type=\"button\">필터 초기화</button>
             <button id=\"resetAllExcluded\" class=\"clear-filters-btn bulk-exclude-btn\" type=\"button\">전체 리뷰 비활성 리셋</button>
           </div>
         </div>
@@ -3026,6 +3189,7 @@ function renderHtml(
       const minLength100 = document.getElementById('minLength100');
       const excludeFilter = document.getElementById('excludeFilter');
       const filterSummary = document.getElementById('filterSummary');
+      const filterPanelCount = document.getElementById('filterPanelCount');
       const activeFilterChips = document.getElementById('activeFilterChips');
       const rawPagination = document.getElementById('rawPagination');
       const rawTotalCount = document.getElementById('rawTotalCount');
@@ -3051,7 +3215,8 @@ function renderHtml(
       const rawAppSections = Array.from(viewRaw.querySelectorAll('.app[data-app-key]'));
       const rawAppSectionCards = rawAppSections.map((section) => ({
         section,
-        cards: Array.from(section.querySelectorAll('.quote-card[data-review-id]'))
+        cards: Array.from(section.querySelectorAll('.quote-card[data-review-id]')),
+        countLabel: section.querySelector('.app-count')
       }));
       const backlogItems = Array.from(viewBacklog.querySelectorAll('.backlog-item'));
       const noteSidebarRoot = document.getElementById('noteSidebarRoot');
@@ -3060,7 +3225,6 @@ function renderHtml(
       const noteSidebarSave = document.getElementById('noteSidebarSave');
       const noteSidebarTitle = document.getElementById('noteSidebarTitle');
       const noteSidebarSub = document.getElementById('noteSidebarSub');
-      const noteSidebarAppName = document.getElementById('noteSidebarAppName');
       const noteSidebarAppLinks = document.getElementById('noteSidebarAppLinks');
       const noteAppSelect = document.getElementById('noteAppSelect');
       const noteSidebarText = document.getElementById('noteSidebarText');
@@ -3089,11 +3253,13 @@ function renderHtml(
       let noteDirty = false;
       const selectedTagFilters = new Set();
       let activeNoteAppKey = '';
-      let activeNoteAppTitle = '';
       const EXCLUDE_FILTER_MODES = new Set(['all', 'active', 'excluded']);
       const PRIORITY_FILTER_MODES = new Set(['all', 'must', 'should', 'could']);
       const REVIEW_TAGS = ['heart', 'satisfaction', 'dissatisfaction'];
       const TAG_FILTER_MODES = new Set(['all', 'heart', 'satisfaction', 'dissatisfaction']);
+      const TAB_QUERY_KEY = 'tab';
+      const TAB_REVIEW_VALUES = new Set(['reviews', 'review', 'raw']);
+      const TAB_REPORT_VALUES = new Set(['reports', 'report', 'backlog']);
       const TAG_LABELS = {
         heart: '❤️',
         satisfaction: '만족',
@@ -3160,6 +3326,35 @@ function renderHtml(
 
       function getSearchQuery() {
         return searchInput instanceof HTMLInputElement ? searchInput.value.trim().toLowerCase() : '';
+      }
+
+      function resolveTabFromQuery() {
+        try {
+          const params = new URLSearchParams(window.location.search || '');
+          const raw = String(params.get(TAB_QUERY_KEY) || '').trim().toLowerCase();
+          if (TAB_REPORT_VALUES.has(raw)) {
+            return false;
+          }
+          if (TAB_REVIEW_VALUES.has(raw)) {
+            return true;
+          }
+        } catch {}
+        return true;
+      }
+
+      function syncTabQuery(raw) {
+        if (!window.history || typeof window.history.replaceState !== 'function') {
+          return;
+        }
+        try {
+          const url = new URL(window.location.href);
+          const nextValue = raw ? 'reviews' : 'reports';
+          if (url.searchParams.get(TAB_QUERY_KEY) === nextValue) {
+            return;
+          }
+          url.searchParams.set(TAB_QUERY_KEY, nextValue);
+          window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+        } catch {}
       }
 
       function getSearchableText(el) {
@@ -3430,7 +3625,10 @@ function renderHtml(
         rawPagination.classList.toggle('hidden-control', !viewRaw.classList.contains('active'));
 
         if (rawTotalCount instanceof HTMLElement) {
-          rawTotalCount.textContent = '리뷰 전체 ' + rawCards.length;
+          rawTotalCount.textContent = '리뷰 ' + rawFilteredCount + '/' + rawCards.length;
+        }
+        if (filterPanelCount instanceof HTMLElement) {
+          filterPanelCount.textContent = '리뷰 ' + rawFilteredCount + '/' + rawCards.length;
         }
 
         if (rawPageInfo instanceof HTMLElement) {
@@ -3446,6 +3644,15 @@ function renderHtml(
 
       function syncRawSectionVisibility() {
         rawAppSectionCards.forEach((entry) => {
+          const filteredCount = entry.cards.reduce((count, card) => {
+            const matchedBySearch = !card.classList.contains('hidden-by-search');
+            const matchedByState = !card.classList.contains('hidden-by-state');
+            return matchedBySearch && matchedByState ? count + 1 : count;
+          }, 0);
+          if (entry.countLabel instanceof HTMLElement) {
+            entry.countLabel.textContent = '리뷰 ' + filteredCount + '/' + entry.cards.length;
+          }
+
           const hasVisible = entry.cards.some(
             (card) =>
               !card.classList.contains('hidden-by-search') &&
@@ -3755,18 +3962,12 @@ function renderHtml(
           : defaultNoteAppKey;
 
         activeNoteAppKey = nextAppKey;
-        const appMeta = noteAppByKey.get(nextAppKey);
-        activeNoteAppTitle = appMeta && appMeta.title ? appMeta.title : nextAppKey;
 
         if (noteSidebarTitle instanceof HTMLElement) {
           noteSidebarTitle.textContent = '앱 노트';
         }
         if (noteSidebarSub instanceof HTMLElement) {
           noteSidebarSub.textContent = '셀렉터에서 앱을 선택해 메모를 관리하세요.';
-        }
-        if (noteSidebarAppName instanceof HTMLElement) {
-          const sourceToken = appMeta && appMeta.sourceToken ? ' (' + appMeta.sourceToken + ')' : '';
-          noteSidebarAppName.textContent = activeNoteAppTitle ? activeNoteAppTitle + sourceToken : '앱을 선택하세요';
         }
         renderNoteAppLinks(nextAppKey);
 
@@ -4013,6 +4214,9 @@ function renderHtml(
         if (button instanceof HTMLElement) {
           setEvidenceToggleButtonState(button, opened);
         }
+        if (!opened) {
+          closeEvidenceDetailRows(evidenceRow);
+        }
         syncEvidenceToggleText();
       }
 
@@ -4024,6 +4228,40 @@ function renderHtml(
         button.setAttribute('aria-expanded', opened ? 'true' : 'false');
         button.setAttribute('aria-label', label);
         button.setAttribute('title', label);
+      }
+
+      function setEvidenceDetailButtonState(button, opened) {
+        if (!(button instanceof HTMLElement)) {
+          return;
+        }
+        button.setAttribute('aria-expanded', opened ? 'true' : 'false');
+        button.textContent = opened ? '접기' : '자세히보기';
+      }
+
+      function closeEvidenceDetailRows(scope) {
+        if (!(scope instanceof HTMLElement)) {
+          return;
+        }
+        const detailRows = Array.from(scope.querySelectorAll('.evidence-detail.open'));
+        detailRows.forEach((detail) => {
+          detail.classList.remove('open');
+          const detailId = detail.getAttribute('id');
+          if (!detailId) {
+            return;
+          }
+          const button = scope.querySelector('.evidence-detail-toggle[data-evidence-detail-id=\"' + detailId + '\"]');
+          setEvidenceDetailButtonState(button, false);
+        });
+      }
+
+      function toggleEvidenceDetailById(detailId) {
+        const detail = document.getElementById(detailId);
+        if (!(detail instanceof HTMLElement)) {
+          return;
+        }
+        const opened = detail.classList.toggle('open');
+        const button = root.querySelector('.evidence-detail-toggle[data-evidence-detail-id=\"' + detailId + '\"]');
+        setEvidenceDetailButtonState(button, opened);
       }
 
       function syncEvidenceToggleText() {
@@ -4055,6 +4293,7 @@ function renderHtml(
 
           if (!visible) {
             evidenceRow.classList.remove('open');
+            closeEvidenceDetailRows(evidenceRow);
             const evidenceToggle = item.querySelector('.evidence-toggle');
             setEvidenceToggleButtonState(evidenceToggle, false);
           }
@@ -4085,7 +4324,8 @@ function renderHtml(
         });
       }
 
-      function setTab(raw) {
+      function setTab(raw, options) {
+        const shouldSyncQuery = !options || options.syncQuery !== false;
         if (raw) {
           tabRaw.classList.add('active');
           tabBacklog.classList.remove('active');
@@ -4118,13 +4358,16 @@ function renderHtml(
           closeFilterPanel();
         }
         toggleEvidenceAll.classList.toggle('hidden-control', raw);
+        if (shouldSyncQuery) {
+          syncTabQuery(raw);
+        }
         syncEvidenceToggleText();
         syncFilterPanelTrigger();
         applySearch();
       }
 
-      tabRaw.addEventListener('click', () => setTab(true));
-      tabBacklog.addEventListener('click', () => setTab(false));
+      tabRaw.addEventListener('click', () => setTab(true, { syncQuery: true }));
+      tabBacklog.addEventListener('click', () => setTab(false, { syncQuery: true }));
       toggleEvidenceAll.addEventListener('click', () => {
         const rows = visibleEvidenceRows();
         if (!rows.length) return;
@@ -4132,6 +4375,9 @@ function renderHtml(
         const openAll = !rows.every((row) => row.classList.contains('open'));
         rows.forEach((row) => {
           row.classList.toggle('open', openAll);
+          if (!openAll) {
+            closeEvidenceDetailRows(row);
+          }
           const evidenceId = row.getAttribute('id');
           if (!evidenceId) return;
           const button = viewBacklog.querySelector('.evidence-toggle[data-evidence-id=\"' + evidenceId + '\"]');
@@ -4152,6 +4398,17 @@ function renderHtml(
             return;
           }
           toggleEvidenceRowById(evidenceId);
+          return;
+        }
+
+        const evidenceDetailToggle = target.closest('.evidence-detail-toggle');
+        if (evidenceDetailToggle instanceof HTMLElement) {
+          event.preventDefault();
+          const detailId = evidenceDetailToggle.getAttribute('data-evidence-detail-id');
+          if (!detailId) {
+            return;
+          }
+          toggleEvidenceDetailById(detailId);
           return;
         }
 
@@ -4372,7 +4629,7 @@ function renderHtml(
       syncActiveFilterChips();
       setSearchExpanded(getSearchQuery().length > 0);
       syncAllCardStateVisuals();
-      setTab(true);
+      setTab(resolveTabFromQuery(), { syncQuery: true });
       loadPreviewState();
     </script>
   </body>
@@ -4381,22 +4638,64 @@ function renderHtml(
 
 async function main(): Promise<void> {
   const argv = await parseArgs();
+  if (argv.all) {
+    if (normalizeText(argv.myApp)) {
+      throw new Error("`--all` cannot be used with `--my-app`.");
+    }
+    if (normalizeText(argv.input) || normalizeText(argv.output)) {
+      throw new Error("`--all` cannot be used with `--input` or `--output`.");
+    }
+
+    const ownerAppIds = await findOwnerAppIdsForBatchRender();
+    if (ownerAppIds.length === 0) {
+      throw new Error(
+        `No render targets found. Expected files: data/{appId}/${REPORTS_DIR_NAME}/${DEFAULT_REPORT_MARKDOWN_FILE}`
+      );
+    }
+
+    for (const ownerAppId of ownerAppIds) {
+      const inputPath = resolveDefaultInput(ownerAppId);
+      const outputPath = resolveDefaultOutput(ownerAppId);
+      const raw = await fs.readFile(inputPath, "utf8");
+      const parsed = parseMarkdown(raw);
+      const reviewPools = await loadReviewPools(ownerAppId);
+      const backlog = buildBacklog(parsed.apps, reviewPools);
+      const ownerAppIconMetaHref = await resolveOwnerAppIconMetaHref(ownerAppId);
+      const html = renderHtml(
+        parsed.title,
+        parsed.apps,
+        backlog,
+        ownerAppId,
+        reviewPools,
+        ownerAppIconMetaHref
+      );
+
+      await fs.mkdir(path.dirname(outputPath), { recursive: true });
+      await fs.writeFile(outputPath, html, "utf8");
+      console.log(`[${ownerAppId}] Rendered HTML report: ${outputPath}`);
+    }
+
+    console.log(`Rendered HTML reports for ${ownerAppIds.length} app(s).`);
+    return;
+  }
+
+  if (!normalizeText(argv.myApp)) {
+    throw new Error("`--my-app` is required unless `--all` is set.");
+  }
+
   const owner = await resolveOwnerApp(String(argv.myApp), argv.registeredAppsPath);
   const ownerAppId = owner.ownerAppId;
-
   const inputPath = normalizeText(argv.input) ? path.resolve(process.cwd(), String(argv.input)) : resolveDefaultInput(ownerAppId);
   const outputPath = normalizeText(argv.output)
     ? path.resolve(process.cwd(), String(argv.output))
     : resolveDefaultOutput(ownerAppId);
-
   const raw = await fs.readFile(inputPath, "utf8");
   const parsed = parseMarkdown(raw);
-  const backlog = buildBacklog(parsed.apps);
   const reviewPools = await loadReviewPools(ownerAppId);
+  const backlog = buildBacklog(parsed.apps, reviewPools);
   const ownerAppIconMetaHref = await resolveOwnerAppIconMetaHref(ownerAppId);
   const html = renderHtml(
     parsed.title,
-    parsed.metadata,
     parsed.apps,
     backlog,
     ownerAppId,
