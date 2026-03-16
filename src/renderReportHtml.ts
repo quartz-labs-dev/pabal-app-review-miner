@@ -3258,6 +3258,13 @@ function renderHtml(
       const REVIEW_TAGS = ['heart', 'satisfaction', 'dissatisfaction'];
       const TAG_FILTER_MODES = new Set(['all', 'heart', 'satisfaction', 'dissatisfaction']);
       const TAB_QUERY_KEY = 'tab';
+      const SEARCH_QUERY_KEY = 'q';
+      const TAGS_QUERY_KEY = 'tags';
+      const EXCLUDE_QUERY_KEY = 'exclude';
+      const MIN_LENGTH_QUERY_KEY = 'min100';
+      const SHOW_ORIGINAL_QUERY_KEY = 'orig';
+      const RAW_PAGE_QUERY_KEY = 'page';
+      const PRIORITY_QUERY_KEY = 'priority';
       const TAB_REVIEW_VALUES = new Set(['reviews', 'review', 'raw']);
       const TAB_REPORT_VALUES = new Set(['reports', 'report', 'backlog']);
       const TAG_LABELS = {
@@ -3328,32 +3335,134 @@ function renderHtml(
         return searchInput instanceof HTMLInputElement ? searchInput.value.trim().toLowerCase() : '';
       }
 
-      function resolveTabFromQuery() {
-        try {
-          const params = new URLSearchParams(window.location.search || '');
-          const raw = String(params.get(TAB_QUERY_KEY) || '').trim().toLowerCase();
-          if (TAB_REPORT_VALUES.has(raw)) {
-            return false;
-          }
-          if (TAB_REVIEW_VALUES.has(raw)) {
-            return true;
-          }
-        } catch {}
-        return true;
+      function parseQueryBoolean(input) {
+        const normalized = String(input || '').trim().toLowerCase();
+        return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
       }
 
-      function syncTabQuery(raw) {
+      function parsePageNumber(input) {
+        const parsed = Number.parseInt(String(input || ''), 10);
+        if (!Number.isFinite(parsed) || parsed < 1) {
+          return 1;
+        }
+        return parsed;
+      }
+
+      function resolveUiStateFromQuery() {
+        const initial = {
+          rawTab: true,
+          search: '',
+          tags: [],
+          excludeMode: 'all',
+          minLength100: false,
+          showOriginal: false,
+          rawPage: 1,
+          backlogPriorityMode: 'all'
+        };
+
+        try {
+          const params = new URLSearchParams(window.location.search || '');
+          const tabValue = String(params.get(TAB_QUERY_KEY) || '').trim().toLowerCase();
+          if (TAB_REPORT_VALUES.has(tabValue)) {
+            initial.rawTab = false;
+          } else if (TAB_REVIEW_VALUES.has(tabValue)) {
+            initial.rawTab = true;
+          }
+
+          const search = String(params.get(SEARCH_QUERY_KEY) || '').trim();
+          initial.search = search;
+
+          const tagValues = String(params.get(TAGS_QUERY_KEY) || '')
+            .split(',')
+            .map((item) => normalizeTag(item))
+            .filter(Boolean);
+          initial.tags = normalizeTagList(tagValues);
+
+          const excludeMode = String(params.get(EXCLUDE_QUERY_KEY) || '').trim().toLowerCase();
+          initial.excludeMode = EXCLUDE_FILTER_MODES.has(excludeMode) ? excludeMode : 'all';
+
+          initial.minLength100 = parseQueryBoolean(params.get(MIN_LENGTH_QUERY_KEY));
+          initial.showOriginal = parseQueryBoolean(params.get(SHOW_ORIGINAL_QUERY_KEY));
+          initial.rawPage = parsePageNumber(params.get(RAW_PAGE_QUERY_KEY));
+
+          const priorityMode = String(params.get(PRIORITY_QUERY_KEY) || '').trim().toLowerCase();
+          initial.backlogPriorityMode = PRIORITY_FILTER_MODES.has(priorityMode) ? priorityMode : 'all';
+        } catch {}
+
+        return initial;
+      }
+
+      function syncUiQuery() {
         if (!window.history || typeof window.history.replaceState !== 'function') {
           return;
         }
+
         try {
           const url = new URL(window.location.href);
-          const nextValue = raw ? 'reviews' : 'reports';
-          if (url.searchParams.get(TAB_QUERY_KEY) === nextValue) {
+          const nextParams = new URLSearchParams(url.searchParams.toString());
+          const activeRawTab = viewRaw.classList.contains('active');
+          const search = searchInput instanceof HTMLInputElement ? searchInput.value.trim() : '';
+          const tags = normalizeTagList(Array.from(selectedTagFilters));
+          const excludeMode = EXCLUDE_FILTER_MODES.has(excludeFilterMode) ? excludeFilterMode : 'all';
+          const minLengthEnabled = minLength100 instanceof HTMLInputElement && minLength100.checked;
+          const showOriginal = toggleAll instanceof HTMLInputElement && toggleAll.checked;
+          const rawPage = parsePageNumber(rawCurrentPage);
+          const priorityMode = PRIORITY_FILTER_MODES.has(backlogPriorityFilterMode)
+            ? backlogPriorityFilterMode
+            : 'all';
+
+          nextParams.set(TAB_QUERY_KEY, activeRawTab ? 'reviews' : 'reports');
+
+          if (search) {
+            nextParams.set(SEARCH_QUERY_KEY, search);
+          } else {
+            nextParams.delete(SEARCH_QUERY_KEY);
+          }
+
+          if (tags.length > 0) {
+            nextParams.set(TAGS_QUERY_KEY, tags.join(','));
+          } else {
+            nextParams.delete(TAGS_QUERY_KEY);
+          }
+
+          if (excludeMode !== 'all') {
+            nextParams.set(EXCLUDE_QUERY_KEY, excludeMode);
+          } else {
+            nextParams.delete(EXCLUDE_QUERY_KEY);
+          }
+
+          if (minLengthEnabled) {
+            nextParams.set(MIN_LENGTH_QUERY_KEY, '1');
+          } else {
+            nextParams.delete(MIN_LENGTH_QUERY_KEY);
+          }
+
+          if (showOriginal) {
+            nextParams.set(SHOW_ORIGINAL_QUERY_KEY, '1');
+          } else {
+            nextParams.delete(SHOW_ORIGINAL_QUERY_KEY);
+          }
+
+          if (rawPage > 1) {
+            nextParams.set(RAW_PAGE_QUERY_KEY, String(rawPage));
+          } else {
+            nextParams.delete(RAW_PAGE_QUERY_KEY);
+          }
+
+          if (priorityMode !== 'all') {
+            nextParams.set(PRIORITY_QUERY_KEY, priorityMode);
+          } else {
+            nextParams.delete(PRIORITY_QUERY_KEY);
+          }
+
+          const currentSearch = url.searchParams.toString();
+          const nextSearch = nextParams.toString();
+          if (currentSearch === nextSearch) {
             return;
           }
-          url.searchParams.set(TAB_QUERY_KEY, nextValue);
-          window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+
+          const nextUrl = url.pathname + (nextSearch ? '?' + nextSearch : '') + url.hash;
+          window.history.replaceState(null, '', nextUrl);
         } catch {}
       }
 
@@ -4300,7 +4409,7 @@ function renderHtml(
         });
       }
 
-      function applySearch() {
+      function applySearch(options) {
         const q = getSearchQuery();
 
         if (viewRaw.classList.contains('active')) {
@@ -4312,6 +4421,10 @@ function renderHtml(
         }
 
         syncFilterSummary();
+        const shouldSyncQuery = !options || options.syncQuery !== false;
+        if (shouldSyncQuery) {
+          syncUiQuery();
+        }
       }
 
       function scheduleApplySearch() {
@@ -4358,12 +4471,38 @@ function renderHtml(
           closeFilterPanel();
         }
         toggleEvidenceAll.classList.toggle('hidden-control', raw);
-        if (shouldSyncQuery) {
-          syncTabQuery(raw);
-        }
         syncEvidenceToggleText();
         syncFilterPanelTrigger();
-        applySearch();
+        applySearch({ syncQuery: shouldSyncQuery });
+      }
+
+      function applyInitialQueryState() {
+        const queryState = resolveUiStateFromQuery();
+
+        if (searchInput instanceof HTMLInputElement) {
+          searchInput.value = queryState.search;
+        }
+        if (toggleAll instanceof HTMLInputElement) {
+          toggleAll.checked = queryState.showOriginal;
+          document.body.classList.toggle('show-all-original', queryState.showOriginal);
+        }
+        if (minLength100 instanceof HTMLInputElement) {
+          minLength100.checked = queryState.minLength100;
+        }
+
+        selectedTagFilters.clear();
+        queryState.tags.forEach((tag) => {
+          selectedTagFilters.add(tag);
+        });
+
+        rawCurrentPage = queryState.rawPage;
+        setExcludeFilterMode(queryState.excludeMode);
+        setBacklogPriorityFilterMode(queryState.backlogPriorityMode);
+        syncTagFilterButtons();
+        syncActiveFilterChips();
+        setSearchExpanded(queryState.search.length > 0);
+        syncAllCardStateVisuals();
+        setTab(queryState.rawTab, { syncQuery: true });
       }
 
       tabRaw.addEventListener('click', () => setTab(true, { syncQuery: true }));
@@ -4536,6 +4675,7 @@ function renderHtml(
         } else {
           document.body.classList.remove('show-all-original');
         }
+        syncUiQuery();
       });
 
       minLength100.addEventListener('change', () => {
@@ -4611,6 +4751,7 @@ function renderHtml(
           rawCurrentPage -= 1;
           applyRawPagination();
           syncFilterSummary();
+          syncUiQuery();
         });
       }
       if (rawPageNext instanceof HTMLButtonElement) {
@@ -4621,15 +4762,10 @@ function renderHtml(
           rawCurrentPage += 1;
           applyRawPagination();
           syncFilterSummary();
+          syncUiQuery();
         });
       }
-      setExcludeFilterMode('all');
-      setBacklogPriorityFilterMode('all');
-      syncTagFilterButtons();
-      syncActiveFilterChips();
-      setSearchExpanded(getSearchQuery().length > 0);
-      syncAllCardStateVisuals();
-      setTab(resolveTabFromQuery(), { syncQuery: true });
+      applyInitialQueryState();
       loadPreviewState();
     </script>
   </body>

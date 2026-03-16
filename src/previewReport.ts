@@ -773,6 +773,7 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
         gap: 14px;
+        align-items: start;
       }
       .card {
         border: 1px solid var(--line);
@@ -874,10 +875,28 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
         font-size: 13px;
         margin-bottom: 8px;
         list-style: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .refs summary::after {
+        content: "";
+        width: 9px;
+        height: 9px;
+        border-right: 2px solid currentColor;
+        border-bottom: 2px solid currentColor;
+        transform: rotate(-45deg);
+        transform-origin: 50% 50%;
+        transition: transform 140ms ease;
+        flex: 0 0 auto;
       }
       .refs summary::-webkit-details-marker { display: none; }
       .refs[open] summary {
         color: var(--ink);
+      }
+      .refs[open] summary::after {
+        transform: rotate(45deg);
       }
       .refs-links .file-link {
         font-size: 13px;

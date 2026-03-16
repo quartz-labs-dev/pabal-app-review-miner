@@ -76,7 +76,15 @@ Render actionable markdown report to interactive HTML.
 - On narrow screens, the notes panel also opens as a bottom sheet instead of a right drawer.
 - Search is shown as a `🔎` button by default and expands to the input field on tap/click.
 - Top controls are tab-scoped: `Reviews` shows `Filter` and `Notes`, while `Reports` shows `Expand evidence`, `Priority` filter, and the same `Notes` button/sidebar.
-- Tab state is synced to query parameter `?tab=reviews|reports` (aliases `review/raw`, `report/backlog` are accepted), so refresh keeps the selected tab.
+- Top navigation state is synced to query parameters, so refresh keeps the same UI state:
+  - `tab` (`reviews|reports`, aliases `review/raw`, `report/backlog`)
+  - `q` (search text)
+  - `tags` (multi-select tags, comma-separated)
+  - `exclude` (`all|active|excluded`)
+  - `min100` (`1` when `100+ chars` is enabled)
+  - `orig` (`1` when `Original` toggle is enabled)
+  - `page` (current page in `Reviews`)
+  - `priority` (`all|must|should|could` in `Reports`)
 - In `Reports`, the secondary status row is hidden so the navigation area stays single-row (the `Reports N/N` count label is not shown).
 - `Reports` shows one unified backlog table across all apps (not per-app grouped sections).
 - In `Reports`, identical backlog items are merged into a single row even when they come from different apps.

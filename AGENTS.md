@@ -65,6 +65,8 @@ This repository has two user-facing CLI features. Keep implementation and docs s
 - command examples in root `README.md` and locale docs
 6. Before finishing, run:
 - `npm run build`
+7. If you modify HTML generation logic in `src/renderReportHtml.ts`, regenerate all report HTML files before finishing:
+- `npm run report:render-html -- --all`
 
 ## Change Checklist
 
@@ -73,3 +75,4 @@ This repository has two user-facing CLI features. Keep implementation and docs s
 - [ ] Korean docs updated
 - [ ] README links/examples updated
 - [ ] Build passes
+- [ ] If `src/renderReportHtml.ts` changed, ran `npm run report:render-html -- --all`

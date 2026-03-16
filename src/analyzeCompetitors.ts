@@ -421,7 +421,6 @@ function buildMarkdownReport(report: AnalysisJsonReport): string {
 
   lines.push(`# ${report.ownerAppId} 리뷰 리포트`);
   lines.push("");
-  lines.push(`- 생성 시각: ${report.generatedAt}`);
   lines.push(`- ownerAppId: ${report.ownerAppId}`);
   lines.push(`- 분석 파일 수: ${report.filesAnalyzed}`);
   lines.push(`- 총 리뷰 수: ${report.totalReviews}`);
