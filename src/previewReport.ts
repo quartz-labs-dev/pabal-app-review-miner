@@ -502,6 +502,7 @@ function handleAppIconRequest(
 }
 
 function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
+  const totalReports = apps.reduce((sum, app) => sum + app.reports.length, 0);
   const cards = apps
     .map((app) => {
       const primaryReport = pickPrimaryReport(app.reports);
@@ -551,7 +552,7 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
 
   const infoLine = filterAppId
     ? `Filter: <code>${escapeHtml(filterAppId)}</code>`
-    : "All App Reports";
+    : "All app reports";
 
   const emptyState = `
     <div class=\"empty\">
@@ -569,58 +570,155 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
     <title>Report Preview Dashboard</title>
     <style>
       :root {
-        --bg: #f3f7fb;
+        --bg: #f3f7fc;
+        --bg-layer: #eef4fb;
         --panel: #ffffff;
+        --panel-soft: #f8fbff;
         --ink: #0f172a;
         --sub: #475569;
-        --line: #dbe6f0;
-        --accent: #0284c7;
+        --line: #d8e3f0;
+        --line-strong: #b8ccdf;
+        --accent: #0ea5e9;
+        --accent-soft: rgba(14, 165, 233, 0.14);
+        --shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
       }
       * { box-sizing: border-box; }
       body {
         margin: 0;
-        font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        font-family: "Manrope", "Pretendard", "Segoe UI", sans-serif;
         color: var(--ink);
-        background: var(--bg);
+        background:
+          radial-gradient(circle at 0% 0%, #d8e9fb 0%, rgba(216, 233, 251, 0) 34%),
+          radial-gradient(circle at 92% 8%, #d9f0ff 0%, rgba(217, 240, 255, 0) 40%),
+          linear-gradient(180deg, var(--bg-layer) 0%, var(--bg) 100%);
       }
       .wrap {
-        max-width: 1160px;
+        max-width: 1220px;
         margin: 0 auto;
-        padding: 22px 14px 40px;
+        padding: 34px 16px 52px;
       }
       h1 {
-        margin: 0 0 6px;
-        font-size: 1.5rem;
+        margin: 0 0 8px;
+        font-size: 2rem;
+        letter-spacing: -0.02em;
+      }
+      .hero {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: linear-gradient(165deg, #ffffff, #f5faff);
+        box-shadow: var(--shadow);
+        padding: 20px;
+        margin-bottom: 16px;
       }
       .sub {
-        margin: 0 0 14px;
+        margin: 0;
         color: var(--sub);
-        font-size: 13px;
+        font-size: 14px;
+      }
+      .hero-stats {
+        margin-top: 14px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .hero-stat {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        padding: 6px 10px;
+        font-size: 12px;
+        color: var(--sub);
+      }
+      .hero-stat strong {
+        color: var(--ink);
       }
       .toolbar {
-        margin-bottom: 14px;
+        margin-bottom: 18px;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .search-shell {
+        width: min(560px, 100%);
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 10px 12px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+      }
+      .search-label {
+        color: var(--sub);
+        font-size: 14px;
+        font-weight: 700;
       }
       .toolbar input {
-        width: min(520px, 100%);
+        width: 100%;
+        border: 0;
+        background: transparent;
+        color: var(--ink);
+        padding: 0;
+        font-size: 15px;
+      }
+      .toolbar input::placeholder {
+        color: #7b8ba2;
+      }
+      .toolbar input:focus {
+        outline: none;
+      }
+      .search-shell:focus-within {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+      .results-meta {
+        margin: 0;
+        padding: 7px 12px;
+        border-radius: 999px;
         border: 1px solid var(--line);
-        border-radius: 10px;
-        padding: 10px 12px;
-        font-size: 14px;
+        background: rgba(255, 255, 255, 0.88);
+        color: var(--sub);
+        font-size: 12px;
+        font-weight: 700;
       }
       .grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 14px;
       }
       .card {
         border: 1px solid var(--line);
-        border-radius: 12px;
+        border-radius: 16px;
         background: var(--panel);
-        padding: 12px;
+        padding: 14px;
+        position: relative;
+        box-shadow: var(--shadow);
+        transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+      }
+      .card::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        border: 1px solid transparent;
+        pointer-events: none;
+        background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(56, 189, 248, 0)) border-box;
+        mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+        mask-composite: exclude;
+      }
+      .card:hover {
+        transform: translateY(-2px);
+        border-color: var(--line-strong);
+        box-shadow: 0 20px 40px rgba(15, 23, 42, 0.12);
       }
       .card h2 {
         margin: 0;
-        font-size: 1rem;
+        font-size: 1.1rem;
         line-height: 1.2;
         word-break: break-word;
       }
@@ -631,13 +729,13 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
         margin-bottom: 10px;
       }
       .app-icon {
-        width: 34px;
-        height: 34px;
-        border-radius: 8px;
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
         object-fit: cover;
         border: 1px solid var(--line);
         flex: 0 0 auto;
-        background: #f8fafc;
+        background: #f5f9ff;
       }
       .links {
         display: grid;
@@ -647,21 +745,24 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
         text-decoration: none;
         color: var(--ink);
         border: 1px solid var(--line);
-        border-radius: 10px;
-        padding: 8px 10px;
+        border-radius: 11px;
+        padding: 9px 11px;
         display: flex;
         justify-content: space-between;
         align-items: center;
+        background: var(--panel-soft);
+        transition: border-color 120ms ease, transform 120ms ease, color 120ms ease;
       }
       .file-link:hover {
         border-color: var(--accent);
         color: var(--accent);
+        transform: translateY(-1px);
       }
       .file-link-main {
-        background: #eef6ff;
-        border-color: #b9d8f4;
+        background: linear-gradient(160deg, rgba(14, 165, 233, 0.16), rgba(14, 165, 233, 0.06));
+        border-color: rgba(14, 165, 233, 0.38);
         font-weight: 600;
-        margin-bottom: 10px;
+        margin-bottom: 12px;
         justify-content: flex-start;
       }
       .main-link-text {
@@ -682,14 +783,16 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
       }
       .refs {
         border-top: 1px dashed var(--line);
-        padding-top: 8px;
+        padding-top: 10px;
       }
       .refs summary {
         cursor: pointer;
         color: var(--sub);
         font-size: 13px;
         margin-bottom: 8px;
+        list-style: none;
       }
+      .refs summary::-webkit-details-marker { display: none; }
       .refs[open] summary {
         color: var(--ink);
       }
@@ -705,26 +808,64 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
       }
       .empty {
         border: 1px dashed var(--line);
-        border-radius: 12px;
+        border-radius: 14px;
         background: var(--panel);
-        padding: 16px;
+        padding: 18px;
         color: var(--sub);
       }
+      .empty pre {
+        margin: 10px 0 0;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #f8fbff;
+        color: #31435f;
+        padding: 10px;
+        overflow-x: auto;
+      }
       .hidden { display: none; }
+      @media (max-width: 680px) {
+        h1 {
+          font-size: 1.64rem;
+        }
+        .wrap {
+          padding-top: 26px;
+        }
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
     </style>
   </head>
   <body>
     <main class=\"wrap\">
       <h1>Report Preview Dashboard</h1>
-      <p class=\"sub\">${infoLine} · Open the main HTML first, then expand references if needed.</p>
+      <section class=\"hero\">
+        <p class=\"sub\">${infoLine} · Open the main HTML first, then expand references if needed.</p>
+        <div class=\"hero-stats\">
+          <span class=\"hero-stat\"><strong>${apps.length}</strong> apps</span>
+          <span class=\"hero-stat\"><strong>${totalReports}</strong> reports</span>
+        </div>
+      </section>
       <div class=\"toolbar\">
-        <input id=\"search\" type=\"search\" placeholder=\"Search by app ID or file name\" />
+        <label class=\"search-shell\">
+          <span class=\"search-label\">Find</span>
+          <input id=\"search\" type=\"search\" placeholder=\"Search by app ID or file name\" />
+        </label>
+        <p id=\"resultsMeta\" class=\"results-meta\">${apps.length} / ${apps.length} apps</p>
       </div>
       ${apps.length ? `<section class=\"grid\" id=\"grid\">${cards}</section>` : emptyState}
     </main>
     <script>
       const input = document.getElementById('search');
+      const resultsMeta = document.getElementById('resultsMeta');
       const cards = Array.from(document.querySelectorAll('.searchable'));
+      function syncResultMeta() {
+        if (!(resultsMeta instanceof HTMLElement)) {
+          return;
+        }
+        const visibleCount = cards.filter((card) => !card.classList.contains('hidden')).length;
+        resultsMeta.textContent = visibleCount + ' / ' + cards.length + ' apps';
+      }
       if (input) {
         input.addEventListener('input', () => {
           const q = input.value.trim().toLowerCase();
@@ -733,8 +874,10 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
             const visible = !q || text.includes(q);
             card.classList.toggle('hidden', !visible);
           });
+          syncResultMeta();
         });
       }
+      syncResultMeta();
     </script>
   </body>
 </html>`;

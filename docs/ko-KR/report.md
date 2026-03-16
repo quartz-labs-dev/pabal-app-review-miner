@@ -68,14 +68,14 @@ npm run report:analyze -- --my-app golden-horizon --include-self
 - `npm run report:render-html -- --my-app <owner> ...`
 - `node dist/renderReportHtml.js ...`
 - 생성되는 HTML 상단 왼쪽에는 홈으로 이동하는 `Home` 버튼(`/`)이 포함됩니다.
-- 상단 컨트롤은 탭에 따라 표시됩니다: `Raw 리뷰`에서는 `원어 전체 보기`, `실행 백로그`에서는 `근거 펼치기`만 노출됩니다.
-- `Raw 리뷰`에서는 제외 상태 필터를 `전체 / 활성만 / 제외만`으로 전환할 수 있습니다(기본값 `전체`).
-- `Raw 리뷰`에서는 `100자 이상만` 토글로 긴 리뷰만 빠르게 볼 수 있습니다.
+- 상단 컨트롤은 탭에 따라 표시됩니다: `리뷰`에서는 `원어 보기`, `리포트`에서는 `근거 펼치기`만 노출됩니다.
+- `리뷰`에서는 활성 상태 필터를 `전체 / 활성 / 비활성`으로 전환할 수 있습니다(기본값 `전체`).
+- `리뷰`에서는 `100자 이상` 토글로 긴 리뷰만 빠르게 볼 수 있습니다.
 - 제목 아래 요약/통계 블록도 탭에 따라 전환되어, 각 탭에 필요한 정보만 표시됩니다.
-- Raw 리뷰 카드에서 `즐겨찾기`, `제외/복원`을 직접 관리할 수 있습니다.
-- Raw 뷰는 앱별 전체 리뷰 데이터(`data/{myAppId}/reviews-ko/*.json`, 없으면 `reviews/*.json`)를 함께 불러옵니다.
+- 리뷰 카드에서 `❤️`(하트), `비활성/활성`을 직접 관리할 수 있습니다.
+- 리뷰 뷰는 앱별 전체 리뷰 데이터(`data/{myAppId}/reviews-ko/*.json`, 없으면 `reviews/*.json`)를 함께 불러옵니다.
   - 리포트 선별 리뷰는 기본 `활성`
-  - 미선별 리뷰는 기본 `제외` 상태로 포함되어 수동 큐레이션 가능
+  - 미선별 리뷰는 기본 `비활성` 상태로 포함되어 수동 큐레이션 가능
 - preview 모드에서는 카드 상태가 `data/{myAppId}/reports/preview-state.json`에 저장됩니다.
 
 ### CLI 옵션
@@ -103,7 +103,7 @@ localhost 프리뷰 서버를 실행합니다.
 - 대시보드 모드에서 `data/{appId}/icon.png`가 있으면 앱 아이콘 표시
 - 리포트 화면 상단도 `data/{appId}/icon.png`를 사용하며, 아이콘이 없으면 `appId` 텍스트로 fallback
 - 단일 파일 모드: `--file`로 HTML 1개 서빙
-- Raw 리뷰 카드 상태 관리를 위한 API를 제공합니다.
+- 리뷰 카드 상태 관리를 위한 API를 제공합니다.
   - `GET /api/preview-state/:appId`
   - `PUT /api/preview-state/:appId`
   - 저장 파일: `data/{myAppId}/reports/preview-state.json`

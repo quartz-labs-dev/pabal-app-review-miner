@@ -68,14 +68,14 @@ Render actionable markdown report to interactive HTML.
 - `npm run report:render-html -- --my-app <owner> ...`
 - `node dist/renderReportHtml.js ...`
 - Generated HTML top bar includes a `Home` button (`/`) at the top-left.
-- In top controls, `Show all original text` appears only in `Raw Reviews` tab, and `Expand evidence` appears only in `Actionable Backlog` tab.
-- In `Raw Reviews`, excluded-state filter is tri-state: `All` / `Active only` / `Excluded only` (default: `All`).
-- In `Raw Reviews`, you can toggle `100+ chars only` to focus on longer reviews.
+- In top controls, `Show original text` appears only in `Reviews` tab, and `Expand evidence` appears only in `Reports` tab.
+- In `Reviews`, state filter is tri-state: `All` / `Active` / `Inactive` (default: `All`).
+- In `Reviews`, you can toggle `100+ chars` to focus on longer reviews.
 - The summary/stat block below the title also switches by tab, so each tab shows only relevant context.
-- Raw review cards include `Favorite` and `Exclude/Restore` actions.
-- Raw view is hydrated from full review datasets (`data/{myAppId}/reviews-ko/*.json`, fallback `reviews/*.json`) per app:
+- Review cards include `❤️` (heart) and `Inactive/Active` actions.
+- Reviews view is hydrated from full review datasets (`data/{myAppId}/reviews-ko/*.json`, fallback `reviews/*.json`) per app:
   - preselected report quotes start as `Active`
-  - non-selected reviews are included as `Excluded` by default for manual curation
+  - non-selected reviews are included as `Inactive` by default for manual curation
 - In preview mode, card states are persisted to `data/{myAppId}/reports/preview-state.json`.
 
 ### CLI Options

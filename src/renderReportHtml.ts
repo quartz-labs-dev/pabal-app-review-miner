@@ -731,7 +731,7 @@ function mapCategory(heading: string): CategoryKey | undefined {
 
 function parseMarkdown(input: string): { title: string; metadata: string[]; apps: AppSection[] } {
   const lines = input.split(/\r?\n/);
-  let title = "Raw 리뷰 리포트";
+  let title = "리뷰 리포트";
   const metadata: string[] = [];
   const apps: AppSection[] = [];
 
@@ -1041,8 +1041,8 @@ function renderHtml(
         </div>
         <div class=\"quote-actions\">
           <button class=\"toggle-one\" type=\"button\">원어 보기</button>
-          <button class=\"favorite-toggle\" type=\"button\">즐겨찾기</button>
-          <button class=\"exclude-toggle\" type=\"button\">제외</button>
+          <button class=\"favorite-toggle\" type=\"button\" aria-label=\"하트\" title=\"하트\">❤️</button>
+          <button class=\"exclude-toggle\" type=\"button\">비활성</button>
         </div>
       </article>
     `;
@@ -1114,7 +1114,7 @@ function renderHtml(
               .join("\n");
       const fullPoolBlock = `
         <section class=\"category category-pool\">
-          <h3>전체 리뷰 풀 (미선별 · 기본 제외)</h3>
+          <h3>전체 리뷰 풀 (미선별 · 기본 비활성)</h3>
           <div class=\"cards\">
             ${fullPoolCards}
           </div>
@@ -1146,7 +1146,7 @@ function renderHtml(
 
       const rows =
         appBacklog.items.length === 0
-          ? `<tr><td colspan=\"6\" class=\"empty\">추출된 실행 백로그 없음</td></tr>`
+          ? `<tr><td colspan=\"6\" class=\"empty\">추출된 리포트 없음</td></tr>`
           : appBacklog.items
               .map((item, itemIndex) => {
                 const evidenceId = `evidence-${appIndex}-${itemIndex}`;
@@ -1243,22 +1243,30 @@ function renderHtml(
     (sum, appBacklog) => sum + appBacklog.items.filter((item) => item.priority === "could").length,
     0
   );
-  const rawStatsHtml = `
-    <section class=\"stats\">
-      <article class=\"stat\"><span class=\"label\">앱 수</span><strong>${apps.length}</strong></article>
-      <article class=\"stat\"><span class=\"label\">Raw 인용</span><strong>${totalRawQuotes}</strong></article>
-      <article class=\"stat\"><span class=\"label\">즐겨찾기 상태</span><strong>프리뷰에서 관리</strong></article>
-      <article class=\"stat\"><span class=\"label\">제외 상태</span><strong>프리뷰에서 관리</strong></article>
-    </section>
-  `;
-  const backlogStatsHtml = `
-    <section class=\"stats\">
-      <article class=\"stat\"><span class=\"label\">앱 수</span><strong>${apps.length}</strong></article>
-      <article class=\"stat\"><span class=\"label\">백로그 항목</span><strong>${totalBacklogItems}</strong></article>
-      <article class=\"stat\"><span class=\"label\">MUST</span><strong>${totalMustItems}</strong></article>
-      <article class=\"stat\"><span class=\"label\">SHOULD / COULD</span><strong>${totalShouldItems} / ${totalCouldItems}</strong></article>
-    </section>
-  `;
+  function renderStatsSection(stats: Array<{ label: string; value: string | number }>): string {
+    const rows = stats
+      .map(
+        (row) =>
+          `<article class=\"stat\"><span class=\"label\">${escapeHtml(row.label)}</span><strong>${escapeHtml(
+            String(row.value)
+          )}</strong></article>`
+      )
+      .join("\n");
+    return `<section class=\"stats\">${rows}</section>`;
+  }
+
+  const rawStatsHtml = renderStatsSection([
+    { label: "앱 수", value: apps.length },
+    { label: "Raw 인용", value: totalRawQuotes },
+    { label: "❤️ 상태", value: "프리뷰에서 관리" },
+    { label: "비활성 상태", value: "프리뷰에서 관리" }
+  ]);
+  const backlogStatsHtml = renderStatsSection([
+    { label: "앱 수", value: apps.length },
+    { label: "백로그 항목", value: totalBacklogItems },
+    { label: "MUST", value: totalMustItems },
+    { label: "SHOULD / COULD", value: `${totalShouldItems} / ${totalCouldItems}` }
+  ]);
   const rawMetadataHtml = metadata.map((line) => `<li>${escapeHtml(line)}</li>`).join("\n");
   const generatedAtLine =
     metadata.find((line) => line.includes("생성 시각")) ??
@@ -1266,7 +1274,7 @@ function renderHtml(
   const backlogMetaLines = [
     generatedAtLine || "생성 시각: -",
     "우선순위 규칙: score = 요청×3 + 불만×2 + 만족×1",
-    "테마 키워드 매칭 기반으로 실행 백로그를 구성"
+    "테마 키워드 매칭 기반으로 리포트를 구성"
   ];
   const backlogMetadataHtml = backlogMetaLines.map((line) => `<li>${escapeHtml(line)}</li>`).join("\n");
   const ownerAppIconHref = ownerAppId ? `/assets/app-icons/${encodeURIComponent(ownerAppId)}.png` : "";
@@ -1288,13 +1296,17 @@ function renderHtml(
     <title>${escapeHtml(title)}</title>
     <style>
       :root {
-        --bg: #f3f6fb;
+        --bg: #f3f7fc;
+        --bg-alt: #edf4fb;
         --panel: #ffffff;
+        --panel-soft: #f7fbff;
+        --panel-elevated: #f1f8ff;
         --ink: #0f172a;
         --sub: #475569;
-        --line: #dbe2ea;
+        --line: #d9e5f1;
+        --line-strong: #bbcee0;
         --accent: #0ea5e9;
-        --accent-soft: #e0f2fe;
+        --accent-soft: rgba(14, 165, 233, 0.14);
         --must: #dc2626;
         --should: #ea580c;
         --could: #15803d;
@@ -1304,26 +1316,29 @@ function renderHtml(
         margin: 0;
         font-family: "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
         color: var(--ink);
-        background: radial-gradient(circle at top right, #e0f2fe 0%, var(--bg) 45%);
+        background:
+          radial-gradient(circle at 0% 0%, #d8e8fb 0%, rgba(216, 232, 251, 0) 36%),
+          radial-gradient(circle at 92% 4%, #dbf0ff 0%, rgba(219, 240, 255, 0) 42%),
+          linear-gradient(180deg, var(--bg-alt) 0%, var(--bg) 100%);
       }
       .wrap {
         max-width: 1240px;
         margin: 0 auto;
-        padding: 20px 14px 40px;
+        padding: 24px 14px 52px;
       }
       .top {
         position: sticky;
         top: 0;
         z-index: 20;
-        backdrop-filter: blur(8px);
-        background: rgba(243, 246, 251, 0.86);
+        backdrop-filter: blur(10px);
+        background: rgba(243, 247, 252, 0.86);
         border-bottom: 1px solid var(--line);
-        box-shadow: 0 4px 14px rgba(2, 132, 199, 0.08);
+        box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
       }
       .top-inner {
         max-width: 1240px;
         margin: 0 auto;
-        padding: 10px 14px;
+        padding: 12px 14px;
         display: flex;
         align-items: center;
         gap: 10px;
@@ -1351,6 +1366,7 @@ function renderHtml(
         align-items: center;
         justify-content: flex-end;
         gap: 10px;
+        flex-wrap: wrap;
       }
       .home-link {
         text-decoration: none;
@@ -1358,6 +1374,14 @@ function renderHtml(
         align-items: center;
         justify-content: center;
         white-space: nowrap;
+        padding: 8px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--ink);
+        font-size: 13px;
+        font-weight: 700;
+        transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease;
       }
       .owner-app {
         display: inline-flex;
@@ -1393,7 +1417,6 @@ function renderHtml(
         border: 1px solid var(--line);
         border-radius: 12px;
         background: var(--panel);
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
       }
       .tab-btn {
         border: 0;
@@ -1413,11 +1436,12 @@ function renderHtml(
       }
       .tab-btn:not(.active):hover {
         color: var(--ink);
-        background: #eef2f8;
+        background: #eef5fc;
       }
       h1 {
-        margin: 8px 0 10px;
-        font-size: 1.45rem;
+        margin: 8px 0 12px;
+        font-size: 1.78rem;
+        letter-spacing: -0.02em;
       }
       .stats {
         display: grid;
@@ -1429,17 +1453,18 @@ function renderHtml(
         border: 1px solid var(--line);
         border-radius: 12px;
         padding: 10px 12px;
-        background: var(--panel);
+        background: linear-gradient(180deg, #ffffff, #f6fbff);
         display: flex;
         flex-direction: column;
         gap: 4px;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
       }
       .stat .label {
         color: var(--sub);
         font-size: 12px;
       }
       .stat strong {
-        font-size: 1rem;
+        font-size: 1.05rem;
         line-height: 1.2;
       }
       .meta {
@@ -1456,12 +1481,22 @@ function renderHtml(
         display: block;
       }
       .meta ul { margin: 0; padding-left: 18px; }
-      input[type=\"search\"] {
+      input[type="search"] {
         width: 100%;
         padding: 10px 12px;
         border: 1px solid var(--line);
         border-radius: 10px;
         font-size: 14px;
+        background: #ffffff;
+        color: var(--ink);
+      }
+      input[type="search"]::placeholder {
+        color: #7b8ca2;
+      }
+      input[type="search"]:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+        outline: none;
       }
       button, .toggle-all-label, .toggle-favorite-label, .toggle-length-label, .exclude-filter {
         border: 1px solid var(--line);
@@ -1473,6 +1508,7 @@ function renderHtml(
       }
       button {
         cursor: pointer;
+        transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
       }
       button:disabled {
         cursor: not-allowed;
@@ -1492,6 +1528,11 @@ function renderHtml(
         padding: 4px;
         gap: 4px;
       }
+      .toggle-all-label input,
+      .toggle-favorite-label input,
+      .toggle-length-label input {
+        accent-color: var(--accent);
+      }
       .exclude-filter-btn {
         border: 1px solid transparent;
         background: transparent;
@@ -1505,6 +1546,22 @@ function renderHtml(
         color: #0369a1;
         background: var(--accent-soft);
       }
+      .filter-summary {
+        display: inline-flex;
+        align-items: center;
+        padding: 8px 10px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: #f8fbff;
+        color: var(--sub);
+        font-size: 12px;
+        font-weight: 700;
+        min-width: 118px;
+        justify-content: center;
+      }
+      .page-filter-summary {
+        margin: 0 0 10px;
+      }
       .hidden-control {
         display: none !important;
       }
@@ -1517,8 +1574,10 @@ function renderHtml(
         border: 1px solid var(--line);
         border-radius: 14px;
         margin-bottom: 14px;
-        background: var(--panel);
+        background: #ffffff;
         overflow: hidden;
+        box-shadow: 0 16px 32px rgba(15, 23, 42, 0.07);
+        animation: card-enter 280ms ease both;
       }
       .app > summary {
         cursor: pointer;
@@ -1529,7 +1588,7 @@ function renderHtml(
         align-items: center;
         gap: 10px;
         flex-wrap: wrap;
-        background: linear-gradient(180deg, #ffffff, #f8fbff);
+        background: linear-gradient(180deg, #ffffff, #f6faff);
       }
       .app > summary::-webkit-details-marker { display: none; }
       .app-heading {
@@ -1552,7 +1611,7 @@ function renderHtml(
         border-radius: 999px;
         padding: 2px 8px;
         font-size: 11px;
-        background: #fff;
+        background: #ffffff;
       }
       .store-link:hover {
         border-color: var(--accent);
@@ -1570,7 +1629,7 @@ function renderHtml(
       .quote-card {
         border: 1px solid var(--line);
         border-radius: 12px;
-        background: #fff;
+        background: #ffffff;
         display: flex;
         flex-direction: column;
         min-height: 100%;
@@ -1581,7 +1640,7 @@ function renderHtml(
         box-shadow: 0 0 0 2px rgba(234, 179, 8, 0.15);
       }
       .quote-card.is-excluded {
-        opacity: 0.6;
+        opacity: 0.62;
       }
       .category-pool h3 {
         margin-top: 16px;
@@ -1701,6 +1760,7 @@ function renderHtml(
         border: 1px solid var(--line);
         border-radius: 10px;
         overflow: hidden;
+        background: #ffffff;
       }
       th, td {
         padding: 9px 10px;
@@ -1753,6 +1813,17 @@ function renderHtml(
       .evidence-list li { margin-bottom: 8px; }
       .example-kr { line-height: 1.35; }
       .example-org { margin-top: 6px; }
+      a:focus-visible,
+      button:focus-visible,
+      input:focus-visible,
+      summary:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      @keyframes card-enter {
+        from { opacity: 0; transform: translateY(4px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
       @media (max-width: 1100px) {
         .search-fixed {
           width: 340px;
@@ -1773,7 +1844,7 @@ function renderHtml(
         }
         .top-right {
           width: 100%;
-          justify-content: flex-end;
+          justify-content: flex-start;
           flex-wrap: wrap;
         }
         .top-right-controls {
@@ -1788,6 +1859,15 @@ function renderHtml(
           flex-basis: 100%;
           order: 3;
         }
+        .filter-summary {
+          min-width: 0;
+          width: 100%;
+        }
+      }
+      @media (max-width: 560px) {
+        .stats {
+          grid-template-columns: 1fr;
+        }
       }
       @media (min-width: 900px) {
         .cards { grid-template-columns: 1fr 1fr; }
@@ -1801,22 +1881,22 @@ function renderHtml(
           <a class=\"home-link\" href=\"/\">홈</a>
           ${ownerAppIdentityHtml}
           <div class=\"tabs\">
-            <button id=\"tabRaw\" class=\"tab-btn active\" type=\"button\">Raw 리뷰</button>
-            <button id=\"tabBacklog\" class=\"tab-btn\" type=\"button\">실행 백로그</button>
+            <button id=\"tabRaw\" class=\"tab-btn active\" type=\"button\">리뷰</button>
+            <button id=\"tabBacklog\" class=\"tab-btn\" type=\"button\">리포트</button>
           </div>
           <div class=\"search-fixed\">
             <input id=\"search\" type=\"search\" placeholder=\"검색 (앱명, 기능요청, 키워드, 원문)\" />
           </div>
         </div>
-        <div class=\"top-right\">
+          <div class=\"top-right\">
           <div class=\"top-right-controls\">
-            <label class=\"toggle-all-label\"><input id=\"toggleAll\" type=\"checkbox\" /> 원어 전체 보기</label>
-            <label class=\"toggle-favorite-label\"><input id=\"favoritesOnly\" type=\"checkbox\" /> 즐겨찾기만</label>
-            <label class=\"toggle-length-label\"><input id=\"minLength100\" type=\"checkbox\" /> 100자 이상만</label>
-            <div id=\"excludeFilter\" class=\"exclude-filter\" role=\"group\" aria-label=\"제외 상태 필터\">
+            <label class=\"toggle-all-label\"><input id=\"toggleAll\" type=\"checkbox\" /> 원어 보기</label>
+            <label class=\"toggle-favorite-label\"><input id=\"favoritesOnly\" type=\"checkbox\" /> ❤️</label>
+            <label class=\"toggle-length-label\"><input id=\"minLength100\" type=\"checkbox\" /> 100자 이상</label>
+            <div id=\"excludeFilter\" class=\"exclude-filter\" role=\"group\" aria-label=\"활성 상태 필터\">
               <button type=\"button\" class=\"exclude-filter-btn is-active\" data-exclude-filter=\"all\">전체</button>
-              <button type=\"button\" class=\"exclude-filter-btn\" data-exclude-filter=\"active\">활성만</button>
-              <button type=\"button\" class=\"exclude-filter-btn\" data-exclude-filter=\"excluded\">제외만</button>
+              <button type=\"button\" class=\"exclude-filter-btn\" data-exclude-filter=\"active\">활성</button>
+              <button type=\"button\" class=\"exclude-filter-btn\" data-exclude-filter=\"excluded\">비활성</button>
             </div>
             <button id=\"toggleEvidenceAll\" type=\"button\">근거 펼치기</button>
           </div>
@@ -1826,6 +1906,7 @@ function renderHtml(
 
     <main class=\"wrap\" id=\"root\">
       <h1>${escapeHtml(title)}</h1>
+      <p id=\"filterSummary\" class=\"filter-summary page-filter-summary\">리뷰 0/0 표시</p>
       <section id=\"contextRaw\" class=\"context-panel active\">
         ${rawStatsHtml}
         <section class=\"meta\">
@@ -1862,6 +1943,7 @@ function renderHtml(
       const minLength100 = document.getElementById('minLength100');
       const minLength100Label = minLength100 ? minLength100.closest('.toggle-length-label') : null;
       const excludeFilter = document.getElementById('excludeFilter');
+      const filterSummary = document.getElementById('filterSummary');
       const excludeFilterButtons = excludeFilter
         ? Array.from(excludeFilter.querySelectorAll('[data-exclude-filter]'))
         : [];
@@ -1873,10 +1955,16 @@ function renderHtml(
       const contextRaw = document.getElementById('contextRaw');
       const contextBacklog = document.getElementById('contextBacklog');
       const rawCards = Array.from(viewRaw.querySelectorAll('.quote-card[data-review-id]'));
+      const backlogItems = Array.from(viewBacklog.querySelectorAll('.backlog-item'));
       const reviewState = Object.create(null);
       let saveStateTimer = null;
       let stateLoaded = false;
       let excludeFilterMode = 'all';
+      const EXCLUDE_FILTER_MODES = new Set(['all', 'active', 'excluded']);
+      const VIEW_LABELS = {
+        raw: '리뷰',
+        backlog: '리포트'
+      };
 
       function resolveOwnerAppId() {
         const fromBody = (document.body && document.body.getAttribute('data-owner-app-id')) || '';
@@ -1927,6 +2015,25 @@ function renderHtml(
         };
       }
 
+      function syncFilterSummary() {
+        if (!(filterSummary instanceof HTMLElement)) {
+          return;
+        }
+
+        if (viewRaw.classList.contains('active')) {
+          const visibleRawCount = rawCards.filter(
+            (card) => !card.classList.contains('hidden-by-search') && !card.classList.contains('hidden-by-state')
+          ).length;
+          filterSummary.textContent = VIEW_LABELS.raw + ' ' + visibleRawCount + '/' + rawCards.length + ' 표시';
+          return;
+        }
+
+        const visibleBacklogCount = backlogItems.filter(
+          (item) => !item.classList.contains('hidden-by-search')
+        ).length;
+        filterSummary.textContent = VIEW_LABELS.backlog + ' ' + visibleBacklogCount + '/' + backlogItems.length + ' 표시';
+      }
+
       function writeCardState(reviewId, next, card) {
         const defaultExcluded = isCardDefaultExcluded(card);
         const defaultFavorite = false;
@@ -1956,19 +2063,20 @@ function renderHtml(
         const favoriteButton = card.querySelector('.favorite-toggle');
         if (favoriteButton instanceof HTMLElement) {
           favoriteButton.classList.toggle('is-active', state.favorite);
-          favoriteButton.textContent = state.favorite ? '즐겨찾기 해제' : '즐겨찾기';
+          favoriteButton.textContent = '❤️';
+          favoriteButton.setAttribute('aria-label', state.favorite ? '하트 해제' : '하트');
+          favoriteButton.setAttribute('title', state.favorite ? '하트 해제' : '하트');
         }
 
         const excludeButton = card.querySelector('.exclude-toggle');
         if (excludeButton instanceof HTMLElement) {
           excludeButton.classList.toggle('is-active', state.excluded);
-          excludeButton.textContent = state.excluded ? '복원' : '제외';
+          excludeButton.textContent = state.excluded ? '활성' : '비활성';
         }
       }
 
       function setExcludeFilterMode(nextMode) {
-        const allowed = ['all', 'active', 'excluded'];
-        excludeFilterMode = allowed.includes(nextMode) ? nextMode : 'all';
+        excludeFilterMode = EXCLUDE_FILTER_MODES.has(nextMode) ? nextMode : 'all';
 
         excludeFilterButtons.forEach((button) => {
           if (!(button instanceof HTMLElement)) {
@@ -2000,6 +2108,7 @@ function renderHtml(
           card.classList.toggle('hidden-by-state', hideByFavorite || hideByLength || hideByExcluded);
           syncCardStateVisual(card);
         });
+        syncFilterSummary();
       }
 
       async function savePreviewState() {
@@ -2125,6 +2234,7 @@ function renderHtml(
 
         applyRawStateFilters();
         syncEvidenceToggleText();
+        syncFilterSummary();
       }
 
       function setTab(raw) {
