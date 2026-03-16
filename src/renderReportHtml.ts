@@ -1240,20 +1240,10 @@ function renderHtml(
       `;
     })
     .join("\n");
-  const appNoteTabsHtml = appNoteApps
+  const appNoteSelectOptionsHtml = appNoteApps
     .map(
       (app, index) =>
-        `<button class=\"note-app-tab${index === 0 ? " is-active" : ""}\" type=\"button\" data-note-app-key=\"${escapeHtml(
-          app.appKey
-        )}\">${escapeHtml(app.title)}</button>`
-    )
-    .join("");
-  const appNoteOverlayItemsHtml = appNoteApps
-    .map(
-      (app, index) =>
-        `<button class=\"note-app-overlay-item${index === 0 ? " is-active" : ""}\" type=\"button\" data-note-app-key=\"${escapeHtml(
-          app.appKey
-        )}\">${escapeHtml(app.title)}</button>`
+        `<option value=\"${escapeHtml(app.appKey)}\"${index === 0 ? " selected" : ""}>${escapeHtml(app.title)}</option>`
     )
     .join("");
   const appNoteAppsJson = toInlineJson(appNoteApps);
@@ -1485,14 +1475,17 @@ function renderHtml(
         min-width: 0;
       }
       .search-fixed {
-        width: min(520px, 100%);
-        flex: 1 1 360px;
-        display: flex;
+        width: auto;
+        max-width: min(520px, 100%);
+        flex: 0 0 auto;
+        margin-left: auto;
+        display: inline-flex;
         align-items: center;
+        justify-content: flex-end;
         gap: 8px;
       }
       .search-toggle-btn {
-        display: none;
+        display: inline-flex;
         align-items: center;
         justify-content: center;
         width: 36px;
@@ -1511,7 +1504,6 @@ function renderHtml(
         color: #075985;
       }
       .top-controls {
-        margin-left: auto;
         display: flex;
         align-items: center;
         justify-content: flex-end;
@@ -1545,23 +1537,11 @@ function renderHtml(
         padding: 6px 10px;
         font-size: 12px;
       }
-      .raw-page-size-label {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        color: #475569;
+      .raw-total-count {
+        color: #334155;
         font-size: 12px;
         font-weight: 700;
-      }
-      .raw-page-size-label select {
-        height: 28px;
-        border: 1px solid #c7d6e8;
-        border-radius: 8px;
-        background: #ffffff;
-        color: #0f172a;
-        font-size: 12px;
-        font-weight: 700;
-        padding: 0 6px;
+        white-space: nowrap;
       }
       .raw-page-info {
         color: #334155;
@@ -1593,29 +1573,32 @@ function renderHtml(
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        white-space: nowrap;
-        padding: 8px 12px;
+        width: 36px;
+        min-height: 36px;
+        padding: 0;
         border-radius: 10px;
         border: 1px solid var(--line);
         background: var(--panel);
         color: var(--ink);
-        font-size: 13px;
+        font-size: 18px;
         font-weight: 700;
+        line-height: 1;
         transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease;
       }
       .owner-app {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
+        min-height: 36px;
+        gap: 6px;
         min-width: 0;
       }
       .owner-app-icon {
-        width: 28px;
-        height: 28px;
-        border-radius: 8px;
+        width: 24px;
+        height: 24px;
+        border-radius: 0;
         object-fit: cover;
-        border: 1px solid var(--line);
-        background: #ffffff;
+        border: 0;
+        background: transparent;
         flex: 0 0 auto;
       }
       .owner-app-fallback {
@@ -1643,9 +1626,11 @@ function renderHtml(
         background: transparent;
         color: var(--sub);
         border-radius: 9px;
+        min-height: 36px;
         padding: 8px 12px;
         font-size: 13px;
         font-weight: 700;
+        line-height: 1;
         cursor: pointer;
         transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
       }
@@ -1726,6 +1711,24 @@ function renderHtml(
         box-shadow: 0 0 0 3px var(--accent-soft);
         outline: none;
       }
+      .search-fixed input[type="search"] {
+        width: 0;
+        min-width: 0;
+        padding: 0;
+        border-width: 0;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateX(4px);
+      }
+      .top.is-search-open .search-fixed input[type="search"] {
+        width: min(460px, 52vw);
+        min-width: 220px;
+        padding: 10px 12px;
+        border-width: 1px;
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateX(0);
+      }
       button {
         border: 1px solid var(--line);
         background: var(--panel);
@@ -1747,15 +1750,15 @@ function renderHtml(
       .toggle-length-label {
         display: flex;
         align-items: center;
-        gap: 10px;
-        min-height: 46px;
+        gap: 8px;
+        min-height: 36px;
         width: fit-content;
-        padding: 0 13px;
+        padding: 0 10px;
         border: 1px solid #c7d6e8;
-        border-radius: 14px;
+        border-radius: 12px;
         background: #ffffff;
         color: #0f172a;
-        font-size: 14px;
+        font-size: 12px;
         font-weight: 700;
         line-height: 1.2;
         cursor: pointer;
@@ -1770,27 +1773,27 @@ function renderHtml(
         display: flex;
         align-items: center;
         flex-wrap: wrap;
-        padding: 6px;
-        gap: 6px;
+        padding: 5px;
+        gap: 5px;
         border: 1px solid #c7d6e8;
-        border-radius: 14px;
+        border-radius: 12px;
         background: #ffffff;
         box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
       }
       .toggle-all-label input,
       .toggle-length-label input {
-        width: 20px;
-        height: 20px;
+        width: 16px;
+        height: 16px;
         margin: 0;
         accent-color: var(--accent);
       }
       .exclude-filter-btn {
         border: 1px solid transparent;
         background: transparent;
-        border-radius: 11px;
-        padding: 8px 12px;
-        min-height: 36px;
-        font-size: 13px;
+        border-radius: 10px;
+        padding: 6px 10px;
+        min-height: 32px;
+        font-size: 12px;
         font-weight: 700;
         color: var(--sub);
       }
@@ -1802,10 +1805,10 @@ function renderHtml(
       .tag-filter-btn {
         border: 1px solid transparent;
         background: transparent;
-        border-radius: 11px;
-        padding: 8px 12px;
-        min-height: 36px;
-        font-size: 13px;
+        border-radius: 10px;
+        padding: 6px 10px;
+        min-height: 32px;
+        font-size: 12px;
         font-weight: 700;
         color: var(--sub);
       }
@@ -1817,10 +1820,10 @@ function renderHtml(
       .clear-filters-btn {
         border-color: #c7d6e8;
         background: #ffffff;
-        border-radius: 12px;
-        padding: 9px 13px;
-        min-height: 40px;
-        font-size: 14px;
+        border-radius: 10px;
+        padding: 6px 10px;
+        min-height: 34px;
+        font-size: 12px;
         font-weight: 700;
       }
       .clear-filters-btn:hover {
@@ -2134,7 +2137,7 @@ function renderHtml(
         width: min(420px, 100vw);
         height: 100%;
         border-left: 1px solid var(--line);
-        background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+        background: #ffffff;
         display: flex;
         flex-direction: column;
         box-shadow: -12px 0 30px rgba(15, 23, 42, 0.18);
@@ -2147,52 +2150,53 @@ function renderHtml(
         transform: translateX(0);
       }
       .filter-panel-head {
-        padding: 10px 12px;
+        padding: 12px 14px;
         border-bottom: 1px solid var(--line);
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 8px;
-        background: #f4f8fd;
+        background: #ffffff;
       }
       .filter-panel-head h2 {
         margin: 0;
-        font-size: 1.45rem;
-        line-height: 1.15;
-        letter-spacing: -0.02em;
+        font-size: 1rem;
+        line-height: 1.2;
       }
       .filter-panel-head button {
-        border-radius: 12px;
-        padding: 7px 12px;
-        min-height: 40px;
-        font-size: 15px;
+        border-radius: 10px;
+        padding: 6px 10px;
+        min-height: 34px;
+        font-size: 12px;
         font-weight: 700;
-        background: #f8fbff;
+        background: #ffffff;
         border-color: #c7d6e8;
       }
       .filter-panel-head button:hover {
         border-color: #9db0c6;
-        background: #f0f7ff;
+        background: #f8fbff;
       }
       .filter-panel-body {
-        padding: 12px 12px 16px;
+        padding: 10px 14px 14px;
         display: flex;
         flex-direction: column;
         gap: 10px;
+        align-items: stretch;
+        text-align: left;
         overflow: auto;
       }
       .filter-field {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 8px;
       }
       .filter-field-title {
         margin: 0;
-        padding: 0 2px;
+        padding: 0;
         color: #475569;
-        font-size: 11px;
+        font-size: 12px;
         font-weight: 700;
-        letter-spacing: 0.02em;
+        text-align: left;
       }
       .filter-panel-body .toggle-all-label,
       .filter-panel-body .toggle-length-label {
@@ -2207,11 +2211,25 @@ function renderHtml(
         align-self: flex-start;
       }
       .filter-panel-foot {
-        margin-top: 4px;
+        margin-top: 0;
+        display: flex;
+        justify-content: flex-start;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
       }
       .filter-panel-foot .clear-filters-btn {
-        width: 100%;
-        justify-content: center;
+        width: auto;
+        justify-content: flex-start;
+      }
+      .bulk-exclude-btn {
+        border-color: #fca5a5;
+        color: #991b1b;
+        background: #fff1f2;
+      }
+      .bulk-exclude-btn:hover {
+        border-color: #ef4444;
+        background: #ffe4e6;
       }
       .note-sidebar-root {
         position: fixed;
@@ -2280,96 +2298,21 @@ function renderHtml(
         font-weight: 700;
         padding: 6px 10px;
       }
-      .note-app-tabs-wrap {
-        position: relative;
-        display: flex;
-        align-items: center;
-        gap: 8px;
+      .note-app-select-wrap {
         padding: 10px 14px;
         border-bottom: 1px solid var(--line);
         background: #f8fbff;
       }
-      .note-app-tabs {
-        flex: 1 1 auto;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        overflow-x: auto;
-        scrollbar-width: thin;
-      }
-      .note-app-list-toggle {
-        flex: 0 0 auto;
-        border-radius: 999px;
-        border-color: #b7cbe0;
-        background: #ffffff;
-        color: #334155;
-        font-size: 11px;
-        font-weight: 700;
-        padding: 6px 10px;
-      }
-      .note-app-list-toggle.is-open {
-        border-color: #0ea5e9;
-        color: #075985;
-        background: #e0f2fe;
-      }
-      .note-app-list-overlay {
-        position: absolute;
-        left: 12px;
-        right: 12px;
-        top: calc(100% + 8px);
-        z-index: 8;
-        border: 1px solid #c7d6e8;
-        border-radius: 14px;
-        background: #ffffff;
-        box-shadow: 0 14px 30px rgba(15, 23, 42, 0.18);
-      }
-      .note-app-list-body {
-        max-height: min(44vh, 320px);
-        overflow: auto;
-        padding: 8px;
-        display: grid;
-        gap: 6px;
-      }
-      .note-app-tab {
-        flex: 0 0 auto;
-        border-radius: 999px;
-        border-color: #c7d6e8;
-        background: #ffffff;
-        color: #334155;
-        font-size: 12px;
-        font-weight: 700;
-        padding: 6px 10px;
-      }
-      .note-app-tab.is-active {
-        border-color: #0ea5e9;
-        color: #075985;
-        background: #e0f2fe;
-      }
-      .note-app-tab.has-note:not(.is-active) {
-        border-color: #93c5fd;
-        color: #1d4ed8;
-        background: #eff6ff;
-      }
-      .note-app-overlay-item {
+      .note-app-select {
         width: 100%;
+        min-height: 38px;
+        border: 1px solid #c7d6e8;
         border-radius: 10px;
-        border-color: #d0deec;
         background: #ffffff;
-        color: #334155;
+        color: #0f172a;
         font-size: 13px;
         font-weight: 700;
-        text-align: left;
-        padding: 9px 10px;
-      }
-      .note-app-overlay-item.is-active {
-        border-color: #0ea5e9;
-        color: #075985;
-        background: #e0f2fe;
-      }
-      .note-app-overlay-item.has-note:not(.is-active) {
-        border-color: #93c5fd;
-        color: #1d4ed8;
-        background: #eff6ff;
+        padding: 0 11px;
       }
       .note-app-meta {
         padding: 10px 14px;
@@ -2504,24 +2447,21 @@ function renderHtml(
         to { opacity: 1; transform: translateY(0); }
       }
       @media (max-width: 1100px) {
-        .search-fixed {
-          width: min(100%, 420px);
-          flex-basis: 320px;
+        .top.is-search-open .search-fixed input[type="search"] {
+          width: min(420px, 48vw);
+          min-width: 200px;
         }
       }
       @media (max-width: 900px) {
         .top-main {
-          display: grid;
-          grid-template-columns: 1fr;
-          grid-template-areas:
-            "left"
-            "search"
-            "actions";
+          display: flex;
+          flex-wrap: wrap;
           align-items: center;
-          gap: 7px;
+          justify-content: flex-end;
+          gap: 8px;
         }
         .top-left {
-          grid-area: left;
+          flex: 1 1 100%;
           width: 100%;
           display: flex;
           align-items: center;
@@ -2535,36 +2475,20 @@ function renderHtml(
           display: none;
         }
         .search-fixed {
-          grid-area: search;
-          width: 100%;
-          max-width: none;
+          margin-left: 0;
+          width: auto;
+          max-width: 100%;
           flex: none;
           min-height: 36px;
         }
-        .search-toggle-btn {
-          display: inline-flex;
-        }
-        .top:not(.is-search-open) .search-fixed input[type="search"] {
-          width: 0;
-          min-width: 0;
-          padding: 0;
-          border-width: 0;
-          opacity: 0;
-          pointer-events: none;
-          transform: translateX(-4px);
-        }
         .top.is-search-open .search-fixed input[type="search"] {
-          width: 100%;
+          width: min(360px, 56vw);
+          min-width: 160px;
           padding: 10px 12px;
-          border-width: 1px;
-          opacity: 1;
-          pointer-events: auto;
-          transform: translateX(0);
         }
         .top-controls {
-          grid-area: actions;
           margin-left: 0;
-          width: 100%;
+          width: auto;
           justify-content: flex-end;
           gap: 8px;
         }
@@ -2586,42 +2510,66 @@ function renderHtml(
           padding: 8px 12px;
         }
         .home-link {
-          padding: 8px 10px;
+          width: 34px;
+          min-height: 34px;
+          font-size: 17px;
         }
         .owner-app-icon {
-          width: 26px;
-          height: 26px;
-          border-radius: 7px;
+          width: 22px;
+          height: 22px;
         }
         .tabs {
           padding: 3px;
           gap: 3px;
         }
         .tab-btn {
+          min-height: 34px;
           padding: 7px 10px;
         }
         .search-fixed {
-          width: 100%;
-          flex-basis: 100%;
+          max-width: 100%;
+        }
+        .top.is-search-open .search-fixed input[type="search"] {
+          width: min(300px, 60vw);
+          min-width: 140px;
+          padding: 9px 11px;
         }
         .top-status-row {
-          gap: 6px;
-          align-items: flex-start;
+          gap: 8px;
+          align-items: center;
         }
         .active-filter-chips {
           width: 100%;
-        }
-        .raw-pagination {
-          margin-left: 0;
-          width: fit-content;
-          max-width: 100%;
-          justify-content: flex-start;
-          flex-wrap: wrap;
+          order: 1;
         }
         .filter-summary {
-          min-width: 0;
+          order: 2;
+          min-height: 36px;
+          padding: 8px 12px;
+          border-radius: 12px;
+          justify-content: center;
+        }
+        .raw-pagination {
+          order: 3;
+          margin-left: 0;
           width: auto;
-          justify-content: flex-start;
+          min-width: 260px;
+          flex: 1 1 320px;
+          max-width: 100%;
+          justify-content: space-between;
+          flex-wrap: nowrap;
+          padding: 6px 8px;
+          gap: 6px;
+        }
+        .raw-pagination button {
+          min-width: 48px;
+          padding: 6px 8px;
+        }
+        .raw-total-count {
+          min-width: 90px;
+        }
+        .raw-page-info {
+          min-width: 50px;
         }
         .filter-panel {
           right: 0;
@@ -2666,12 +2614,13 @@ function renderHtml(
           min-height: 34px;
           padding: 6px 9px;
         }
-        .note-app-tabs-wrap {
+        .note-app-select-wrap {
           padding: 8px 12px;
-          gap: 6px;
         }
-        .note-app-list-toggle {
-          padding: 5px 9px;
+        .note-app-select {
+          min-height: 36px;
+          font-size: 12px;
+          padding: 0 10px;
         }
         .note-app-meta {
           padding: 8px 12px;
@@ -2683,35 +2632,61 @@ function renderHtml(
         .note-sidebar-foot {
           padding: 8px 12px;
         }
+        .filter-panel-head {
+          padding: 10px 12px;
+        }
+        .filter-panel-body {
+          padding: 8px 12px 12px;
+        }
         .filter-panel-head h2 {
-          font-size: 1.3rem;
+          font-size: 1rem;
         }
         .filter-panel-head button {
-          min-height: 36px;
-          padding: 6px 10px;
-          font-size: 14px;
+          min-height: 34px;
+          padding: 6px 9px;
+          font-size: 12px;
         }
       }
       @media (max-width: 560px) {
         .top-left {
           gap: 6px;
         }
+        .search-toggle-btn {
+          width: 34px;
+          height: 34px;
+          font-size: 15px;
+        }
+        .top.is-search-open .search-fixed input[type="search"] {
+          width: min(250px, 62vw);
+          min-width: 120px;
+          padding: 8px 10px;
+        }
         .top-controls button {
           min-height: 34px;
           font-size: 12px;
           padding: 6px 10px;
         }
-        .note-app-tab {
-          padding: 5px 9px;
+        .raw-pagination {
+          width: 100%;
+          min-width: 0;
+          flex: 1 1 100%;
+        }
+        .filter-summary {
+          min-width: 0;
+          width: auto;
+          justify-content: flex-start;
+        }
+        .raw-total-count {
           font-size: 11px;
+          min-width: 80px;
         }
-        .note-app-list-overlay {
-          left: 8px;
-          right: 8px;
+        .raw-page-info {
+          min-width: 44px;
         }
-        .note-app-overlay-item {
+        .note-app-select {
+          min-height: 34px;
           font-size: 12px;
-          padding: 8px 9px;
+          padding: 0 9px;
         }
         .stats {
           grid-template-columns: 1fr;
@@ -2726,7 +2701,7 @@ function renderHtml(
     <div class=\"top\">
       <div class=\"top-inner top-main\">
         <div class=\"top-left\">
-          <a class=\"home-link\" href=\"/\">홈</a>
+          <a class=\"home-link\" href=\"/\" aria-label=\"홈\" title=\"홈\">🏠</a>
           ${ownerAppIdentityHtml}
           <div class=\"tabs\">
             <button id=\"tabRaw\" class=\"tab-btn active\" type=\"button\">리뷰</button>
@@ -2734,8 +2709,8 @@ function renderHtml(
           </div>
         </div>
         <div class=\"search-fixed\">
-          <button id=\"openSearchInput\" class=\"search-toggle-btn\" type=\"button\" aria-label=\"검색 열기\" title=\"검색\">🔎</button>
           <input id=\"search\" type=\"search\" placeholder=\"검색 (앱명, 기능요청, 키워드, 원문)\" />
+          <button id=\"openSearchInput\" class=\"search-toggle-btn\" type=\"button\" aria-label=\"검색 열기\" title=\"검색\">🔎</button>
         </div>
         <div class=\"top-controls\">
           <button id=\"openNoteSidebar\" type=\"button\">노트</button>
@@ -2747,13 +2722,7 @@ function renderHtml(
         <div id=\"activeFilterChips\" class=\"active-filter-chips\"></div>
         <p id=\"filterSummary\" class=\"filter-summary page-filter-summary\">리뷰 0/0 표시</p>
         <div id=\"rawPagination\" class=\"raw-pagination\">
-          <label class=\"raw-page-size-label\">페이지당
-            <select id=\"rawPageSize\" aria-label=\"리뷰 페이지 크기\">
-              <option value=\"50\">50</option>
-              <option value=\"100\" selected>100</option>
-              <option value=\"200\">200</option>
-            </select>
-          </label>
+          <span id=\"rawTotalCount\" class=\"raw-total-count\">리뷰 전체 0</span>
           <button id=\"rawPagePrev\" type=\"button\">이전</button>
           <span id=\"rawPageInfo\" class=\"raw-page-info\">1/1</span>
           <button id=\"rawPageNext\" type=\"button\">다음</button>
@@ -2790,19 +2759,17 @@ function renderHtml(
         <div class=\"note-sidebar-head\">
           <div>
             <h2 id=\"noteSidebarTitle\">앱 노트</h2>
-            <div id=\"noteSidebarSub\" class=\"note-sidebar-sub\">상단 탭에서 앱을 선택해 메모를 관리하세요.</div>
+            <div id=\"noteSidebarSub\" class=\"note-sidebar-sub\">셀렉터에서 앱을 선택해 메모를 관리하세요.</div>
           </div>
           <div class=\"note-sidebar-head-actions\">
             <button id=\"noteSidebarSave\" type=\"button\">저장</button>
             <button id=\"noteSidebarClose\" type=\"button\">닫기</button>
           </div>
         </div>
-        <div class=\"note-app-tabs-wrap\">
-          <div id=\"noteAppTabs\" class=\"note-app-tabs\">${appNoteTabsHtml}</div>
-          <button id=\"noteAppListToggle\" class=\"note-app-list-toggle\" type=\"button\" aria-expanded=\"false\">전체 보기</button>
-          <div id=\"noteAppListOverlay\" class=\"note-app-list-overlay\" hidden>
-            <div id=\"noteAppListBody\" class=\"note-app-list-body\">${appNoteOverlayItemsHtml}</div>
-          </div>
+        <div class=\"note-app-select-wrap\">
+          <select id=\"noteAppSelect\" class=\"note-app-select\" aria-label=\"노트 앱 선택\">
+            ${appNoteSelectOptionsHtml}
+          </select>
         </div>
         <div class=\"note-app-meta\">
           <p id=\"noteSidebarAppName\" class=\"note-app-name\">앱을 선택하세요</p>
@@ -2820,7 +2787,7 @@ function renderHtml(
           <h2 id=\"filterPanelTitle\">리뷰 필터</h2>
           <button id=\"filterPanelClose\" type=\"button\">닫기</button>
         </div>
-        <div id=\"topFiltersLeft\" class=\"top-filters-left filter-panel-body\">
+        <div id=\"topFiltersLeft\" class=\"filter-panel-body\">
           <div class=\"filter-field\">
             <label class=\"toggle-all-label\"><input id=\"toggleAll\" type=\"checkbox\" /> 원어 보기</label>
           </div>
@@ -2846,6 +2813,7 @@ function renderHtml(
           </div>
           <div class=\"filter-panel-foot\">
             <button id=\"clearFilters\" class=\"clear-filters-btn\" type=\"button\">필터 초기화</button>
+            <button id=\"resetAllExcluded\" class=\"clear-filters-btn bulk-exclude-btn\" type=\"button\">전체 리뷰 비활성 리셋</button>
           </div>
         </div>
       </aside>
@@ -2864,12 +2832,13 @@ function renderHtml(
         ? Array.from(tagFilter.querySelectorAll('[data-tag-filter]'))
         : [];
       const clearFiltersButton = document.getElementById('clearFilters');
+      const resetAllExcludedButton = document.getElementById('resetAllExcluded');
       const minLength100 = document.getElementById('minLength100');
       const excludeFilter = document.getElementById('excludeFilter');
       const filterSummary = document.getElementById('filterSummary');
       const activeFilterChips = document.getElementById('activeFilterChips');
       const rawPagination = document.getElementById('rawPagination');
-      const rawPageSizeSelect = document.getElementById('rawPageSize');
+      const rawTotalCount = document.getElementById('rawTotalCount');
       const rawPagePrev = document.getElementById('rawPagePrev');
       const rawPageNext = document.getElementById('rawPageNext');
       const rawPageInfo = document.getElementById('rawPageInfo');
@@ -2899,10 +2868,7 @@ function renderHtml(
       const noteSidebarSub = document.getElementById('noteSidebarSub');
       const noteSidebarAppName = document.getElementById('noteSidebarAppName');
       const noteSidebarAppLinks = document.getElementById('noteSidebarAppLinks');
-      const noteAppListToggle = document.getElementById('noteAppListToggle');
-      const noteAppListOverlay = document.getElementById('noteAppListOverlay');
-      const noteAppTabs = Array.from(document.querySelectorAll('.note-app-tab[data-note-app-key]'));
-      const noteAppOverlayItems = Array.from(document.querySelectorAll('.note-app-overlay-item[data-note-app-key]'));
+      const noteAppSelect = document.getElementById('noteAppSelect');
       const noteSidebarText = document.getElementById('noteSidebarText');
       const noteSidebarStatus = document.getElementById('noteSidebarStatus');
       const filterPanelRoot = document.getElementById('filterPanelRoot');
@@ -2913,8 +2879,8 @@ function renderHtml(
       const persistedAppNotes = Object.create(null);
       const noteAppCatalog = ${appNoteAppsJson};
       const noteAppByKey = new Map(noteAppCatalog.map((item) => [item.appKey, item]));
+      const defaultNoteAppKey = noteAppCatalog[0] ? noteAppCatalog[0].appKey : '';
       const searchableTextCache = new WeakMap();
-      const RAW_PAGE_SIZE_OPTIONS = new Set([50, 100, 200]);
       let saveStateTimer = null;
       let searchApplyRaf = 0;
       let filterPanelCloseTimer = 0;
@@ -2923,15 +2889,12 @@ function renderHtml(
       let rawPageSize = 100;
       let rawCurrentPage = 1;
       let rawFilteredCount = rawCards.length;
-      let rawVisibleCount = rawCards.length;
       let rawTotalPages = 1;
       let excludeFilterMode = 'all';
       let noteDirty = false;
-      let noteAppListOpen = false;
       const selectedTagFilters = new Set();
       let activeNoteAppKey = '';
       let activeNoteAppTitle = '';
-      const mobileSearchMedia = window.matchMedia('(max-width: 900px)');
       const EXCLUDE_FILTER_MODES = new Set(['all', 'active', 'excluded']);
       const REVIEW_TAGS = ['heart', 'satisfaction', 'dissatisfaction'];
       const TAG_FILTER_MODES = new Set(['all', 'heart', 'satisfaction', 'dissatisfaction']);
@@ -3255,7 +3218,11 @@ function renderHtml(
         }
 
         const multiPage = rawTotalPages > 1;
-        rawPagination.classList.toggle('hidden-control', !viewRaw.classList.contains('active') || !multiPage);
+        rawPagination.classList.toggle('hidden-control', !viewRaw.classList.contains('active'));
+
+        if (rawTotalCount instanceof HTMLElement) {
+          rawTotalCount.textContent = '리뷰 전체 ' + rawCards.length;
+        }
 
         if (rawPageInfo instanceof HTMLElement) {
           rawPageInfo.textContent = rawCurrentPage + '/' + rawTotalPages;
@@ -3265,9 +3232,6 @@ function renderHtml(
         }
         if (rawPageNext instanceof HTMLButtonElement) {
           rawPageNext.disabled = !multiPage || rawCurrentPage >= rawTotalPages;
-        }
-        if (rawPageSizeSelect instanceof HTMLSelectElement) {
-          rawPageSizeSelect.value = String(rawPageSize);
         }
       }
 
@@ -3300,7 +3264,6 @@ function renderHtml(
           filteredCards[index].classList.remove('hidden-by-page');
         }
 
-        rawVisibleCount = Math.max(0, Math.min(rawPageSize, rawFilteredCount - startIndex));
         syncRawSectionVisibility();
         syncRawPaginationUi();
       }
@@ -3310,22 +3273,12 @@ function renderHtml(
           return;
         }
 
-        const isMobile = mobileSearchMedia.matches;
-        const shouldOpen = isMobile ? Boolean(nextExpanded) : true;
+        const shouldOpen = Boolean(nextExpanded);
         topBar.classList.toggle('is-search-open', shouldOpen);
         if (openSearchInputButton instanceof HTMLElement) {
           openSearchInputButton.setAttribute('aria-label', shouldOpen ? '검색 닫기' : '검색 열기');
           openSearchInputButton.setAttribute('title', shouldOpen ? '검색 닫기' : '검색');
         }
-      }
-
-      function syncSearchVisibilityByViewport() {
-        const hasQuery = getSearchQuery().length > 0;
-        if (mobileSearchMedia.matches) {
-          setSearchExpanded(hasQuery);
-          return;
-        }
-        setSearchExpanded(true);
       }
 
       function closeFilterPanel() {
@@ -3366,13 +3319,14 @@ function renderHtml(
         }
 
         if (viewRaw.classList.contains('active')) {
-          filterSummary.textContent = VIEW_LABELS.raw + ' 전체 ' + rawCards.length;
+          filterSummary.classList.add('hidden-control');
           syncActiveFilterChips();
           syncFilterPanelTrigger();
           syncRawPaginationUi();
           return;
         }
 
+        filterSummary.classList.remove('hidden-control');
         const visibleBacklogCount = backlogItems.filter(
           (item) => !item.classList.contains('hidden-by-search')
         ).length;
@@ -3398,6 +3352,34 @@ function renderHtml(
         setExcludeFilterMode('all');
         rawCurrentPage = 1;
         applySearch();
+      }
+
+      function resetAllReviewsToExcluded() {
+        if (rawCards.length === 0) {
+          return;
+        }
+
+        const confirmed = window.confirm('모든 리뷰를 비활성으로 변경하고 해시태그를 초기화할까요?');
+        if (!confirmed) {
+          return;
+        }
+
+        rawCards.forEach((card) => {
+          const reviewId = getCardReviewId(card);
+          if (!reviewId) {
+            return;
+          }
+
+          const state = readCardState(reviewId, card);
+          state.excluded = true;
+          state.tags = [];
+          writeCardState(reviewId, state, card);
+          syncCardStateVisual(card);
+        });
+
+        rawCurrentPage = 1;
+        applySearch();
+        schedulePreviewStateSave();
       }
 
       function applyRawStateFilters(searchQuery) {
@@ -3505,39 +3487,13 @@ function renderHtml(
         openNoteSidebarButton.classList.toggle('is-active', noteCount > 0 || noteDirty);
       }
 
-      function setNoteAppListOpen(nextOpen) {
-        noteAppListOpen = Boolean(nextOpen);
-        if (noteAppListOverlay instanceof HTMLElement) {
-          noteAppListOverlay.hidden = !noteAppListOpen;
+      function syncNoteAppSelect() {
+        if (!(noteAppSelect instanceof HTMLSelectElement)) {
+          return;
         }
-        if (noteAppListToggle instanceof HTMLElement) {
-          noteAppListToggle.classList.toggle('is-open', noteAppListOpen);
-          noteAppListToggle.setAttribute('aria-expanded', noteAppListOpen ? 'true' : 'false');
-          noteAppListToggle.textContent = noteAppListOpen ? '접기' : '전체 보기';
+        if (activeNoteAppKey && noteAppSelect.value !== activeNoteAppKey) {
+          noteAppSelect.value = activeNoteAppKey;
         }
-      }
-
-      function syncNoteAppTabs() {
-        noteAppTabs.forEach((tab) => {
-          if (!(tab instanceof HTMLElement)) {
-            return;
-          }
-
-          const appKey = (tab.getAttribute('data-note-app-key') || '').trim();
-          const hasNote = Boolean(appNotes[appKey] && normalizeNoteContent(appNotes[appKey].content).trim());
-          tab.classList.toggle('is-active', appKey === activeNoteAppKey);
-          tab.classList.toggle('has-note', hasNote);
-        });
-        noteAppOverlayItems.forEach((item) => {
-          if (!(item instanceof HTMLElement)) {
-            return;
-          }
-
-          const appKey = (item.getAttribute('data-note-app-key') || '').trim();
-          const hasNote = Boolean(appNotes[appKey] && normalizeNoteContent(appNotes[appKey].content).trim());
-          item.classList.toggle('is-active', appKey === activeNoteAppKey);
-          item.classList.toggle('has-note', hasNote);
-        });
       }
 
       function renderNoteAppLinks(appKey) {
@@ -3587,14 +3543,11 @@ function renderHtml(
         noteSidebarStatus.textContent = '저장됨 · ' + formatDateLabel(note.updatedAt);
       }
 
-      function selectAppNoteTab(appKey) {
+      function selectNoteApp(appKey) {
         const requestedAppKey = String(appKey || '').trim();
-        const fallbackApp = noteAppCatalog[0];
         const nextAppKey = noteAppByKey.has(requestedAppKey)
           ? requestedAppKey
-          : fallbackApp
-            ? fallbackApp.appKey
-            : '';
+          : defaultNoteAppKey;
 
         activeNoteAppKey = nextAppKey;
         const appMeta = noteAppByKey.get(nextAppKey);
@@ -3604,7 +3557,7 @@ function renderHtml(
           noteSidebarTitle.textContent = '앱 노트';
         }
         if (noteSidebarSub instanceof HTMLElement) {
-          noteSidebarSub.textContent = '앱별 메모를 저장해 큐레이션에 활용하세요.';
+          noteSidebarSub.textContent = '셀렉터에서 앱을 선택해 메모를 관리하세요.';
         }
         if (noteSidebarAppName instanceof HTMLElement) {
           const sourceToken = appMeta && appMeta.sourceToken ? ' (' + appMeta.sourceToken + ')' : '';
@@ -3616,8 +3569,7 @@ function renderHtml(
           noteSidebarText.value = appNotes[nextAppKey] ? appNotes[nextAppKey].content : '';
         }
 
-        syncNoteAppTabs();
-        setNoteAppListOpen(false);
+        syncNoteAppSelect();
         refreshNoteSidebarStatus();
       }
 
@@ -3637,7 +3589,7 @@ function renderHtml(
           });
         }
 
-        selectAppNoteTab(activeNoteAppKey || noteAppCatalog[0].appKey);
+        selectNoteApp(activeNoteAppKey || defaultNoteAppKey);
 
         if (noteSidebarText instanceof HTMLTextAreaElement) {
           window.setTimeout(() => noteSidebarText.focus(), 0);
@@ -3645,7 +3597,6 @@ function renderHtml(
       }
 
       function closeAppNoteSidebar() {
-        setNoteAppListOpen(false);
         if (noteSidebarRoot instanceof HTMLElement) {
           noteSidebarRoot.classList.remove('is-open');
           if (noteSidebarCloseTimer) {
@@ -3676,7 +3627,7 @@ function renderHtml(
 
         syncNoteDirtyState();
         syncNoteSidebarTrigger();
-        syncNoteAppTabs();
+        syncNoteAppSelect();
         refreshNoteSidebarStatus();
       }
 
@@ -3745,7 +3696,7 @@ function renderHtml(
         copyAppNotesMap(persistedAppNotes, snapshot);
         syncNoteDirtyState();
         syncNoteSidebarTrigger();
-        syncNoteAppTabs();
+        syncNoteAppSelect();
         refreshNoteSidebarStatus();
       }
 
@@ -3755,8 +3706,8 @@ function renderHtml(
           applySearch();
           syncNoteDirtyState();
           syncNoteSidebarTrigger();
-          syncNoteAppTabs();
-          selectAppNoteTab(activeNoteAppKey || (noteAppCatalog[0] && noteAppCatalog[0].appKey) || '');
+          syncNoteAppSelect();
+          selectNoteApp(activeNoteAppKey || defaultNoteAppKey);
           return;
         }
 
@@ -3772,8 +3723,8 @@ function renderHtml(
             applySearch();
             syncNoteDirtyState();
             syncNoteSidebarTrigger();
-            syncNoteAppTabs();
-            selectAppNoteTab(activeNoteAppKey || (noteAppCatalog[0] && noteAppCatalog[0].appKey) || '');
+            syncNoteAppSelect();
+            selectNoteApp(activeNoteAppKey || defaultNoteAppKey);
             return;
           }
 
@@ -3835,8 +3786,8 @@ function renderHtml(
         syncAllCardStateVisuals();
         applySearch();
         syncNoteSidebarTrigger();
-        syncNoteAppTabs();
-        selectAppNoteTab(activeNoteAppKey || (noteAppCatalog[0] && noteAppCatalog[0].appKey) || '');
+        syncNoteAppSelect();
+        selectNoteApp(activeNoteAppKey || defaultNoteAppKey);
         refreshNoteSidebarStatus();
       }
 
@@ -4063,46 +4014,11 @@ function renderHtml(
       if (openNoteSidebarButton instanceof HTMLElement) {
         openNoteSidebarButton.addEventListener('click', openAppNoteSidebar);
       }
-      noteAppTabs.forEach((tab) => {
-        if (!(tab instanceof HTMLElement)) {
-          return;
-        }
-        tab.addEventListener('click', () => {
-          const appKey = (tab.getAttribute('data-note-app-key') || '').trim();
-          selectAppNoteTab(appKey);
-        });
-      });
-      noteAppOverlayItems.forEach((item) => {
-        if (!(item instanceof HTMLElement)) {
-          return;
-        }
-        item.addEventListener('click', () => {
-          const appKey = (item.getAttribute('data-note-app-key') || '').trim();
-          selectAppNoteTab(appKey);
-        });
-      });
-      if (noteAppListToggle instanceof HTMLElement) {
-        noteAppListToggle.addEventListener('click', () => {
-          setNoteAppListOpen(!noteAppListOpen);
+      if (noteAppSelect instanceof HTMLSelectElement) {
+        noteAppSelect.addEventListener('change', () => {
+          selectNoteApp(noteAppSelect.value);
         });
       }
-      document.addEventListener('click', (event) => {
-        if (!noteAppListOpen) {
-          return;
-        }
-
-        const target = event.target;
-        if (!(target instanceof HTMLElement)) {
-          return;
-        }
-
-        const inToggle = noteAppListToggle instanceof HTMLElement && noteAppListToggle.contains(target);
-        const inOverlay = noteAppListOverlay instanceof HTMLElement && noteAppListOverlay.contains(target);
-        if (inToggle || inOverlay) {
-          return;
-        }
-        setNoteAppListOpen(false);
-      });
       if (openFilterPanelButton instanceof HTMLElement) {
         openFilterPanelButton.addEventListener('click', openFilterPanel);
       }
@@ -4134,7 +4050,7 @@ function renderHtml(
           }
         }
         if (event.key === 'Escape') {
-          if (mobileSearchMedia.matches && getSearchQuery().length === 0) {
+          if (getSearchQuery().length === 0) {
             setSearchExpanded(false);
           }
         }
@@ -4171,6 +4087,9 @@ function renderHtml(
       if (clearFiltersButton instanceof HTMLElement) {
         clearFiltersButton.addEventListener('click', resetRawFilters);
       }
+      if (resetAllExcludedButton instanceof HTMLElement) {
+        resetAllExcludedButton.addEventListener('click', resetAllReviewsToExcluded);
+      }
       excludeFilterButtons.forEach((button) => {
         if (!(button instanceof HTMLElement)) {
           return;
@@ -4189,9 +4108,6 @@ function renderHtml(
         scheduleApplySearch();
       });
       document.addEventListener('click', (event) => {
-        if (!mobileSearchMedia.matches) {
-          return;
-        }
         if (getSearchQuery().length > 0) {
           return;
         }
@@ -4206,11 +4122,6 @@ function renderHtml(
         }
         setSearchExpanded(false);
       });
-      if (mobileSearchMedia && typeof mobileSearchMedia.addEventListener === 'function') {
-        mobileSearchMedia.addEventListener('change', () => {
-          syncSearchVisibilityByViewport();
-        });
-      }
       if (rawPagePrev instanceof HTMLButtonElement) {
         rawPagePrev.addEventListener('click', () => {
           if (rawCurrentPage <= 1) {
@@ -4231,21 +4142,10 @@ function renderHtml(
           syncFilterSummary();
         });
       }
-      if (rawPageSizeSelect instanceof HTMLSelectElement) {
-        rawPageSizeSelect.value = String(rawPageSize);
-        rawPageSizeSelect.addEventListener('change', () => {
-          const nextSize = Number(rawPageSizeSelect.value || '100');
-          rawPageSize = RAW_PAGE_SIZE_OPTIONS.has(nextSize) ? nextSize : 100;
-          rawCurrentPage = 1;
-          applyRawPagination();
-          syncFilterSummary();
-        });
-      }
       setExcludeFilterMode('all');
       syncTagFilterButtons();
       syncActiveFilterChips();
-      syncSearchVisibilityByViewport();
-      setNoteAppListOpen(false);
+      setSearchExpanded(getSearchQuery().length > 0);
       syncAllCardStateVisuals();
       setTab(true);
       loadPreviewState();

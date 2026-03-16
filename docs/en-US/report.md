@@ -73,20 +73,21 @@ Render actionable markdown report to interactive HTML.
 - Filters are managed in a separate panel opened from the top bar `Filter` button.
 - On narrow screens, the filter panel opens as a bottom sheet.
 - On narrow screens, the notes panel also opens as a bottom sheet instead of a right drawer.
-- On narrow screens, search is collapsed to a `🔎` button by default and expands to the input field on tap.
+- Search is shown as a `🔎` button by default and expands to the input field on tap/click.
 - Top controls are tab-scoped: `Reviews` shows `Filter` and `Notes`, while `Reports` shows `Expand evidence`.
 - In `Reviews`, hashtag filter supports multi-select (`#❤️`, `#Satisfaction`, `#Dissatisfaction`), and `All tags` clears tag filters.
 - In `Reviews`, state filter is tri-state: `All` / `Active` / `Inactive` (default: `All`).
 - In `Reviews`, you can toggle `100+ chars` to focus on longer reviews.
 - `Reset filters` clears search/state/tag/length filters in one click.
-- `Reviews` tab supports pagination (default `100 items/page`, adjustable to `50/100/200`).
-- Pagination is applied to the current search/filter result set, and top summary shows only `overall total reviews`.
+- In the filter panel, `Reset all to inactive` sets every review to `Inactive` in bulk and clears all hashtags.
+- `Reviews` tab supports pagination with a fixed page size of `100 items/page`.
+- Pagination is applied to the current search/filter result set, and `total reviews` is shown in the pagination area.
 - The summary/stat block below the title also switches by tab, so each tab shows only relevant context.
 - In the `Reviews` tab context block, the `Raw quotes` card and generated-at/criteria/classification meta list are not shown.
 - Review cards include `#❤️ / #Satisfaction / #Dissatisfaction` hashtag toggles and `Inactive/Active`.
 - Hashtags can be edited only when the card is `Active`.
-- Top-right controls include a `Notes` button; in the right sidebar you can switch app tabs to manage app-level notes.
-- In notes tab area, use `View all` to open/close an overlay list and pick any app from the full list.
+- Top-right controls include a `Notes` button; in the right sidebar you can switch the app selector to manage app-level notes.
+- In the notes panel, use the app selector to switch the currently active app for note editing.
 - The notes sidebar shows the selected app name and store links (App Store / Google Play).
 - Notes are not auto-saved; use `Save` (or `Ctrl/Cmd + S`) to persist note changes.
 - Reviews view is hydrated from full review datasets (`data/{myAppId}/reviews-ko/*.json`, fallback `reviews/*.json`) per app:
