@@ -1248,6 +1248,14 @@ function renderHtml(
         )}\">${escapeHtml(app.title)}</button>`
     )
     .join("");
+  const appNoteOverlayItemsHtml = appNoteApps
+    .map(
+      (app, index) =>
+        `<button class=\"note-app-overlay-item${index === 0 ? " is-active" : ""}\" type=\"button\" data-note-app-key=\"${escapeHtml(
+          app.appKey
+        )}\">${escapeHtml(app.title)}</button>`
+    )
+    .join("");
   const appNoteAppsJson = toInlineJson(appNoteApps);
 
   const backlogSections = backlogs
@@ -1336,14 +1344,6 @@ function renderHtml(
     })
     .join("\n");
 
-  const totalRawQuotes = apps.reduce(
-    (sum, app) =>
-      sum +
-      app.categories.satisfaction.length +
-      app.categories.dissatisfaction.length +
-      app.categories.requests.length,
-    0
-  );
   const totalBacklogItems = backlogs.reduce((sum, appBacklog) => sum + appBacklog.items.length, 0);
   const totalMustItems = backlogs.reduce(
     (sum, appBacklog) => sum + appBacklog.items.filter((item) => item.priority === "must").length,
@@ -1371,7 +1371,6 @@ function renderHtml(
 
   const rawStatsHtml = renderStatsSection([
     { label: "앱 수", value: apps.length },
-    { label: "Raw 인용", value: totalRawQuotes },
     {
       label: "해시태그 정의",
       value: "#만족 · #불만족 · #❤️",
@@ -1389,7 +1388,6 @@ function renderHtml(
     { label: "MUST", value: totalMustItems },
     { label: "SHOULD / COULD", value: `${totalShouldItems} / ${totalCouldItems}` }
   ]);
-  const rawMetadataHtml = metadata.map((line) => `<li>${escapeHtml(line)}</li>`).join("\n");
   const generatedAtLine =
     metadata.find((line) => line.includes("생성 시각")) ??
     metadata.find((line) => line.toLowerCase().includes("generated at"));
@@ -1489,6 +1487,28 @@ function renderHtml(
       .search-fixed {
         width: min(520px, 100%);
         flex: 1 1 360px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .search-toggle-btn {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: #ffffff;
+        color: #0f172a;
+        font-size: 16px;
+        line-height: 1;
+        padding: 0;
+      }
+      .search-toggle-btn:hover {
+        border-color: #0ea5e9;
+        background: #f0f9ff;
+        color: #075985;
       }
       .top-controls {
         margin-left: auto;
@@ -1696,6 +1716,7 @@ function renderHtml(
         font-size: 14px;
         background: #ffffff;
         color: var(--ink);
+        transition: opacity 180ms ease, transform 180ms ease, border-color 120ms ease, box-shadow 120ms ease;
       }
       input[type="search"]::placeholder {
         color: #7b8ca2;
@@ -1726,15 +1747,15 @@ function renderHtml(
       .toggle-length-label {
         display: flex;
         align-items: center;
-        gap: 12px;
-        min-height: 58px;
+        gap: 10px;
+        min-height: 46px;
         width: fit-content;
-        padding: 0 16px;
+        padding: 0 13px;
         border: 1px solid #c7d6e8;
-        border-radius: 16px;
+        border-radius: 14px;
         background: #ffffff;
         color: #0f172a;
-        font-size: 16px;
+        font-size: 14px;
         font-weight: 700;
         line-height: 1.2;
         cursor: pointer;
@@ -1749,27 +1770,27 @@ function renderHtml(
         display: flex;
         align-items: center;
         flex-wrap: wrap;
-        padding: 8px;
-        gap: 8px;
+        padding: 6px;
+        gap: 6px;
         border: 1px solid #c7d6e8;
-        border-radius: 16px;
+        border-radius: 14px;
         background: #ffffff;
         box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
       }
       .toggle-all-label input,
       .toggle-length-label input {
-        width: 24px;
-        height: 24px;
+        width: 20px;
+        height: 20px;
         margin: 0;
         accent-color: var(--accent);
       }
       .exclude-filter-btn {
         border: 1px solid transparent;
         background: transparent;
-        border-radius: 12px;
-        padding: 10px 14px;
-        min-height: 42px;
-        font-size: 14px;
+        border-radius: 11px;
+        padding: 8px 12px;
+        min-height: 36px;
+        font-size: 13px;
         font-weight: 700;
         color: var(--sub);
       }
@@ -1781,10 +1802,10 @@ function renderHtml(
       .tag-filter-btn {
         border: 1px solid transparent;
         background: transparent;
-        border-radius: 12px;
-        padding: 10px 14px;
-        min-height: 42px;
-        font-size: 14px;
+        border-radius: 11px;
+        padding: 8px 12px;
+        min-height: 36px;
+        font-size: 13px;
         font-weight: 700;
         color: var(--sub);
       }
@@ -1796,10 +1817,10 @@ function renderHtml(
       .clear-filters-btn {
         border-color: #c7d6e8;
         background: #ffffff;
-        border-radius: 14px;
-        padding: 12px 16px;
-        min-height: 50px;
-        font-size: 16px;
+        border-radius: 12px;
+        padding: 9px 13px;
+        min-height: 40px;
+        font-size: 14px;
         font-weight: 700;
       }
       .clear-filters-btn:hover {
@@ -2088,11 +2109,23 @@ function renderHtml(
         position: fixed;
         inset: 0;
         z-index: 46;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 180ms ease;
+      }
+      .filter-panel-root.is-open {
+        opacity: 1;
+        pointer-events: auto;
       }
       .filter-panel-backdrop {
         position: absolute;
         inset: 0;
         background: rgba(15, 23, 42, 0.34);
+        opacity: 0;
+        transition: opacity 180ms ease;
+      }
+      .filter-panel-root.is-open .filter-panel-backdrop {
+        opacity: 1;
       }
       .filter-panel {
         position: absolute;
@@ -2105,9 +2138,16 @@ function renderHtml(
         display: flex;
         flex-direction: column;
         box-shadow: -12px 0 30px rgba(15, 23, 42, 0.18);
+        opacity: 0;
+        transform: translateX(20px);
+        transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease;
+      }
+      .filter-panel-root.is-open .filter-panel {
+        opacity: 1;
+        transform: translateX(0);
       }
       .filter-panel-head {
-        padding: 14px 14px 12px;
+        padding: 10px 12px;
         border-bottom: 1px solid var(--line);
         display: flex;
         align-items: center;
@@ -2117,15 +2157,15 @@ function renderHtml(
       }
       .filter-panel-head h2 {
         margin: 0;
-        font-size: 2rem;
-        line-height: 1.1;
+        font-size: 1.45rem;
+        line-height: 1.15;
         letter-spacing: -0.02em;
       }
       .filter-panel-head button {
-        border-radius: 18px;
-        padding: 12px 18px;
-        min-height: 64px;
-        font-size: 20px;
+        border-radius: 12px;
+        padding: 7px 12px;
+        min-height: 40px;
+        font-size: 15px;
         font-weight: 700;
         background: #f8fbff;
         border-color: #c7d6e8;
@@ -2135,22 +2175,22 @@ function renderHtml(
         background: #f0f7ff;
       }
       .filter-panel-body {
-        padding: 16px 12px 20px;
+        padding: 12px 12px 16px;
         display: flex;
         flex-direction: column;
-        gap: 14px;
+        gap: 10px;
         overflow: auto;
       }
       .filter-field {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 6px;
       }
       .filter-field-title {
         margin: 0;
         padding: 0 2px;
         color: #475569;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 700;
         letter-spacing: 0.02em;
       }
@@ -2177,11 +2217,23 @@ function renderHtml(
         position: fixed;
         inset: 0;
         z-index: 50;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 180ms ease;
+      }
+      .note-sidebar-root.is-open {
+        opacity: 1;
+        pointer-events: auto;
       }
       .note-sidebar-backdrop {
         position: absolute;
         inset: 0;
         background: rgba(15, 23, 42, 0.38);
+        opacity: 0;
+        transition: opacity 180ms ease;
+      }
+      .note-sidebar-root.is-open .note-sidebar-backdrop {
+        opacity: 1;
       }
       .note-sidebar {
         position: absolute;
@@ -2194,6 +2246,13 @@ function renderHtml(
         display: flex;
         flex-direction: column;
         box-shadow: -12px 0 30px rgba(15, 23, 42, 0.18);
+        opacity: 0;
+        transform: translateX(20px);
+        transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease;
+      }
+      .note-sidebar-root.is-open .note-sidebar {
+        opacity: 1;
+        transform: translateX(0);
       }
       .note-sidebar-head {
         padding: 12px 14px;
@@ -2221,14 +2280,55 @@ function renderHtml(
         font-weight: 700;
         padding: 6px 10px;
       }
-      .note-app-tabs {
+      .note-app-tabs-wrap {
+        position: relative;
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 8px;
         padding: 10px 14px;
         border-bottom: 1px solid var(--line);
         background: #f8fbff;
+      }
+      .note-app-tabs {
+        flex: 1 1 auto;
+        display: flex;
+        align-items: center;
+        gap: 6px;
         overflow-x: auto;
+        scrollbar-width: thin;
+      }
+      .note-app-list-toggle {
+        flex: 0 0 auto;
+        border-radius: 999px;
+        border-color: #b7cbe0;
+        background: #ffffff;
+        color: #334155;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 6px 10px;
+      }
+      .note-app-list-toggle.is-open {
+        border-color: #0ea5e9;
+        color: #075985;
+        background: #e0f2fe;
+      }
+      .note-app-list-overlay {
+        position: absolute;
+        left: 12px;
+        right: 12px;
+        top: calc(100% + 8px);
+        z-index: 8;
+        border: 1px solid #c7d6e8;
+        border-radius: 14px;
+        background: #ffffff;
+        box-shadow: 0 14px 30px rgba(15, 23, 42, 0.18);
+      }
+      .note-app-list-body {
+        max-height: min(44vh, 320px);
+        overflow: auto;
+        padding: 8px;
+        display: grid;
+        gap: 6px;
       }
       .note-app-tab {
         flex: 0 0 auto;
@@ -2246,6 +2346,27 @@ function renderHtml(
         background: #e0f2fe;
       }
       .note-app-tab.has-note:not(.is-active) {
+        border-color: #93c5fd;
+        color: #1d4ed8;
+        background: #eff6ff;
+      }
+      .note-app-overlay-item {
+        width: 100%;
+        border-radius: 10px;
+        border-color: #d0deec;
+        background: #ffffff;
+        color: #334155;
+        font-size: 13px;
+        font-weight: 700;
+        text-align: left;
+        padding: 9px 10px;
+      }
+      .note-app-overlay-item.is-active {
+        border-color: #0ea5e9;
+        color: #075985;
+        background: #e0f2fe;
+      }
+      .note-app-overlay-item.has-note:not(.is-active) {
         border-color: #93c5fd;
         color: #1d4ed8;
         background: #eff6ff;
@@ -2397,7 +2518,7 @@ function renderHtml(
             "search"
             "actions";
           align-items: center;
-          gap: 8px;
+          gap: 7px;
         }
         .top-left {
           grid-area: left;
@@ -2418,19 +2539,42 @@ function renderHtml(
           width: 100%;
           max-width: none;
           flex: none;
+          min-height: 36px;
+        }
+        .search-toggle-btn {
+          display: inline-flex;
+        }
+        .top:not(.is-search-open) .search-fixed input[type="search"] {
+          width: 0;
+          min-width: 0;
+          padding: 0;
+          border-width: 0;
+          opacity: 0;
+          pointer-events: none;
+          transform: translateX(-4px);
+        }
+        .top.is-search-open .search-fixed input[type="search"] {
+          width: 100%;
+          padding: 10px 12px;
+          border-width: 1px;
+          opacity: 1;
+          pointer-events: auto;
+          transform: translateX(0);
         }
         .top-controls {
           grid-area: actions;
           margin-left: 0;
           width: 100%;
-          justify-content: stretch;
+          justify-content: flex-end;
           gap: 8px;
         }
         .top-controls button {
-          flex: 1 1 0;
-          min-height: 42px;
-          font-size: 14px;
+          flex: 0 0 auto;
+          min-height: 36px;
+          padding: 7px 12px;
+          font-size: 13px;
           font-weight: 700;
+          border-radius: 12px;
         }
         .tabs {
           margin-left: auto;
@@ -2461,20 +2605,22 @@ function renderHtml(
           flex-basis: 100%;
         }
         .top-status-row {
-          gap: 8px;
+          gap: 6px;
+          align-items: flex-start;
         }
         .active-filter-chips {
           width: 100%;
         }
         .raw-pagination {
           margin-left: 0;
-          width: 100%;
+          width: fit-content;
+          max-width: 100%;
           justify-content: flex-start;
           flex-wrap: wrap;
         }
         .filter-summary {
           min-width: 0;
-          width: 100%;
+          width: auto;
           justify-content: flex-start;
         }
         .filter-panel {
@@ -2489,6 +2635,10 @@ function renderHtml(
           border-top: 1px solid var(--line);
           border-radius: 16px 16px 0 0;
           box-shadow: 0 -16px 34px rgba(15, 23, 42, 0.22);
+          transform: translateY(20px);
+        }
+        .filter-panel-root.is-open .filter-panel {
+          transform: translateY(0);
         }
         .note-sidebar {
           right: 0;
@@ -2501,6 +2651,10 @@ function renderHtml(
           border-top: 1px solid var(--line);
           border-radius: 16px 16px 0 0;
           box-shadow: 0 -16px 34px rgba(15, 23, 42, 0.24);
+          transform: translateY(20px);
+        }
+        .note-sidebar-root.is-open .note-sidebar {
+          transform: translateY(0);
         }
         .note-sidebar-head {
           padding: 10px 12px;
@@ -2512,8 +2666,12 @@ function renderHtml(
           min-height: 34px;
           padding: 6px 9px;
         }
-        .note-app-tabs {
+        .note-app-tabs-wrap {
           padding: 8px 12px;
+          gap: 6px;
+        }
+        .note-app-list-toggle {
+          padding: 5px 9px;
         }
         .note-app-meta {
           padding: 8px 12px;
@@ -2526,12 +2684,12 @@ function renderHtml(
           padding: 8px 12px;
         }
         .filter-panel-head h2 {
-          font-size: 1.8rem;
+          font-size: 1.3rem;
         }
         .filter-panel-head button {
-          min-height: 54px;
-          padding: 10px 16px;
-          font-size: 18px;
+          min-height: 36px;
+          padding: 6px 10px;
+          font-size: 14px;
         }
       }
       @media (max-width: 560px) {
@@ -2539,13 +2697,21 @@ function renderHtml(
           gap: 6px;
         }
         .top-controls button {
-          min-height: 40px;
-          font-size: 13px;
-          padding: 8px 9px;
+          min-height: 34px;
+          font-size: 12px;
+          padding: 6px 10px;
         }
         .note-app-tab {
           padding: 5px 9px;
           font-size: 11px;
+        }
+        .note-app-list-overlay {
+          left: 8px;
+          right: 8px;
+        }
+        .note-app-overlay-item {
+          font-size: 12px;
+          padding: 8px 9px;
         }
         .stats {
           grid-template-columns: 1fr;
@@ -2568,6 +2734,7 @@ function renderHtml(
           </div>
         </div>
         <div class=\"search-fixed\">
+          <button id=\"openSearchInput\" class=\"search-toggle-btn\" type=\"button\" aria-label=\"검색 열기\" title=\"검색\">🔎</button>
           <input id=\"search\" type=\"search\" placeholder=\"검색 (앱명, 기능요청, 키워드, 원문)\" />
         </div>
         <div class=\"top-controls\">
@@ -2598,11 +2765,6 @@ function renderHtml(
       <h1>${escapeHtml(reportTitle)}</h1>
       <section id=\"contextRaw\" class=\"context-panel active\">
         ${rawStatsHtml}
-        <section class=\"meta\">
-          <ul>
-            ${rawMetadataHtml}
-          </ul>
-        </section>
       </section>
       <section id=\"contextBacklog\" class=\"context-panel\">
         ${backlogStatsHtml}
@@ -2635,7 +2797,13 @@ function renderHtml(
             <button id=\"noteSidebarClose\" type=\"button\">닫기</button>
           </div>
         </div>
-        <div id=\"noteAppTabs\" class=\"note-app-tabs\">${appNoteTabsHtml}</div>
+        <div class=\"note-app-tabs-wrap\">
+          <div id=\"noteAppTabs\" class=\"note-app-tabs\">${appNoteTabsHtml}</div>
+          <button id=\"noteAppListToggle\" class=\"note-app-list-toggle\" type=\"button\" aria-expanded=\"false\">전체 보기</button>
+          <div id=\"noteAppListOverlay\" class=\"note-app-list-overlay\" hidden>
+            <div id=\"noteAppListBody\" class=\"note-app-list-body\">${appNoteOverlayItemsHtml}</div>
+          </div>
+        </div>
         <div class=\"note-app-meta\">
           <p id=\"noteSidebarAppName\" class=\"note-app-name\">앱을 선택하세요</p>
           <div id=\"noteSidebarAppLinks\" class=\"note-app-links\"></div>
@@ -2684,8 +2852,11 @@ function renderHtml(
     </div>
 
     <script>
+      const topBar = document.querySelector('.top');
       const root = document.getElementById('root');
       const searchInput = document.getElementById('search');
+      const openSearchInputButton = document.getElementById('openSearchInput');
+      const searchFixed = document.querySelector('.search-fixed');
       const openFilterPanelButton = document.getElementById('openFilterPanel');
       const toggleAll = document.getElementById('toggleAll');
       const tagFilter = document.getElementById('tagFilter');
@@ -2720,7 +2891,6 @@ function renderHtml(
         cards: Array.from(section.querySelectorAll('.quote-card[data-review-id]'))
       }));
       const backlogItems = Array.from(viewBacklog.querySelectorAll('.backlog-item'));
-      const evidenceToggleButtons = Array.from(viewBacklog.querySelectorAll('.evidence-toggle[data-evidence-id]'));
       const noteSidebarRoot = document.getElementById('noteSidebarRoot');
       const noteSidebarBackdrop = document.getElementById('noteSidebarBackdrop');
       const noteSidebarClose = document.getElementById('noteSidebarClose');
@@ -2729,7 +2899,10 @@ function renderHtml(
       const noteSidebarSub = document.getElementById('noteSidebarSub');
       const noteSidebarAppName = document.getElementById('noteSidebarAppName');
       const noteSidebarAppLinks = document.getElementById('noteSidebarAppLinks');
+      const noteAppListToggle = document.getElementById('noteAppListToggle');
+      const noteAppListOverlay = document.getElementById('noteAppListOverlay');
       const noteAppTabs = Array.from(document.querySelectorAll('.note-app-tab[data-note-app-key]'));
+      const noteAppOverlayItems = Array.from(document.querySelectorAll('.note-app-overlay-item[data-note-app-key]'));
       const noteSidebarText = document.getElementById('noteSidebarText');
       const noteSidebarStatus = document.getElementById('noteSidebarStatus');
       const filterPanelRoot = document.getElementById('filterPanelRoot');
@@ -2744,6 +2917,8 @@ function renderHtml(
       const RAW_PAGE_SIZE_OPTIONS = new Set([50, 100, 200]);
       let saveStateTimer = null;
       let searchApplyRaf = 0;
+      let filterPanelCloseTimer = 0;
+      let noteSidebarCloseTimer = 0;
       let stateLoaded = false;
       let rawPageSize = 100;
       let rawCurrentPage = 1;
@@ -2752,9 +2927,11 @@ function renderHtml(
       let rawTotalPages = 1;
       let excludeFilterMode = 'all';
       let noteDirty = false;
+      let noteAppListOpen = false;
       const selectedTagFilters = new Set();
       let activeNoteAppKey = '';
       let activeNoteAppTitle = '';
+      const mobileSearchMedia = window.matchMedia('(max-width: 900px)');
       const EXCLUDE_FILTER_MODES = new Set(['all', 'active', 'excluded']);
       const REVIEW_TAGS = ['heart', 'satisfaction', 'dissatisfaction'];
       const TAG_FILTER_MODES = new Set(['all', 'heart', 'satisfaction', 'dissatisfaction']);
@@ -3128,10 +3305,39 @@ function renderHtml(
         syncRawPaginationUi();
       }
 
+      function setSearchExpanded(nextExpanded) {
+        if (!(topBar instanceof HTMLElement)) {
+          return;
+        }
+
+        const isMobile = mobileSearchMedia.matches;
+        const shouldOpen = isMobile ? Boolean(nextExpanded) : true;
+        topBar.classList.toggle('is-search-open', shouldOpen);
+        if (openSearchInputButton instanceof HTMLElement) {
+          openSearchInputButton.setAttribute('aria-label', shouldOpen ? '검색 닫기' : '검색 열기');
+          openSearchInputButton.setAttribute('title', shouldOpen ? '검색 닫기' : '검색');
+        }
+      }
+
+      function syncSearchVisibilityByViewport() {
+        const hasQuery = getSearchQuery().length > 0;
+        if (mobileSearchMedia.matches) {
+          setSearchExpanded(hasQuery);
+          return;
+        }
+        setSearchExpanded(true);
+      }
+
       function closeFilterPanel() {
         if (filterPanelRoot instanceof HTMLElement) {
-          filterPanelRoot.hidden = true;
-          filterPanelRoot.setAttribute('aria-hidden', 'true');
+          filterPanelRoot.classList.remove('is-open');
+          if (filterPanelCloseTimer) {
+            window.clearTimeout(filterPanelCloseTimer);
+          }
+          filterPanelCloseTimer = window.setTimeout(() => {
+            filterPanelRoot.hidden = true;
+            filterPanelRoot.setAttribute('aria-hidden', 'true');
+          }, 180);
         }
       }
 
@@ -3140,8 +3346,14 @@ function renderHtml(
           return;
         }
         if (filterPanelRoot instanceof HTMLElement) {
+          if (filterPanelCloseTimer) {
+            window.clearTimeout(filterPanelCloseTimer);
+          }
           filterPanelRoot.hidden = false;
           filterPanelRoot.setAttribute('aria-hidden', 'false');
+          window.requestAnimationFrame(() => {
+            filterPanelRoot.classList.add('is-open');
+          });
         }
         if (filterPanelClose instanceof HTMLElement) {
           window.setTimeout(() => filterPanelClose.focus(), 0);
@@ -3154,8 +3366,7 @@ function renderHtml(
         }
 
         if (viewRaw.classList.contains('active')) {
-          const pageText = rawTotalPages > 1 ? ' · 페이지 ' + rawCurrentPage + '/' + rawTotalPages : '';
-          filterSummary.textContent = VIEW_LABELS.raw + ' ' + rawVisibleCount + '/' + rawFilteredCount + ' 표시 (전체 ' + rawCards.length + ')' + pageText;
+          filterSummary.textContent = VIEW_LABELS.raw + ' 전체 ' + rawCards.length;
           syncActiveFilterChips();
           syncFilterPanelTrigger();
           syncRawPaginationUi();
@@ -3294,6 +3505,18 @@ function renderHtml(
         openNoteSidebarButton.classList.toggle('is-active', noteCount > 0 || noteDirty);
       }
 
+      function setNoteAppListOpen(nextOpen) {
+        noteAppListOpen = Boolean(nextOpen);
+        if (noteAppListOverlay instanceof HTMLElement) {
+          noteAppListOverlay.hidden = !noteAppListOpen;
+        }
+        if (noteAppListToggle instanceof HTMLElement) {
+          noteAppListToggle.classList.toggle('is-open', noteAppListOpen);
+          noteAppListToggle.setAttribute('aria-expanded', noteAppListOpen ? 'true' : 'false');
+          noteAppListToggle.textContent = noteAppListOpen ? '접기' : '전체 보기';
+        }
+      }
+
       function syncNoteAppTabs() {
         noteAppTabs.forEach((tab) => {
           if (!(tab instanceof HTMLElement)) {
@@ -3304,6 +3527,16 @@ function renderHtml(
           const hasNote = Boolean(appNotes[appKey] && normalizeNoteContent(appNotes[appKey].content).trim());
           tab.classList.toggle('is-active', appKey === activeNoteAppKey);
           tab.classList.toggle('has-note', hasNote);
+        });
+        noteAppOverlayItems.forEach((item) => {
+          if (!(item instanceof HTMLElement)) {
+            return;
+          }
+
+          const appKey = (item.getAttribute('data-note-app-key') || '').trim();
+          const hasNote = Boolean(appNotes[appKey] && normalizeNoteContent(appNotes[appKey].content).trim());
+          item.classList.toggle('is-active', appKey === activeNoteAppKey);
+          item.classList.toggle('has-note', hasNote);
         });
       }
 
@@ -3384,6 +3617,7 @@ function renderHtml(
         }
 
         syncNoteAppTabs();
+        setNoteAppListOpen(false);
         refreshNoteSidebarStatus();
       }
 
@@ -3393,8 +3627,14 @@ function renderHtml(
         }
 
         if (noteSidebarRoot instanceof HTMLElement) {
+          if (noteSidebarCloseTimer) {
+            window.clearTimeout(noteSidebarCloseTimer);
+          }
           noteSidebarRoot.hidden = false;
           noteSidebarRoot.setAttribute('aria-hidden', 'false');
+          window.requestAnimationFrame(() => {
+            noteSidebarRoot.classList.add('is-open');
+          });
         }
 
         selectAppNoteTab(activeNoteAppKey || noteAppCatalog[0].appKey);
@@ -3405,9 +3645,16 @@ function renderHtml(
       }
 
       function closeAppNoteSidebar() {
+        setNoteAppListOpen(false);
         if (noteSidebarRoot instanceof HTMLElement) {
-          noteSidebarRoot.hidden = true;
-          noteSidebarRoot.setAttribute('aria-hidden', 'true');
+          noteSidebarRoot.classList.remove('is-open');
+          if (noteSidebarCloseTimer) {
+            window.clearTimeout(noteSidebarCloseTimer);
+          }
+          noteSidebarCloseTimer = window.setTimeout(() => {
+            noteSidebarRoot.hidden = true;
+            noteSidebarRoot.setAttribute('aria-hidden', 'true');
+          }, 180);
         }
       }
 
@@ -3729,21 +3976,6 @@ function renderHtml(
 
         syncEvidenceToggleText();
       });
-      evidenceToggleButtons.forEach((button) => {
-        if (!(button instanceof HTMLElement)) {
-          return;
-        }
-
-        button.addEventListener('click', (event) => {
-          event.preventDefault();
-          const evidenceId = button.getAttribute('data-evidence-id');
-          if (!evidenceId) {
-            return;
-          }
-          toggleEvidenceRowById(evidenceId);
-        });
-      });
-
       root.addEventListener('click', (event) => {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
@@ -3815,6 +4047,19 @@ function renderHtml(
       if (noteSidebarSave instanceof HTMLElement) {
         noteSidebarSave.addEventListener('click', saveAppNotesManually);
       }
+      if (openSearchInputButton instanceof HTMLElement) {
+        openSearchInputButton.addEventListener('click', () => {
+          const isOpen = topBar instanceof HTMLElement && topBar.classList.contains('is-search-open');
+          if (isOpen && getSearchQuery().length === 0) {
+            setSearchExpanded(false);
+            return;
+          }
+          setSearchExpanded(true);
+          if (searchInput instanceof HTMLInputElement) {
+            window.setTimeout(() => searchInput.focus(), 0);
+          }
+        });
+      }
       if (openNoteSidebarButton instanceof HTMLElement) {
         openNoteSidebarButton.addEventListener('click', openAppNoteSidebar);
       }
@@ -3826,6 +4071,37 @@ function renderHtml(
           const appKey = (tab.getAttribute('data-note-app-key') || '').trim();
           selectAppNoteTab(appKey);
         });
+      });
+      noteAppOverlayItems.forEach((item) => {
+        if (!(item instanceof HTMLElement)) {
+          return;
+        }
+        item.addEventListener('click', () => {
+          const appKey = (item.getAttribute('data-note-app-key') || '').trim();
+          selectAppNoteTab(appKey);
+        });
+      });
+      if (noteAppListToggle instanceof HTMLElement) {
+        noteAppListToggle.addEventListener('click', () => {
+          setNoteAppListOpen(!noteAppListOpen);
+        });
+      }
+      document.addEventListener('click', (event) => {
+        if (!noteAppListOpen) {
+          return;
+        }
+
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+          return;
+        }
+
+        const inToggle = noteAppListToggle instanceof HTMLElement && noteAppListToggle.contains(target);
+        const inOverlay = noteAppListOverlay instanceof HTMLElement && noteAppListOverlay.contains(target);
+        if (inToggle || inOverlay) {
+          return;
+        }
+        setNoteAppListOpen(false);
       });
       if (openFilterPanelButton instanceof HTMLElement) {
         openFilterPanelButton.addEventListener('click', openFilterPanel);
@@ -3844,12 +4120,22 @@ function renderHtml(
           writeAppNote(activeNoteAppKey, noteSidebarText.value);
         });
       }
+      if (searchInput instanceof HTMLInputElement) {
+        searchInput.addEventListener('focus', () => {
+          setSearchExpanded(true);
+        });
+      }
       document.addEventListener('keydown', (event) => {
         if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
           if (noteSidebarRoot instanceof HTMLElement && !noteSidebarRoot.hidden) {
             event.preventDefault();
             saveAppNotesManually();
             return;
+          }
+        }
+        if (event.key === 'Escape') {
+          if (mobileSearchMedia.matches && getSearchQuery().length === 0) {
+            setSearchExpanded(false);
           }
         }
         if (event.key === 'Escape') {
@@ -3899,8 +4185,32 @@ function renderHtml(
       });
       searchInput.addEventListener('input', () => {
         rawCurrentPage = 1;
+        setSearchExpanded(true);
         scheduleApplySearch();
       });
+      document.addEventListener('click', (event) => {
+        if (!mobileSearchMedia.matches) {
+          return;
+        }
+        if (getSearchQuery().length > 0) {
+          return;
+        }
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+          return;
+        }
+
+        const inSearch = searchFixed instanceof HTMLElement && searchFixed.contains(target);
+        if (inSearch) {
+          return;
+        }
+        setSearchExpanded(false);
+      });
+      if (mobileSearchMedia && typeof mobileSearchMedia.addEventListener === 'function') {
+        mobileSearchMedia.addEventListener('change', () => {
+          syncSearchVisibilityByViewport();
+        });
+      }
       if (rawPagePrev instanceof HTMLButtonElement) {
         rawPagePrev.addEventListener('click', () => {
           if (rawCurrentPage <= 1) {
@@ -3934,6 +4244,8 @@ function renderHtml(
       setExcludeFilterMode('all');
       syncTagFilterButtons();
       syncActiveFilterChips();
+      syncSearchVisibilityByViewport();
+      setNoteAppListOpen(false);
       syncAllCardStateVisuals();
       setTab(true);
       loadPreviewState();

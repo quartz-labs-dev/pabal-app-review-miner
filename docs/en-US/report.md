@@ -73,17 +73,20 @@ Render actionable markdown report to interactive HTML.
 - Filters are managed in a separate panel opened from the top bar `Filter` button.
 - On narrow screens, the filter panel opens as a bottom sheet.
 - On narrow screens, the notes panel also opens as a bottom sheet instead of a right drawer.
+- On narrow screens, search is collapsed to a `🔎` button by default and expands to the input field on tap.
 - Top controls are tab-scoped: `Reviews` shows `Filter` and `Notes`, while `Reports` shows `Expand evidence`.
 - In `Reviews`, hashtag filter supports multi-select (`#❤️`, `#Satisfaction`, `#Dissatisfaction`), and `All tags` clears tag filters.
 - In `Reviews`, state filter is tri-state: `All` / `Active` / `Inactive` (default: `All`).
 - In `Reviews`, you can toggle `100+ chars` to focus on longer reviews.
 - `Reset filters` clears search/state/tag/length filters in one click.
 - `Reviews` tab supports pagination (default `100 items/page`, adjustable to `50/100/200`).
-- Pagination is applied to the current search/filter result set, and summary shows `visible on page / filtered total / overall total`.
+- Pagination is applied to the current search/filter result set, and top summary shows only `overall total reviews`.
 - The summary/stat block below the title also switches by tab, so each tab shows only relevant context.
+- In the `Reviews` tab context block, the `Raw quotes` card and generated-at/criteria/classification meta list are not shown.
 - Review cards include `#❤️ / #Satisfaction / #Dissatisfaction` hashtag toggles and `Inactive/Active`.
 - Hashtags can be edited only when the card is `Active`.
 - Top-right controls include a `Notes` button; in the right sidebar you can switch app tabs to manage app-level notes.
+- In notes tab area, use `View all` to open/close an overlay list and pick any app from the full list.
 - The notes sidebar shows the selected app name and store links (App Store / Google Play).
 - Notes are not auto-saved; use `Save` (or `Ctrl/Cmd + S`) to persist note changes.
 - Reviews view is hydrated from full review datasets (`data/{myAppId}/reviews-ko/*.json`, fallback `reviews/*.json`) per app:
@@ -117,6 +120,7 @@ Run localhost preview server.
 - Dashboard mode: home lists app ids and generated report files (`.html`, `.md`, `.json`)
 - Dashboard mode can display app icons when `data/{appId}/icon.png` exists
 - Report page header also uses `data/{appId}/icon.png`; when missing, UI falls back to `appId` text
+- Dashboard background fills the full viewport height (no abrupt cut when content is short).
 - Single-file mode: serve one HTML file with `--file`
 - Serves preview state API for raw-review card management:
   - `GET /api/preview-state/:appId`

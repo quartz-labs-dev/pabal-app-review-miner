@@ -653,14 +653,27 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
         --shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
       }
       * { box-sizing: border-box; }
+      html,
+      body {
+        min-height: 100%;
+      }
+      html {
+        background:
+          radial-gradient(circle at 0% 0%, #d8e9fb 0%, rgba(216, 233, 251, 0) 34%),
+          radial-gradient(circle at 92% 8%, #d9f0ff 0%, rgba(217, 240, 255, 0) 40%),
+          linear-gradient(180deg, var(--bg-layer) 0%, var(--bg) 100%);
+        background-color: var(--bg);
+      }
       body {
         margin: 0;
+        min-height: 100dvh;
         font-family: "Manrope", "Pretendard", "Segoe UI", sans-serif;
         color: var(--ink);
         background:
           radial-gradient(circle at 0% 0%, #d8e9fb 0%, rgba(216, 233, 251, 0) 34%),
           radial-gradient(circle at 92% 8%, #d9f0ff 0%, rgba(217, 240, 255, 0) 40%),
           linear-gradient(180deg, var(--bg-layer) 0%, var(--bg) 100%);
+        background-color: var(--bg);
       }
       .wrap {
         max-width: 1220px;
