@@ -29,17 +29,25 @@ interface AppReports {
   reports: ReportEntry[];
 }
 
+type PreviewTag = "heart" | "satisfaction" | "dissatisfaction";
+
 interface PreviewStateEntry {
   excluded?: boolean;
-  favorite?: boolean;
+  tags?: PreviewTag[];
+  updatedAt: string;
+}
+
+interface AppNoteEntry {
+  content: string;
   updatedAt: string;
 }
 
 interface PreviewStateFile {
-  version: 1;
+  version: 2;
   ownerAppId: string;
   updatedAt: string;
   reviews: Record<string, PreviewStateEntry>;
+  appNotes: Record<string, AppNoteEntry>;
 }
 
 const REPORT_FILE_EXTENSIONS = new Set([".html", ".md", ".json"]);
@@ -52,7 +60,10 @@ const PREVIEW_STATE_FILE_NAME = "preview-state.json";
 const PREVIEW_STATE_API_PREFIX = "/api/preview-state/";
 const PREVIEW_STATE_MAX_BODY_BYTES = 1_000_000;
 const PREVIEW_STATE_MAX_REVIEWS = 200_000;
+const PREVIEW_STATE_MAX_NOTES = 2_000;
+const PREVIEW_STATE_MAX_NOTE_LENGTH = 20_000;
 const APP_ICON_ROUTE_PREFIX = "/assets/app-icons/";
+const PREVIEW_TAG_SET = new Set<PreviewTag>(["heart", "satisfaction", "dissatisfaction"]);
 
 function toAbsolutePath(input: string): string {
   return path.resolve(process.cwd(), input);
@@ -203,13 +214,35 @@ function isSafeReviewId(reviewId: string): boolean {
   return /^[a-z0-9._:-]+$/i.test(reviewId) && reviewId.length <= 180;
 }
 
+function isSafeNoteAppKey(appKey: string): boolean {
+  return /^[a-z0-9._-]+$/i.test(appKey) && appKey.length <= 180;
+}
+
 function createDefaultPreviewState(ownerAppId: string): PreviewStateFile {
   return {
-    version: 1,
+    version: 2,
     ownerAppId,
     updatedAt: new Date().toISOString(),
-    reviews: {}
+    reviews: {},
+    appNotes: {}
   };
+}
+
+function normalizePreviewTags(value: unknown): PreviewTag[] {
+  const source = Array.isArray(value) ? value : [];
+  const ordered: PreviewTag[] = [];
+  const seen = new Set<PreviewTag>();
+
+  for (const item of source) {
+    const candidate = normalizeText(String(item ?? "")).toLowerCase() as PreviewTag;
+    if (!PREVIEW_TAG_SET.has(candidate) || seen.has(candidate)) {
+      continue;
+    }
+    seen.add(candidate);
+    ordered.push(candidate);
+  }
+
+  return ordered;
 }
 
 function normalizePreviewStateEntry(value: unknown): PreviewStateEntry | undefined {
@@ -219,15 +252,33 @@ function normalizePreviewStateEntry(value: unknown): PreviewStateEntry | undefin
 
   const row = value as Record<string, unknown>;
   const excluded = Boolean(row.excluded);
-  const favorite = Boolean(row.favorite);
+  const tags = normalizePreviewTags(row.tags);
 
-  if (!excluded && !favorite) {
+  if (!excluded && tags.length === 0) {
     return undefined;
   }
 
   return {
     excluded: excluded || undefined,
-    favorite: favorite || undefined,
+    tags: tags.length > 0 ? tags : undefined,
+    updatedAt: normalizeText(typeof row.updatedAt === "string" ? row.updatedAt : new Date().toISOString())
+  };
+}
+
+function normalizeAppNoteEntry(value: unknown): AppNoteEntry | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const row = value as Record<string, unknown>;
+  const contentSource = typeof row.content === "string" ? row.content : "";
+  const content = contentSource.replace(/\r\n?/g, "\n").replace(/\u0000/g, "").trim();
+  if (!content) {
+    return undefined;
+  }
+
+  return {
+    content: content.slice(0, PREVIEW_STATE_MAX_NOTE_LENGTH),
     updatedAt: normalizeText(typeof row.updatedAt === "string" ? row.updatedAt : new Date().toISOString())
   };
 }
@@ -241,7 +292,10 @@ function normalizePreviewState(ownerAppId: string, value: unknown): PreviewState
   const source = value as Record<string, unknown>;
   const rawReviews =
     source.reviews && typeof source.reviews === "object" ? (source.reviews as Record<string, unknown>) : {};
+  const rawAppNotes =
+    source.appNotes && typeof source.appNotes === "object" ? (source.appNotes as Record<string, unknown>) : {};
   const reviews: Record<string, PreviewStateEntry> = {};
+  const appNotes: Record<string, AppNoteEntry> = {};
   const pairs = Object.entries(rawReviews).slice(0, PREVIEW_STATE_MAX_REVIEWS);
 
   for (const [reviewIdRaw, reviewStateRaw] of pairs) {
@@ -258,11 +312,27 @@ function normalizePreviewState(ownerAppId: string, value: unknown): PreviewState
     reviews[reviewId] = normalized;
   }
 
+  const appNotePairs = Object.entries(rawAppNotes).slice(0, PREVIEW_STATE_MAX_NOTES);
+  for (const [appKeyRaw, appNoteRaw] of appNotePairs) {
+    const appKey = normalizeText(appKeyRaw);
+    if (!appKey || !isSafeNoteAppKey(appKey)) {
+      continue;
+    }
+
+    const normalized = normalizeAppNoteEntry(appNoteRaw);
+    if (!normalized) {
+      continue;
+    }
+
+    appNotes[appKey] = normalized;
+  }
+
   return {
-    version: 1,
+    version: 2,
     ownerAppId,
     updatedAt: normalizeText(typeof source.updatedAt === "string" ? source.updatedAt : new Date().toISOString()),
-    reviews
+    reviews,
+    appNotes
   };
 }
 

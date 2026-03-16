@@ -60,6 +60,7 @@ npm run report:analyze -- --my-app golden-horizon --include-self
 
 - `data/{myAppId}/reports/competitor-report.ko.md`
 - `data/{myAppId}/reports/competitor-report.ko.json`
+- Generated markdown title (H1) now follows `{myAppId} 리뷰 리포트`.
 
 ## `report:render-html`
 
@@ -67,16 +68,30 @@ Render actionable markdown report to interactive HTML.
 
 - `npm run report:render-html -- --my-app <owner> ...`
 - `node dist/renderReportHtml.js ...`
+- HTML document title (`<title>` and H1) is fixed to `{myAppId} 리뷰 리포트` (or `{myAppId} Review Report` for English reports).
 - Generated HTML top bar includes a `Home` button (`/`) at the top-left.
-- In top controls, `Show original text` appears only in `Reviews` tab, and `Expand evidence` appears only in `Reports` tab.
+- Filters are managed in a separate panel opened from the top bar `Filter` button.
+- On narrow screens, the filter panel opens as a bottom sheet.
+- On narrow screens, the notes panel also opens as a bottom sheet instead of a right drawer.
+- Top controls are tab-scoped: `Reviews` shows `Filter` and `Notes`, while `Reports` shows `Expand evidence`.
+- In `Reviews`, hashtag filter supports multi-select (`#❤️`, `#Satisfaction`, `#Dissatisfaction`), and `All tags` clears tag filters.
 - In `Reviews`, state filter is tri-state: `All` / `Active` / `Inactive` (default: `All`).
 - In `Reviews`, you can toggle `100+ chars` to focus on longer reviews.
+- `Reset filters` clears search/state/tag/length filters in one click.
+- `Reviews` tab supports pagination (default `100 items/page`, adjustable to `50/100/200`).
+- Pagination is applied to the current search/filter result set, and summary shows `visible on page / filtered total / overall total`.
 - The summary/stat block below the title also switches by tab, so each tab shows only relevant context.
-- Review cards include `❤️` (heart) and `Inactive/Active` actions.
+- Review cards include `#❤️ / #Satisfaction / #Dissatisfaction` hashtag toggles and `Inactive/Active`.
+- Hashtags can be edited only when the card is `Active`.
+- Top-right controls include a `Notes` button; in the right sidebar you can switch app tabs to manage app-level notes.
+- The notes sidebar shows the selected app name and store links (App Store / Google Play).
+- Notes are not auto-saved; use `Save` (or `Ctrl/Cmd + S`) to persist note changes.
 - Reviews view is hydrated from full review datasets (`data/{myAppId}/reviews-ko/*.json`, fallback `reviews/*.json`) per app:
   - preselected report quotes start as `Active`
   - non-selected reviews are included as `Inactive` by default for manual curation
-- In preview mode, card states are persisted to `data/{myAppId}/reports/preview-state.json`.
+- In preview mode, card states and app notes are persisted to `data/{myAppId}/reports/preview-state.json` (card state updates immediately; notes persist on explicit save).
+- `preview-state.json` now uses v2 schema only (`reviews.tags`, `reviews.excluded`, `appNotes`). Older `favorite`/`notes` fields are no longer used.
+- If `data/{myAppId}/icon.png` exists, HTML includes icon meta tags (`icon`, `og:image`, `twitter:image`) automatically.
 
 ### CLI Options
 

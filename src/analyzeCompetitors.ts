@@ -419,7 +419,7 @@ function analyzeCompetitor(payload: ReviewFilePayload, fileName: string, topQuot
 function buildMarkdownReport(report: AnalysisJsonReport): string {
   const lines: string[] = [];
 
-  lines.push("# 경쟁앱 리뷰 분석 리포트");
+  lines.push(`# ${report.ownerAppId} 리뷰 리포트`);
   lines.push("");
   lines.push(`- 생성 시각: ${report.generatedAt}`);
   lines.push(`- ownerAppId: ${report.ownerAppId}`);
