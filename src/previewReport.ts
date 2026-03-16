@@ -29,7 +29,7 @@ interface AppReports {
   reports: ReportEntry[];
 }
 
-type PreviewTag = "heart" | "satisfaction" | "dissatisfaction";
+type PreviewTag = "heart" | "satisfaction" | "dissatisfaction" | "requests";
 
 interface PreviewStateEntry {
   excluded?: boolean;
@@ -63,7 +63,7 @@ const PREVIEW_STATE_MAX_REVIEWS = 200_000;
 const PREVIEW_STATE_MAX_NOTES = 2_000;
 const PREVIEW_STATE_MAX_NOTE_LENGTH = 20_000;
 const APP_ICON_ROUTE_PREFIX = "/assets/app-icons/";
-const PREVIEW_TAG_SET = new Set<PreviewTag>(["heart", "satisfaction", "dissatisfaction"]);
+const PREVIEW_TAG_SET = new Set<PreviewTag>(["heart", "satisfaction", "dissatisfaction", "requests"]);
 
 function toAbsolutePath(input: string): string {
   return path.resolve(process.cwd(), input);
@@ -252,15 +252,16 @@ function normalizePreviewStateEntry(value: unknown): PreviewStateEntry | undefin
 
   const row = value as Record<string, unknown>;
   const excluded = Boolean(row.excluded);
+  const hasExplicitTags = Object.prototype.hasOwnProperty.call(row, "tags") && Array.isArray(row.tags);
   const tags = normalizePreviewTags(row.tags);
 
-  if (!excluded && tags.length === 0) {
+  if (!excluded && !hasExplicitTags) {
     return undefined;
   }
 
   return {
     excluded: excluded || undefined,
-    tags: tags.length > 0 ? tags : undefined,
+    tags: hasExplicitTags ? tags : undefined,
     updatedAt: normalizeText(typeof row.updatedAt === "string" ? row.updatedAt : new Date().toISOString())
   };
 }

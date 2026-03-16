@@ -17,6 +17,7 @@ interface CliArgs {
 }
 
 type CategoryKey = "satisfaction" | "dissatisfaction" | "requests";
+type ReviewTag = "heart" | "satisfaction" | "dissatisfaction" | "requests";
 type Priority = "must" | "should" | "could";
 type Impact = "high" | "medium" | "low";
 type Effort = "high" | "medium" | "low";
@@ -27,6 +28,7 @@ interface QuoteItem {
   meta: string;
   kr: string;
   org: string;
+  tags?: ReviewTag[];
 }
 
 interface AppSection {
@@ -344,6 +346,52 @@ function parseReviewCount(line: string): string | undefined {
     }
   }
   return undefined;
+}
+
+function defaultTagsForCategory(category: CategoryKey): ReviewTag[] {
+  if (category === "satisfaction") {
+    return ["satisfaction"];
+  }
+  if (category === "dissatisfaction") {
+    return ["dissatisfaction"];
+  }
+  return ["requests"];
+}
+
+function normalizeReviewTags(tags: unknown): ReviewTag[] {
+  const source = Array.isArray(tags) ? tags : [];
+  const seen = new Set<ReviewTag>();
+  const ordered: ReviewTag[] = [];
+
+  for (const tag of source) {
+    const normalized = normalizeText(String(tag ?? "")).toLowerCase();
+    if (
+      normalized !== "heart" &&
+      normalized !== "satisfaction" &&
+      normalized !== "dissatisfaction" &&
+      normalized !== "requests"
+    ) {
+      continue;
+    }
+
+    const typed = normalized as ReviewTag;
+    if (seen.has(typed)) {
+      continue;
+    }
+
+    seen.add(typed);
+    ordered.push(typed);
+  }
+
+  return ordered;
+}
+
+function resolveQuoteTags(quote: QuoteItem, fallbackCategory: CategoryKey): ReviewTag[] {
+  const normalized = normalizeReviewTags(quote.tags);
+  if (normalized.length > 0) {
+    return normalized;
+  }
+  return defaultTagsForCategory(fallbackCategory);
 }
 
 function hashToken(input: string): string {
@@ -866,7 +914,8 @@ function parseMarkdown(input: string): { title: string; metadata: string[]; apps
       }),
       meta: normalizeText(currentQuote.meta),
       kr,
-      org
+      org,
+      tags: defaultTagsForCategory(currentCategory)
     });
 
     currentQuote = undefined;
@@ -950,12 +999,12 @@ function parseMarkdown(input: string): { title: string; metadata: string[]; apps
 
 function renderCategoryTitle(key: CategoryKey): string {
   if (key === "satisfaction") {
-    return "만족 (구체 사례)";
+    return "#만족";
   }
   if (key === "dissatisfaction") {
-    return "불만족 (구체 문제)";
+    return "#불만족";
   }
-  return "요청 기능 / 개선 제안";
+  return "#요청기능";
 }
 
 function priorityOrder(priority: Priority): number {
@@ -1038,11 +1087,14 @@ function buildBacklog(apps: AppSection[], reviewPools: ReviewPools): AppBacklog[
           }
           bucket.evidenceReviewIds.add(scopedReviewId);
 
-          if (categoryKey === "requests") {
+          const quoteTags = resolveQuoteTags(quote, categoryKey);
+          if (quoteTags.includes("requests")) {
             bucket.reqCount += 1;
-          } else if (categoryKey === "dissatisfaction") {
+          }
+          if (quoteTags.includes("dissatisfaction")) {
             bucket.negCount += 1;
-          } else {
+          }
+          if (quoteTags.includes("satisfaction")) {
             bucket.posCount += 1;
           }
 
@@ -1207,6 +1259,7 @@ function renderHtml(
               <button class=\"tag-toggle tag-heart\" type=\"button\" data-tag=\"heart\" aria-label=\"❤️ 태그\" title=\"❤️ 태그\">#❤️</button>
               <button class=\"tag-toggle tag-satisfaction\" type=\"button\" data-tag=\"satisfaction\" aria-label=\"만족 태그\" title=\"만족 태그\">#만족</button>
               <button class=\"tag-toggle tag-dissatisfaction\" type=\"button\" data-tag=\"dissatisfaction\" aria-label=\"불만족 태그\" title=\"불만족 태그\">#불만족</button>
+              <button class=\"tag-toggle tag-requests\" type=\"button\" data-tag=\"requests\" aria-label=\"요청 기능 태그\" title=\"요청 기능 태그\">#요청기능</button>
             </div>
             <button class=\"exclude-toggle\" type=\"button\">활성</button>
           </div>
@@ -1240,38 +1293,35 @@ function renderHtml(
         links
       });
       const seededReviewIds = new Set<string>();
-      const categoryBlocks = (Object.keys(app.categories) as CategoryKey[])
-        .map((categoryKey) => {
+      const selectedCards = (Object.keys(app.categories) as CategoryKey[])
+        .flatMap((categoryKey) => {
           const items = app.categories[categoryKey];
           const categoryTitle = renderCategoryTitle(categoryKey);
-          const cards =
-            items.length === 0
-              ? `<p class=\"empty\">해당 항목 없음</p>`
-              : items
-                  .map((item) => {
-                    const matchedReviewId = findPoolReviewIdForQuote(item, appPool);
-                    const reviewId = normalizeText(matchedReviewId) || normalizeText(item.reviewId);
-                    if (reviewId) {
-                      seededReviewIds.add(reviewId);
-                    }
+          return items.map((item) => {
+            const matchedReviewId = findPoolReviewIdForQuote(item, appPool);
+            const reviewId = normalizeText(matchedReviewId) || normalizeText(item.reviewId);
+            if (reviewId) {
+              seededReviewIds.add(reviewId);
+            }
 
-                    return renderQuoteCard({
-                      appTitle: app.title,
-                      appKey,
-                      categoryTitle,
-                      reviewId: reviewId || item.reviewId,
-                      meta: item.meta,
-                      kr: item.kr,
-                      org: item.org,
-                      defaultExcluded: false,
-                      defaultTags: []
-                    });
-                  })
-                  .join("\n");
-
-          return renderCategorySection(categoryTitle, cards);
+            return renderQuoteCard({
+              appTitle: app.title,
+              appKey,
+              categoryTitle,
+              reviewId: reviewId || item.reviewId,
+              meta: item.meta,
+              kr: item.kr,
+              org: item.org,
+              defaultExcluded: false,
+              defaultTags: resolveQuoteTags(item, categoryKey)
+            });
+          });
         })
         .join("\n");
+      const selectedReviewsBlock = renderCategorySection(
+        "선별 리뷰 (해시태그 기반)",
+        selectedCards || `<p class=\"empty\">해당 항목 없음</p>`
+      );
 
       const poolReviews = appPool?.reviews ?? [];
       const unselectedReviews = poolReviews.filter((review) => !seededReviewIds.has(review.reviewId));
@@ -1318,7 +1368,7 @@ function renderHtml(
             </span>
           </summary>
           <div class=\"app-body\">
-            ${categoryBlocks}
+            ${selectedReviewsBlock}
             ${fullPoolBlock}
           </div>
         </details>
@@ -1544,8 +1594,8 @@ function renderHtml(
   const rawSummaryHtml = `
     <section class=\"review-summary\">
       <p><strong>앱 수 ${apps.length}</strong></p>
-      <p><strong>해시태그 정의:</strong> #만족 · #불만족 · #❤️</p>
-      <p>활성 리뷰를 성격별로 분류하고 필터링할 때 사용</p>
+      <p><strong>해시태그 정의:</strong> #요청기능 · #불만족 · #만족 · #❤️</p>
+      <p>활성 리뷰를 해시태그 기준으로 분류하고 필터링할 때 사용</p>
       <p><strong>활성 상태 정의:</strong> 리포트 반영 후보 여부</p>
       <p>추가 검토/반영 대상이면 활성, 보류·중복이면 비활성</p>
     </section>
@@ -1553,7 +1603,7 @@ function renderHtml(
   const backlogSummaryHtml = `
     <section class=\"backlog-summary\">
       <p><strong>백로그 항목 ${totalBacklogItems}</strong> · MUST ${totalMustItems} · SHOULD ${totalShouldItems} · COULD ${totalCouldItems}</p>
-      <p>우선순위 규칙: 요청×3 + 불만×2 + 만족×1</p>
+      <p>우선순위 규칙(해시태그 기준): 요청×3 + 불만×2 + 만족×1</p>
     </section>
   `;
   const ownerAppIconHref = ownerAppId ? `/assets/app-icons/${encodeURIComponent(ownerAppId)}.png` : "";
@@ -2124,6 +2174,9 @@ function renderHtml(
       .quote-card.has-dissatisfaction-tag {
         border-left: 4px solid #dc2626;
       }
+      .quote-card.has-requests-tag {
+        border-left: 4px solid #2563eb;
+      }
       .quote-card.is-excluded {
         opacity: 0.62;
       }
@@ -2271,6 +2324,11 @@ function renderHtml(
         border-color: #dc2626;
         color: #991b1b;
         background: #fee2e2;
+      }
+      .tag-requests.is-active {
+        border-color: #2563eb;
+        color: #1e3a8a;
+        background: #dbeafe;
       }
       .tag-toggle:disabled {
         opacity: 0.55;
@@ -3151,6 +3209,7 @@ function renderHtml(
               <button type=\"button\" class=\"tag-filter-btn\" data-tag-filter=\"heart\">#❤️</button>
               <button type=\"button\" class=\"tag-filter-btn\" data-tag-filter=\"satisfaction\">#만족</button>
               <button type=\"button\" class=\"tag-filter-btn\" data-tag-filter=\"dissatisfaction\">#불만족</button>
+              <button type=\"button\" class=\"tag-filter-btn\" data-tag-filter=\"requests\">#요청기능</button>
             </div>
           </div>
           <div class=\"filter-field\">
@@ -3255,8 +3314,8 @@ function renderHtml(
       let activeNoteAppKey = '';
       const EXCLUDE_FILTER_MODES = new Set(['all', 'active', 'excluded']);
       const PRIORITY_FILTER_MODES = new Set(['all', 'must', 'should', 'could']);
-      const REVIEW_TAGS = ['heart', 'satisfaction', 'dissatisfaction'];
-      const TAG_FILTER_MODES = new Set(['all', 'heart', 'satisfaction', 'dissatisfaction']);
+      const REVIEW_TAGS = ['heart', 'satisfaction', 'dissatisfaction', 'requests'];
+      const TAG_FILTER_MODES = new Set(['all', 'heart', 'satisfaction', 'dissatisfaction', 'requests']);
       const TAB_QUERY_KEY = 'tab';
       const SEARCH_QUERY_KEY = 'q';
       const TAGS_QUERY_KEY = 'tags';
@@ -3270,7 +3329,8 @@ function renderHtml(
       const TAG_LABELS = {
         heart: '❤️',
         satisfaction: '만족',
-        dissatisfaction: '불만족'
+        dissatisfaction: '불만족',
+        requests: '요청기능'
       };
 
       function escapeInlineHtml(input) {
@@ -3503,10 +3563,11 @@ function renderHtml(
           return { tags: defaultTags, excluded: defaultExcluded };
         }
 
-        const tags = normalizeTagList(Array.isArray(row.tags) ? row.tags : []);
+        const hasExplicitTags = Object.prototype.hasOwnProperty.call(row, 'tags') && Array.isArray(row.tags);
+        const tags = hasExplicitTags ? normalizeTagList(row.tags) : defaultTags;
 
         return {
-          tags: tags.length ? tags : defaultTags,
+          tags,
           excluded: Boolean(row.excluded)
         };
       }
@@ -3542,6 +3603,7 @@ function renderHtml(
         card.classList.toggle('has-heart-tag', state.tags.includes('heart'));
         card.classList.toggle('has-satisfaction-tag', state.tags.includes('satisfaction'));
         card.classList.toggle('has-dissatisfaction-tag', state.tags.includes('dissatisfaction'));
+        card.classList.toggle('has-requests-tag', state.tags.includes('requests'));
         card.classList.toggle('is-excluded', state.excluded);
 
         const tagButtons = Array.from(card.querySelectorAll('.tag-toggle[data-tag]'));
@@ -4260,14 +4322,15 @@ function renderHtml(
               return;
             }
 
+            const hasExplicitTags = Object.prototype.hasOwnProperty.call(row, 'tags') && Array.isArray(row.tags);
             const tags = normalizeTagList(Array.isArray(row.tags) ? row.tags : []);
             const excluded = Boolean(row.excluded);
-            if (!excluded && tags.length === 0) {
+            if (!excluded && !hasExplicitTags) {
               return;
             }
 
             reviewState[reviewId] = {
-              tags: normalizeTagList(tags),
+              tags: hasExplicitTags ? tags : undefined,
               excluded,
               updatedAt: typeof row.updatedAt === 'string' ? row.updatedAt : new Date().toISOString()
             };

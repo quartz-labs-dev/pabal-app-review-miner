@@ -94,7 +94,7 @@ Render actionable markdown report to interactive HTML.
 - `Evidence count` is calculated as the number of unique reviews (`reviewId`-based dedupe), not raw quote line count.
 - In expanded evidence rows, the Korean sentence is shown by default (without `KR:` prefix), and `See details` reveals the review ID, metadata, and original text.
 - Expanded evidence rows render all matched evidence reviews for that backlog row (not a sampled subset).
-- In `Reviews`, hashtag filter supports multi-select (`#❤️`, `#Satisfaction`, `#Dissatisfaction`), and `All tags` clears tag filters.
+- In `Reviews`, hashtag filter supports multi-select (`#❤️`, `#Requests`, `#Satisfaction`, `#Dissatisfaction`), and `All tags` clears tag filters.
 - In `Reviews`, state filter is tri-state: `All` / `Active` / `Inactive` (default: `All`).
 - In `Reviews`, you can toggle `100+ chars` to focus on longer reviews.
 - `Reset filters` clears search/state/tag/length filters in one click.
@@ -104,9 +104,10 @@ Render actionable markdown report to interactive HTML.
 - Pagination is applied to the current search/filter result set, and the pagination area shows `filtered reviews / total reviews`.
 - Each app row in the `Reviews` tab also shows `filtered reviews / total reviews` on the right.
 - The context block below the title switches by tab, so each tab shows only relevant context.
-- In the `Reports` tab context, a compact text summary is shown (backlog counts and priority rule) without stat/meta cards.
+- In the `Reports` tab context, a compact text summary is shown (backlog counts and hashtag-based priority rule) without stat/meta cards.
 - In the `Reviews` tab context block, a plain text summary is shown (app count, hashtag definition, active-state definition) without cards.
-- Review cards include `#❤️ / #Satisfaction / #Dissatisfaction` hashtag toggles and `Inactive/Active`.
+- Review cards include `#❤️ / #Requests / #Satisfaction / #Dissatisfaction` hashtag toggles and `Inactive/Active`.
+- Curated quotes are shown in one `Selected Reviews (Hashtag-based)` section instead of separate category sections.
 - In review cards, `Original` text open/close uses a smooth expand/collapse animation.
 - Hashtags can be edited only when the card is `Active`.
 - Top-right controls include a `Notes` button; in the right sidebar you can switch the app selector to manage app-level notes.
