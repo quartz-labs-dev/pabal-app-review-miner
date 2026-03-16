@@ -23,7 +23,7 @@ Output structure:
 ```bash
 npm install
 npm run build
-npm run setup:config
+npm run setup:icon
 npm run review:collect -- --my-app golden-horizon --apps apps.json --limit 200
 npm run review:collect -- --my-app golden-horizon --apps apps.json --limit 200 --append-existing
 npm run review:collect -- --my-app golden-horizon --auto-top 5 --limit 200
@@ -35,6 +35,8 @@ npm run report:analyze -- --my-app golden-horizon
 npm run report:render-html -- --my-app golden-horizon
 npm run report:preview -- --my-app golden-horizon --port 4173
 ```
+
+`setup:icon` skips manual bootstrap when `pabal-store-api-mcp` is already configured.
 
 ## Setup
 
@@ -55,10 +57,21 @@ This project resolves `myAppId` from:
 
 - `~/.config/pabal-mcp/registered-apps.json`
 
-Option A: Automatic template (recommended)
+Recommended: Reuse existing `pabal-store-api-mcp` setup
 
 ```bash
-npm run setup:config
+npm run setup:icon
+```
+
+If these files already exist and are valid, the command skips manual bootstrap:
+
+- `~/.config/pabal-mcp/config.json`
+- `~/.config/pabal-mcp/registered-apps.json`
+
+Fallback: local bootstrap (same behavior as before)
+
+```bash
+npm run setup:icon
 ```
 
 This command:
@@ -66,8 +79,9 @@ This command:
 - applies `chmod 700` (best effort)
 - creates `registered-apps.json` with a starter template if missing
 - locks file permissions to `600` for files in `~/.config/pabal-mcp`
+- if `~/.config/pabal-mcp/config.json` has `dataDir` and pabal-web exists, syncs product icons (`public/products/*/icons/icon.png`, with `public/products/*/icon.png` fallback) into this project at `data/{appId}/icon.png` for dashboard and report screens
 
-Option B: Manual shell commands
+Manual quick add (if not set up yet)
 
 ```bash
 mkdir -p ~/.config/pabal-mcp
@@ -96,6 +110,10 @@ JSON
 open ~/.config/pabal-mcp
 chmod 600 ~/.config/pabal-mcp/*
 ```
+
+### 🔐 Configure Credentials
+
+`pabal-resource-mcp` uses the configuration file from `pabal-store-api-mcp`. For detailed credential setup instructions (App Store Connect API keys, Google Play service accounts, etc.), see the [pabal-store-api-mcp README](https://pabal.quartz.best/docs/pabal-store-api-mcp/README).
 
 ### 3. JSON Rules
 

@@ -100,6 +100,8 @@ npm run report:render-html -- --my-app aurora-eos
 Run localhost preview server.
 
 - Dashboard mode: home lists app ids and generated report files (`.html`, `.md`, `.json`)
+- Dashboard mode can display app icons when `data/{appId}/icon.png` exists
+- Report page header also uses `data/{appId}/icon.png`; when missing, UI falls back to `appId` text
 - Single-file mode: serve one HTML file with `--file`
 - Serves preview state API for raw-review card management:
   - `GET /api/preview-state/:appId`

@@ -23,7 +23,7 @@
 ```bash
 npm install
 npm run build
-npm run setup:config
+npm run setup:icon
 npm run review:collect -- --my-app golden-horizon --apps apps.json --limit 200
 npm run review:collect -- --my-app golden-horizon --apps apps.json --limit 200 --append-existing
 npm run review:collect -- --my-app golden-horizon --auto-top 5 --limit 200
@@ -35,6 +35,8 @@ npm run report:analyze -- --my-app golden-horizon
 npm run report:render-html -- --my-app golden-horizon
 npm run report:preview -- --my-app golden-horizon --port 4173
 ```
+
+`pabal-store-api-mcp`가 이미 설정되어 있으면 `setup:icon`은 수동 부트스트랩을 건너뜁니다.
 
 ## 셋업
 
@@ -55,10 +57,21 @@ npm run build
 
 - `~/.config/pabal-mcp/registered-apps.json`
 
-방법 A: 자동 템플릿 생성 (권장)
+권장: 기존 `pabal-store-api-mcp` 설정 재사용
 
 ```bash
-npm run setup:config
+npm run setup:icon
+```
+
+아래 파일이 이미 존재하고 유효하면, 이 명령은 수동 부트스트랩을 건너뜁니다.
+
+- `~/.config/pabal-mcp/config.json`
+- `~/.config/pabal-mcp/registered-apps.json`
+
+대체 경로: 로컬 부트스트랩(기존 동작 유지)
+
+```bash
+npm run setup:icon
 ```
 
 이 명령이 수행하는 작업:
@@ -66,8 +79,9 @@ npm run setup:config
 - `chmod 700` 적용 (환경에 따라 실패해도 계속 진행)
 - `registered-apps.json`이 없으면 기본 템플릿 생성
 - `~/.config/pabal-mcp` 폴더 내 파일 권한을 `600`으로 잠금
+- `~/.config/pabal-mcp/config.json`에 `dataDir`가 있고 pabal-web이 존재하면 상품 아이콘(`public/products/*/icons/icon.png`, 대체 경로 `public/products/*/icon.png`)을 이 프로젝트의 `data/{appId}/icon.png`로 동기화해 대시보드/리포트 화면 아이콘으로 사용
 
-방법 B: 수동 명령으로 생성
+미설정 시 수동으로 빠르게 추가
 
 ```bash
 mkdir -p ~/.config/pabal-mcp
@@ -96,6 +110,10 @@ JSON
 open ~/.config/pabal-mcp
 chmod 600 ~/.config/pabal-mcp/*
 ```
+
+### 🔐 자격 증명 설정
+
+`pabal-resource-mcp`는 `pabal-store-api-mcp`의 설정 파일을 사용합니다. App Store Connect API 키, Google Play 서비스 계정 등 상세 자격 증명 설정은 [pabal-store-api-mcp README](https://pabal.quartz.best/docs/pabal-store-api-mcp/README)를 참고하세요.
 
 ### 3. JSON 규칙
 

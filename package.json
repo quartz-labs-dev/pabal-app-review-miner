@@ -16,7 +16,7 @@
     "report:analyze": "node dist/analyzeCompetitors.js",
     "report:render-html": "node dist/renderReportHtml.js",
     "report:preview": "node dist/previewReport.js",
-    "setup:config": "node scripts/setup-config.mjs",
+    "setup:icon": "node scripts/setup-icon.mjs",
     "start": "npm run report:preview --"
   },
   "keywords": [

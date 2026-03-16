@@ -25,6 +25,7 @@ interface ReportEntry {
 
 interface AppReports {
   appId: string;
+  iconHref?: string;
   reports: ReportEntry[];
 }
 
@@ -51,6 +52,7 @@ const PREVIEW_STATE_FILE_NAME = "preview-state.json";
 const PREVIEW_STATE_API_PREFIX = "/api/preview-state/";
 const PREVIEW_STATE_MAX_BODY_BYTES = 1_000_000;
 const PREVIEW_STATE_MAX_REVIEWS = 200_000;
+const APP_ICON_ROUTE_PREFIX = "/assets/app-icons/";
 
 function toAbsolutePath(input: string): string {
   return path.resolve(process.cwd(), input);
@@ -384,7 +386,6 @@ async function loadAppReports(dataRoot: string, filterAppId?: string): Promise<A
   const filtered = entries.filter((entry) => entry.isDirectory());
 
   const appReports: AppReports[] = [];
-
   for (const entry of filtered) {
     const appId = entry.name;
     if (filterAppId && appId !== filterAppId) {
@@ -409,8 +410,10 @@ async function loadAppReports(dataRoot: string, filterAppId?: string): Promise<A
       continue;
     }
 
+    const iconPath = resolveDashboardIconPath(dataRoot, appId);
     appReports.push({
       appId,
+      iconHref: iconPath ? `${APP_ICON_ROUTE_PREFIX}${encodeURIComponent(appId)}.png` : undefined,
       reports: files.map((fileName) => ({
         fileName,
         href: `/r/${encodeURIComponent(appId)}/${encodeURIComponent(fileName)}`
@@ -439,11 +442,75 @@ function pickPrimaryReport(reports: ReportEntry[]): ReportEntry {
   return primaryHtml ?? reports[0];
 }
 
+function resolveDashboardIconPath(dataRoot: string, appId: string): string | undefined {
+  const inAppIcon = path.resolve(dataRoot, appId, "icon.png");
+  if (existsSync(inAppIcon)) {
+    return inAppIcon;
+  }
+  return undefined;
+}
+
+function handleAppIconRequest(
+  pathname: string,
+  res: ServerResponse,
+  dataRoot: string,
+  filterAppId?: string
+): boolean {
+  if (!pathname.startsWith(APP_ICON_ROUTE_PREFIX)) {
+    return false;
+  }
+
+  const tail = pathname.slice(APP_ICON_ROUTE_PREFIX.length);
+  if (!tail.endsWith(".png")) {
+    sendNotFound(res);
+    return true;
+  }
+
+  const encodedAppId = tail.slice(0, -4);
+  if (!encodedAppId || encodedAppId.includes("/")) {
+    sendNotFound(res);
+    return true;
+  }
+
+  let decodedAppId = encodedAppId;
+  try {
+    decodedAppId = decodeURIComponent(encodedAppId);
+  } catch {
+    sendNotFound(res);
+    return true;
+  }
+
+  const appId = normalizeText(decodedAppId);
+  if (!appId || !isSafeAppId(appId)) {
+    sendNotFound(res);
+    return true;
+  }
+
+  if (filterAppId && appId !== filterAppId) {
+    sendNotFound(res);
+    return true;
+  }
+
+  const iconTarget = resolveDashboardIconPath(dataRoot, appId);
+  if (!iconTarget) {
+    sendNotFound(res);
+    return true;
+  }
+
+  serveFile(res, iconTarget);
+  return true;
+}
+
 function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
   const cards = apps
     .map((app) => {
       const primaryReport = pickPrimaryReport(app.reports);
       const referenceReports = app.reports.filter((report) => report !== primaryReport);
+      const iconBlock = app.iconHref
+        ? `<img class=\"app-icon\" src=\"${escapeHtml(app.iconHref)}\" alt=\"${escapeHtml(
+            app.appId
+          )} icon\" loading=\"lazy\" decoding=\"async\" />`
+        : "";
 
       const referenceLinks = referenceReports
         .map((report) => {
@@ -466,7 +533,10 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
         <section class=\"card searchable\" data-search=\"${escapeHtml(
           `${app.appId} ${app.reports.map((x) => x.fileName).join(" ")}`
         ).toLowerCase()}\">
-          <h2>${escapeHtml(app.appId)}</h2>
+          <div class=\"card-head\">
+            ${iconBlock}
+            <h2>${escapeHtml(app.appId)}</h2>
+          </div>
           <a class=\"file-link file-link-main\" href=\"${escapeHtml(primaryReport.href)}\">
             <span class=\"main-link-text\">
               <span class=\"main-link-title\">View Report</span>
@@ -549,8 +619,25 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
         padding: 12px;
       }
       .card h2 {
-        margin: 0 0 10px;
+        margin: 0;
         font-size: 1rem;
+        line-height: 1.2;
+        word-break: break-word;
+      }
+      .card-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      .app-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        object-fit: cover;
+        border: 1px solid var(--line);
+        flex: 0 0 auto;
+        background: #f8fafc;
       }
       .links {
         display: grid;
@@ -662,6 +749,10 @@ function createSingleFileHandler(baseDir: string, indexPath: string, dataRoot: s
       return;
     }
 
+    if (handleAppIconRequest(pathname, res, dataRoot, filterAppId)) {
+      return;
+    }
+
     if (pathname === "/") {
       serveFile(res, indexPath);
       return;
@@ -689,6 +780,10 @@ function createDashboardHandler(dataRoot: string, filterAppId?: string) {
     if (pathname === "/") {
       const apps = await loadAppReports(dataRoot, filterAppId);
       sendHtml(res, renderHomeHtml(apps, filterAppId));
+      return;
+    }
+
+    if (handleAppIconRequest(pathname, res, dataRoot, filterAppId)) {
       return;
     }
 

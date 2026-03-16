@@ -21,7 +21,7 @@ Output structure:
 ```bash
 npm install
 npm run build
-npm run setup:config
+npm run setup:icon
 npm run review:collect -- --my-app golden-horizon --apps apps.json --limit 200
 npm run review:collect -- --my-app golden-horizon --apps apps.json --limit 200 --append-existing
 
@@ -52,6 +52,9 @@ npm run report:preview -- --my-app golden-horizon --port 4173
 # or start dashboard home (all apps) and click each generated report file
 npm run report:preview -- --port 4173
 ```
+
+`setup:icon` skips manual bootstrap when `pabal-store-api-mcp` is already configured.
+If `~/.config/pabal-mcp/config.json` includes `dataDir` and pabal-web exists, it also syncs product icons (`public/products/*/icons/icon.png`, with `public/products/*/icon.png` as fallback) to `data/{appId}/icon.png` for dashboard and report screens.
 
 ## Documentation
 

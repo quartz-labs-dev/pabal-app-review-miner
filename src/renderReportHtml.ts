@@ -1269,6 +1269,16 @@ function renderHtml(
     "테마 키워드 매칭 기반으로 실행 백로그를 구성"
   ];
   const backlogMetadataHtml = backlogMetaLines.map((line) => `<li>${escapeHtml(line)}</li>`).join("\n");
+  const ownerAppIconHref = ownerAppId ? `/assets/app-icons/${encodeURIComponent(ownerAppId)}.png` : "";
+  const ownerAppIdentityHtml = ownerAppId
+    ? `<div class=\"owner-app\" aria-label=\"Owner app\">
+          <img class=\"owner-app-icon\" src=\"${escapeHtml(ownerAppIconHref)}\" alt=\"${escapeHtml(
+            ownerAppId
+          )} icon\" loading=\"lazy\" decoding=\"async\"
+            onerror=\"this.style.display='none';if(this.nextElementSibling){this.nextElementSibling.style.display='inline-flex';}\" />
+          <span class=\"owner-app-fallback\">${escapeHtml(ownerAppId)}</span>
+        </div>`
+    : "";
 
   return `<!doctype html>
 <html lang=\"ko\">
@@ -1347,6 +1357,32 @@ function renderHtml(
         display: inline-flex;
         align-items: center;
         justify-content: center;
+        white-space: nowrap;
+      }
+      .owner-app {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+      .owner-app-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        object-fit: cover;
+        border: 1px solid var(--line);
+        background: #ffffff;
+        flex: 0 0 auto;
+      }
+      .owner-app-fallback {
+        display: none;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 2px 9px;
+        font-size: 12px;
+        color: var(--sub);
+        background: var(--panel);
         white-space: nowrap;
       }
       .tabs {
@@ -1763,6 +1799,7 @@ function renderHtml(
       <div class=\"top-inner\">
         <div class=\"top-left\">
           <a class=\"home-link\" href=\"/\">홈</a>
+          ${ownerAppIdentityHtml}
           <div class=\"tabs\">
             <button id=\"tabRaw\" class=\"tab-btn active\" type=\"button\">Raw 리뷰</button>
             <button id=\"tabBacklog\" class=\"tab-btn\" type=\"button\">실행 백로그</button>

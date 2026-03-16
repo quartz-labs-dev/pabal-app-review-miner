@@ -100,6 +100,8 @@ npm run report:render-html -- --my-app aurora-eos
 localhost 프리뷰 서버를 실행합니다.
 
 - 대시보드 모드: 앱 목록 + 생성된 리포트 파일(`.html`, `.md`, `.json`) 표시
+- 대시보드 모드에서 `data/{appId}/icon.png`가 있으면 앱 아이콘 표시
+- 리포트 화면 상단도 `data/{appId}/icon.png`를 사용하며, 아이콘이 없으면 `appId` 텍스트로 fallback
 - 단일 파일 모드: `--file`로 HTML 1개 서빙
 - Raw 리뷰 카드 상태 관리를 위한 API를 제공합니다.
   - `GET /api/preview-state/:appId`
