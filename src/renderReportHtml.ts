@@ -2731,7 +2731,7 @@ function renderHtml(
       .evidence-row.open .evidence-panel {
         padding: 12px;
         border-top-color: var(--line);
-        max-height: 3200px;
+        max-height: 999999px;
         opacity: 1;
         transform: translateY(0);
       }
@@ -2768,7 +2768,7 @@ function renderHtml(
       }
       .evidence-detail.open {
         margin-top: 6px;
-        max-height: 400px;
+        max-height: 99999px;
         opacity: 1;
         transform: translateY(0);
       }
