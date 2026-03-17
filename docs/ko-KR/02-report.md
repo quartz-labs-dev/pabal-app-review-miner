@@ -30,43 +30,14 @@ npm run report:translate -- --my-app golden-horizon
 - `data/{myAppId}/reviews-ko/{competitor}.json`
 - `data/{myAppId}/reviews-ko/.translation-cache.json`
 
-## `report:analyze`
-
-번역 리뷰를 기반으로 경쟁앱 인사이트 리포트를 생성합니다.
-
-- `npm run report:analyze -- --my-app <owner> ...`
-- `node dist/analyzeCompetitors.js ...`
-
-### CLI 옵션
-
-- `--my-app` (필수)
-- `--registered-apps-path`
-- `--input-dir` (기본값: `data/{myAppId}/reviews-ko`, 없으면 `reviews/` 폴백)
-- `--output-dir` (기본값: `data/{myAppId}/reports`)
-- `--include-self` (기본값 `false`)
-- `--top-quotes` (기본값 `3`)
-- `--output text|json`
-
-### 예시
-
-```bash
-npm run report:analyze -- --my-app golden-horizon
-npm run report:analyze -- --my-app golden-horizon --include-self
-```
-
-### 출력
-
-- `data/{myAppId}/reports/competitor-report.ko.md`
-- `data/{myAppId}/reports/competitor-report.ko.json`
-- 생성되는 마크다운 제목(H1)은 `{myAppId} 리뷰 리포트` 형식입니다.
-
 ## `report:render-html`
 
-액셔너블 마크다운 리포트를 인터랙티브 HTML로 변환합니다.
+액셔너블 마크다운 리포트를 공용 뷰어용 bundle JSON으로 변환합니다.
 
 - `npm run report:render-html -- --my-app <owner> ...`
 - `npm run report:render-html -- --all`
 - `node dist/renderReportHtml.js ...`
+- 기본 출력은 JSON bundle만 생성합니다. 앱별 HTML 파일은 옵션(`--with-html`)으로만 생성합니다.
 - HTML 문서 제목(H1/`<title>`)은 `{myAppId} 리뷰 리포트`(영문 리포트는 `{myAppId} Review Report`) 형식으로 고정됩니다.
 - 생성되는 HTML 상단 왼쪽에는 홈으로 이동하는 `Home` 버튼(`/`)이 포함됩니다.
 - 필터는 상단 `필터` 버튼으로 여는 별도 패널에서 관리합니다.
@@ -91,7 +62,8 @@ npm run report:analyze -- --my-app golden-horizon --include-self
 - `리포트` 테이블에는 별도 `근거` 컬럼이 없으며, `근거 수` 옆 화살표 버튼으로 근거 행을 펼치고/접습니다.
 - `근거 수`는 원문 인용 라인 수가 아니라, `reviewId` 기준으로 중복 제거한 고유 리뷰 수로 계산됩니다.
 - 근거 행을 펼치면 한국어 문장만 기본 표시되며(`KR:` 접두사 없음), `자세히보기`에서 리뷰 ID/메타/원문을 확인할 수 있습니다.
-- 근거 행을 펼치면 해당 백로그 항목에 매칭된 근거 리뷰를 샘플링 없이 전부 렌더합니다.
+- 근거 행을 펼치면 우선순위가 높은 근거 리뷰만 렌더합니다(백로그 항목당 최대 8개).
+- 백로그 테마는 고정 하드코딩 목록이 아니라, 앱별 리뷰 텍스트를 기반으로 동적으로 추출됩니다(토큰 빈도 기반 휴리스틱).
 - `리뷰`에서는 해시태그 필터를 `#❤️ / #요청기능 / #만족 / #불만족` 다중 선택할 수 있고, `태그 전체`로 초기화할 수 있습니다.
 - `리뷰`에서는 활성 상태 필터를 `전체 / 활성 / 비활성`으로 전환할 수 있습니다(기본값 `전체`).
 - `리뷰`에서는 `100자 이상` 토글로 긴 리뷰만 빠르게 볼 수 있습니다.
@@ -116,17 +88,20 @@ npm run report:analyze -- --my-app golden-horizon --include-self
   - 리포트 선별 리뷰는 기본 `활성`
   - 미선별 리뷰는 기본 `비활성` 상태로 포함되어 수동 큐레이션 가능
 - preview 모드에서는 카드 상태와 앱 노트가 `data/{myAppId}/reports/preview-state.json`에 저장됩니다(카드 상태는 즉시 반영, 노트는 저장 버튼으로 반영).
+- `preview-state.json`은 리뷰 카드의 전체 상태(full-state)를 저장합니다(diff-only override 아님).
 - `preview-state.json`은 v2 스키마(`reviews.tags`, `reviews.excluded`, `appNotes`)만 사용합니다. 기존 `favorite`/`notes` 필드는 더 이상 사용하지 않습니다.
 - `data/{myAppId}/icon.png`가 존재하면 HTML에 아이콘 메타 태그(`icon`, `og:image`, `twitter:image`)가 자동 반영됩니다.
 
 ### CLI 옵션
 
 - `--my-app` (`--all` 미사용 시 필수)
-- `--all` (기본값 `false`): `data/{appId}/reports/competitor-raw-actionable.ko.md`가 있는 앱 전체 일괄 렌더링
+- `--all` (기본값 `false`): 리뷰 JSON(`data/{appId}/reviews-ko/*.json`, 없으면 `reviews/*.json`)이 있는 앱 전체 일괄 렌더링
 - `--registered-apps-path`
-- `--input` (기본값: `data/{myAppId}/reports/competitor-raw-actionable.ko.md`)
-- `--output` (기본값: `data/{myAppId}/reports/competitor-raw-actionable.ko.html`)
-- `--all`은 `--my-app`, `--input`, `--output`과 함께 사용할 수 없습니다.
+- `--input` (선택): 소스 파일(`.md` 또는 `.json`). 생략하면 raw 리뷰 JSON에서 앱 소스를 자동 구성합니다.
+- `--output` (기본값: `data/{myAppId}/reports/competitor-raw-actionable.ko.json`)
+- `--with-html` (기본값 `false`): 레거시 HTML 파일도 함께 생성
+- `--html-output` (`--with-html`일 때 사용, 기본값: `data/{myAppId}/reports/competitor-raw-actionable.ko.html`)
+- `--all`은 `--my-app`, `--input`, `--output`, `--html-output`과 함께 사용할 수 없습니다.
 
 ### 예시
 
@@ -137,17 +112,89 @@ npm run report:render-html -- --all
 
 ### 출력
 
-- `data/{myAppId}/reports/competitor-raw-actionable.ko.html`
+- `data/{myAppId}/reports/competitor-raw-actionable.ko.json` (공용 뷰어 번들 데이터)
+- `data/{myAppId}/reports/backlog.ko.json` (앱별 백로그 데이터, 근거는 `reviewId` 참조만 저장)
+- `--with-html` 사용 시에만: `data/{myAppId}/reports/competitor-raw-actionable.ko.html`
+
+## `report:init-backlog`
+
+앱별 `backlog.ko.json`을 초기화합니다(`preview-state` 초기화와 별도).
+
+- `npm run report:init-backlog -- --my-app <owner> ...`
+- `npm run report:init-backlog -- --all`
+- `node dist/initReportBacklog.js ...`
+- 기본값으로 기존 backlog는 유지하고, 없는 파일만 초기화합니다.
+- 내부적으로 `report:render-html`을 호출해 backlog를 생성/정규화합니다.
+
+### CLI 옵션
+
+- `--my-app` (`--all` 미사용 시 필수)
+- `--all` (기본값 `false`): `data/` 하위에서 렌더 가능한 앱 전체 초기화
+- `--registered-apps-path`
+- `--data-dir` (기본값: `data/`)
+- `--input` (단일 앱 모드 전용): `report:render-html`로 전달할 소스 파일(`.md`/`.json`)
+- `--force` (기본값 `false`): `backlog.ko.json`이 있어도 재생성
+- `--dry-run` (기본값 `false`)
+- `--all`은 `--my-app`, `--input`과 함께 사용할 수 없습니다.
+
+### 예시
+
+```bash
+npm run report:init-backlog -- --my-app aurora-eos
+npm run report:init-backlog -- --my-app aurora-eos --force
+npm run report:init-backlog -- --all
+```
+
+### 출력
+
+- `data/{myAppId}/reports/backlog.ko.json`
+
+## `report:init-state`
+
+리포트 bundle의 기본값을 기준으로 `preview-state.json`을 초기화합니다.
+
+- `npm run report:init-state -- --my-app <owner> ...`
+- `npm run report:init-state -- --all`
+- `node dist/initReportState.js ...`
+- 모든 리뷰 상태를 `data/{myAppId}/reports/preview-state.json`으로 시드합니다.
+  - `reviewDefaults[reviewId].excluded` (기본 활성/비활성)
+  - `reviewDefaults[reviewId].tags` (기본 해시태그)
+- 이 명령은 초기 마이그레이션/리셋 용도입니다. 초기화 이후에는 preview UI에서 상태를 수동 관리하면 됩니다.
+- `report:render-html`은 리포트 번들(JSON)과 옵션 레거시 HTML만 생성하며 `preview-state.json`을 리셋하지 않습니다.
+
+### CLI 옵션
+
+- `--my-app` (`--all` 미사용 시 필수)
+- `--all` (기본값 `false`): `data/{appId}/reports/competitor-raw-actionable.ko.json`가 있는 앱 전체 초기화
+- `--registered-apps-path`
+- `--data-dir` (기본값: `data/`)
+- `--input` (기본값: `data/{myAppId}/reports/competitor-raw-actionable.ko.json`)
+- `--output` (기본값: `data/{myAppId}/reports/preview-state.json`)
+- `--keep-notes` (기본값 `true`): 리뷰 상태를 다시 초기화할 때 기존 앱 노트 유지
+- `--all`은 `--my-app`, `--input`, `--output`과 함께 사용할 수 없습니다.
+
+### 예시
+
+```bash
+npm run report:init-state -- --my-app aurora-eos
+npm run report:init-state -- --all
+```
+
+### 출력
+
+- `data/{myAppId}/reports/preview-state.json`
 
 ## `report:preview`
 
 localhost 프리뷰 서버를 실행합니다.
 
-- 대시보드 모드: 앱 목록 + 생성된 리포트 파일(`.html`, `.md`, `.json`) 표시
+- 대시보드 모드: 앱 목록 + 생성된 리포트 파일(`.md`, `.json`, 옵션 레거시 `.html`) 표시
+- 권장 흐름: 앱별 데이터는 JSON bundle만 유지하고 `/v/:appId` 공용 뷰어로 확인
+- 대시보드의 기본 `View Report` 링크는 공용 뷰어 라우트(`/v/:appId`)를 사용합니다.
 - 대시보드 모드에서 `data/{appId}/icon.png`가 있으면 앱 아이콘 표시
 - 리포트 화면 상단도 `data/{appId}/icon.png`를 사용하며, 아이콘이 없으면 `appId` 텍스트로 fallback
 - 대시보드 배경은 뷰포트 전체 높이를 채우도록 렌더링됩니다(짧은 콘텐츠에서도 배경이 끊기지 않음).
-- 단일 파일 모드: `--file`로 HTML 1개 서빙
+- 단일 파일 모드: `--file`로 레거시 HTML 1개 서빙
 - 리뷰 카드 상태 관리를 위한 API를 제공합니다.
   - `GET /api/preview-state/:appId`
   - `PUT /api/preview-state/:appId`
@@ -170,5 +217,5 @@ localhost 프리뷰 서버를 실행합니다.
 ```bash
 npm run report:preview -- --port 4173
 npm run report:preview -- --my-app aurora-eos --port 4173
-npm run report:preview -- --file data/aurora-eos/reports/competitor-raw-actionable.ko.html --port 4173
+npm run report:preview -- --file data/aurora-eos/reports/competitor-raw-actionable.ko.html --port 4173  # 레거시 모드
 ```

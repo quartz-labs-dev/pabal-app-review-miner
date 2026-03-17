@@ -13,6 +13,8 @@ interface CliArgs {
   registeredAppsPath?: string;
   input?: string;
   output?: string;
+  htmlOutput?: string;
+  withHtml: boolean;
   all: boolean;
 }
 
@@ -46,6 +48,14 @@ interface ThemeDefinition {
   action: string;
 }
 
+interface BacklogConcept {
+  id: string;
+  title: string;
+  action: string;
+  keywords: string[];
+  effort: Effort;
+}
+
 interface BacklogItem {
   priority: Priority;
   title: string;
@@ -54,13 +64,29 @@ interface BacklogItem {
   action: string;
   evidenceCount: number;
   evidenceReviewIds: string[];
-  examples: QuoteItem[];
+  examples?: QuoteItem[];
 }
 
 interface AppBacklog {
   appTitle: string;
   reviewCount: string;
   items: BacklogItem[];
+}
+
+interface BacklogDataItem {
+  priority: Priority;
+  title: string;
+  impact: Impact;
+  effort: Effort;
+  action: string;
+  evidenceCount: number;
+  evidenceReviewIds: string[];
+}
+
+interface BacklogDataApp {
+  appTitle: string;
+  reviewCount: string;
+  items: BacklogDataItem[];
 }
 
 interface UnifiedBacklogItem {
@@ -107,236 +133,847 @@ interface ReviewPools {
   byDisplayName: Map<string, AppReviewPool[]>;
 }
 
-const THEMES: ThemeDefinition[] = [
-  {
-    id: "reliability_performance",
-    title: "핵심 플로우 안정화 (로딩/크래시/동기화)",
-    keywords: [
-      "crash",
-      "freeze",
-      "stuck",
-      "loading",
-      "buffer",
-      "blank screen",
-      "sync",
-      "cannot login",
-      "bug",
-      "오류",
-      "멈춤",
-      "로딩",
-      "버그",
-      "동기화",
-      "로그인",
-      "작동하지"
-    ],
-    impact: "high",
-    effort: "high",
-    action: "로그인/재생/알림/지도 진입 등 핵심 사용자 여정의 안정성 이슈를 우선 해결"
-  },
-  {
-    id: "multi_location_planning",
-    title: "다중 위치/여행 계획 지원",
-    keywords: [
-      "choose location",
-      "select location",
-      "other location",
-      "remote location",
-      "travel",
-      "map",
-      "location",
-      "different location",
-      "위치 선택",
-      "다른 위치",
-      "여행",
-      "지도",
-      "원격 위치"
-    ],
-    impact: "high",
-    effort: "medium",
-    action: "현재 위치 외에 저장 위치/원격 위치를 등록해 비교·계획 가능한 UX 제공"
-  },
-  {
-    id: "alert_relevance",
-    title: "알림 관련성 개선 (주간/구름/현지 조건 필터)",
-    keywords: [
-      "daylight",
-      "dawn",
-      "dusk",
-      "cloud",
-      "overcast",
-      "solar noon",
-      "mute",
-      "threshold",
-      "일광",
-      "낮",
-      "새벽",
-      "황혼",
-      "구름",
-      "흐림",
-      "음소거",
-      "임계"
-    ],
-    impact: "high",
-    effort: "medium",
-    action: "지역 일출/일몰·구름량·사용자 임계값을 반영한 알림 정책으로 노이즈를 축소"
-  },
-  {
-    id: "advanced_alert_logic",
-    title: "고급 알림 규칙 (복합 조건 트리거)",
-    keywords: [
-      "bz",
-      "bt",
-      "solar wind",
-      "speed",
-      "density",
-      "combination",
-      "criter",
-      "태양풍",
-      "속도",
-      "밀도",
-      "조합",
-      "조건"
-    ],
-    impact: "high",
-    effort: "high",
-    action: "단일 기준이 아닌 복합 조건(Bz+속도 등) 기반의 고급 알림 룰 제공"
-  },
-  {
-    id: "forecast_transparency",
-    title: "예보 신뢰성/출처 투명화",
-    keywords: [
-      "model",
-      "source",
-      "noaa",
-      "ovation",
-      "aurorawatch",
-      "compare",
-      "accuracy",
-      "fake kp",
-      "not accurate",
-      "모델",
-      "출처",
-      "정확",
-      "비교"
-    ],
-    impact: "high",
-    effort: "medium",
-    action: "예보 모델/출처를 명시하고 다중 모델 비교 또는 보정 가이드를 제공"
-  },
-  {
-    id: "notification_controls",
-    title: "알림 제어권 강화",
-    keywords: [
-      "notification",
-      "alert",
-      "push",
-      "alarm",
-      "알림",
-      "푸시",
-      "알람",
-      "notifications"
-    ],
-    impact: "medium",
-    effort: "medium",
-    action: "알림 빈도/시간대/조건/채널을 세분화해 개인화된 제어 옵션 제공"
-  },
-  {
-    id: "widget_watch_screen",
-    title: "위젯/워치/대화면 최적화",
-    keywords: [
-      "widget",
-      "apple watch",
-      "watch",
-      "ipad",
-      "landscape",
-      "tablet",
-      "위젯",
-      "워치",
-      "아이패드",
-      "가로",
-      "큰 화면"
-    ],
-    impact: "medium",
-    effort: "medium",
-    action: "위젯, Apple Watch, 태블릿/가로모드 등 기기별 사용 맥락 최적화"
-  },
-  {
-    id: "pricing_paywall",
-    title: "가격/유료화 명확성 개선",
-    keywords: [
-      "price",
-      "paid",
-      "subscription",
-      "trial",
-      "refund",
-      "paywall",
-      "pricing",
-      "가격",
-      "유료",
-      "구독",
-      "환불"
-    ],
-    impact: "medium",
-    effort: "low",
-    action: "유료 기능/가격/환불/체험 조건을 초반 화면에서 명확하게 고지"
-  },
-  {
-    id: "offline_playback",
-    title: "오프라인 다운로드/재생 품질",
-    keywords: [
-      "download",
-      "offline",
-      "stream",
-      "airplay",
-      "cast",
-      "fullscreen",
-      "chapter",
-      "video player",
-      "버퍼",
-      "다운로드",
-      "오프라인",
-      "전체 화면",
-      "챕터",
-      "재생"
-    ],
-    impact: "high",
-    effort: "high",
-    action: "다운로드 큐, 재개, 챕터 탐색, 캐스팅/전체화면 안정성 중심으로 미디어 스택 개선"
-  },
-  {
-    id: "timezone_localization",
-    title: "시간대/지역화 정확성",
-    keywords: [
-      "timezone",
-      "time zone",
-      "gmt",
-      "local time",
-      "time data",
-      "시간대",
-      "현지 시간",
-      "지역화"
-    ],
-    impact: "medium",
-    effort: "low",
-    action: "시간대 표기 및 계산 로직을 명확화하고 사용자 선택 옵션 제공"
-  }
-];
+interface ReviewDefaultEntry {
+  excluded: boolean;
+  tags: ReviewTag[];
+}
 
-const PRIORITY_BOOST_THEME_IDS = new Set([
-  "reliability_performance",
-  "offline_playback",
-  "alert_relevance",
-  "multi_location_planning"
+interface RenderBundlePayload {
+  version: 2;
+  ownerAppId: string;
+  generatedAt: string;
+  reviewDefaults: Record<string, ReviewDefaultEntry>;
+  html: string;
+}
+
+interface BacklogDataFile {
+  version: 1;
+  ownerAppId: string;
+  generatedAt: string;
+  appBacklogs: BacklogDataApp[];
+}
+
+interface ReportSourceFile {
+  version: 1;
+  ownerAppId: string;
+  generatedAt: string;
+  title: string;
+  metadata: string[];
+  apps: AppSection[];
+}
+
+const THEME_MAX_PER_APP = 10;
+const THEME_MIN_REVIEW_COUNT = 2;
+const THEME_FALLBACK_ID = "general_feedback";
+const THEME_STOPWORDS_EN = new Set([
+  "the",
+  "and",
+  "for",
+  "you",
+  "your",
+  "with",
+  "that",
+  "this",
+  "have",
+  "has",
+  "had",
+  "are",
+  "was",
+  "were",
+  "will",
+  "would",
+  "should",
+  "could",
+  "can",
+  "cant",
+  "cannot",
+  "not",
+  "dont",
+  "doesnt",
+  "didnt",
+  "its",
+  "it's",
+  "they",
+  "them",
+  "their",
+  "there",
+  "here",
+  "from",
+  "about",
+  "into",
+  "over",
+  "under",
+  "than",
+  "then",
+  "when",
+  "where",
+  "what",
+  "why",
+  "how",
+  "just",
+  "very",
+  "really",
+  "also",
+  "only",
+  "more",
+  "most",
+  "much",
+  "many",
+  "some",
+  "any",
+  "all",
+  "our",
+  "out",
+  "use",
+  "using",
+  "used",
+  "get",
+  "got",
+  "one",
+  "two",
+  "new",
+  "old",
+  "now",
+  "still",
+  "even",
+  "app",
+  "apps",
+  "aurora",
+  "review",
+  "reviews",
+  "really",
+  "very",
+  "just",
+  "there",
+  "their",
+  "about",
+  "with",
+  "have",
+  "this",
+  "that",
+  "from",
+  "would",
+  "could",
+  "should",
+  "when",
+  "where",
+  "what",
+  "into",
+  "over",
+  "under",
+  "your",
+  "they",
+  "them",
+  "will",
+  "been",
+  "more",
+  "less",
+  "than",
+  "then",
+  "also",
+  "only",
+  "using",
+  "used",
+  "user",
+  "users",
+  "like",
+  "love",
+  "good",
+  "great",
+  "nice",
+  "best",
+  "improve",
+  "improvement",
+  "issue",
+  "issues",
+  "problem",
+  "problems",
+  "feature"
 ]);
+const THEME_STOPWORDS_KO = new Set([
+  "앱",
+  "리뷰",
+  "사용",
+  "기능",
+  "정말",
+  "너무",
+  "매우",
+  "그냥",
+  "그리고",
+  "하지만",
+  "하면",
+  "하는",
+  "에서",
+  "으로",
+  "에게",
+  "있고",
+  "있습니다",
+  "있어요",
+  "합니다",
+  "같아요",
+  "좋아요",
+  "최고",
+  "오로라",
+  "관련",
+  "개선",
+  "반복",
+  "피드백",
+  "사용자",
+  "요청",
+  "불만",
+  "만족",
+  "앱을",
+  "앱이",
+  "앱에서"
+]);
+const HIGH_EFFORT_HINTS = ["crash", "freeze", "sync", "login", "결제", "구독", "버그", "성능", "오류"];
+const LOW_EFFORT_HINTS = ["label", "copy", "번역", "문구", "텍스트", "색상", "아이콘"];
+const REQUEST_HINTS = [
+  "please",
+  "would like",
+  "wish",
+  "add",
+  "need",
+  "can you",
+  "feature request",
+  "please add",
+  "기능",
+  "추가",
+  "원해",
+  "원합니다",
+  "해주세요",
+  "넣어",
+  "지원해",
+  "알림"
+];
+const DISSATISFACTION_HINTS = [
+  "bad",
+  "wrong",
+  "inaccurate",
+  "useless",
+  "disappoint",
+  "bug",
+  "error",
+  "not work",
+  "can't",
+  "waste",
+  "별로",
+  "불만",
+  "실망",
+  "오류",
+  "버그",
+  "안됨",
+  "안 돼",
+  "느림"
+];
+const THEME_FEATURE_TERMS_EN = [
+  "location",
+  "map",
+  "alert",
+  "alerts",
+  "notification",
+  "notifications",
+  "forecast",
+  "accuracy",
+  "subscription",
+  "payment",
+  "price",
+  "trial",
+  "ads",
+  "widget",
+  "search",
+  "filter",
+  "save",
+  "favorite",
+  "theme",
+  "dark",
+  "language",
+  "translate",
+  "refresh",
+  "update",
+  "speed",
+  "performance",
+  "crash",
+  "login",
+  "sync",
+  "gps"
+];
+const THEME_FEATURE_TERMS_KO = [
+  "위치",
+  "지도",
+  "알림",
+  "예보",
+  "정확",
+  "구독",
+  "결제",
+  "광고",
+  "위젯",
+  "검색",
+  "필터",
+  "저장",
+  "즐겨찾기",
+  "테마",
+  "다크",
+  "언어",
+  "번역",
+  "업데이트",
+  "속도",
+  "성능",
+  "충돌",
+  "로그인",
+  "동기화",
+  "배터리"
+];
+const THEME_ACTION_HINTS_KO = ["선택", "저장", "추가", "설정", "지원", "표시", "필터", "검색", "고정"];
+const THEME_ACTION_HINTS_EN = ["select", "save", "add", "set", "support", "show", "filter", "search", "pin"];
+const THEME_MULTI_HINTS_KO = ["다중", "여러", "복수"];
+const THEME_MULTI_HINTS_EN = ["multiple", "multi", "several"];
 
 const REVIEW_COUNT_PREFIXES = ["- 전체 리뷰 수:", "- Total review count:"];
 const BACKLOG_CATEGORY_ORDER: CategoryKey[] = ["dissatisfaction", "requests", "satisfaction"];
 const REPORTS_DIR_NAME = "reports";
-const DEFAULT_REPORT_MARKDOWN_FILE = "competitor-raw-actionable.ko.md";
 const DEFAULT_REPORT_HTML_FILE = "competitor-raw-actionable.ko.html";
+const DEFAULT_REPORT_BUNDLE_FILE = "competitor-raw-actionable.ko.json";
+const DEFAULT_BACKLOG_JSON_FILE = "backlog.ko.json";
+const MAX_SYNTH_REVIEWS_PER_APP = 48;
+const MAX_SYNTH_REVIEWS_PER_CATEGORY = 18;
+const MAX_EVIDENCE_PER_ITEM = 8;
+const MIN_SYNTH_REVIEW_SCORE = 5;
+const BACKLOG_CONCEPTS: BacklogConcept[] = [
+  {
+    id: "multi_location",
+    title: "위치 선택/저장 개선",
+    action: "다중 위치를 저장/전환할 수 있도록 위치 선택 UX를 개선",
+    keywords: ["위치", "location", "다중 위치", "여러 위치", "복수 위치", "multi location", "multiple location", "favorite location", "saved location"],
+    effort: "medium"
+  },
+  {
+    id: "map_usability",
+    title: "지도 가독성 및 조작 개선",
+    action: "지도 줌/핀/레이어 가독성과 조작 반응성을 개선",
+    keywords: ["지도", "map", "marker", "pin", "zoom"],
+    effort: "medium"
+  },
+  {
+    id: "alert_settings",
+    title: "알림 조건·시간 설정 개선",
+    action: "알림 임계값/빈도/시간대 설정을 세분화",
+    keywords: ["알림", "alert", "notification", "notify", "push"],
+    effort: "medium"
+  },
+  {
+    id: "ads_control",
+    title: "광고 노출 제어 개선",
+    action: "광고 빈도/위치 제어와 유료 제거 옵션 안내를 개선",
+    keywords: ["광고", "ads", "ad "],
+    effort: "low"
+  },
+  {
+    id: "stability",
+    title: "앱 안정성(충돌/오류) 개선",
+    action: "충돌·오류 재현 케이스를 우선 수정하고 안정성을 강화",
+    keywords: ["충돌", "오류", "버그", "안됨", "crash", "freeze", "stuck", "error", "bug"],
+    effort: "high"
+  },
+  {
+    id: "accuracy_update",
+    title: "예보 정확도 및 갱신 주기 개선",
+    action: "예보 정확도 개선과 데이터 갱신 주기/시점을 명확히 제공",
+    keywords: ["정확", "예보", "업데이트", "갱신", "accuracy", "forecast", "inaccurate", "update"],
+    effort: "high"
+  },
+  {
+    id: "subscription",
+    title: "구독/결제 안내 개선",
+    action: "가격·체험·해지 흐름 안내를 명확히 개선",
+    keywords: ["구독", "결제", "가격", "subscription", "payment", "price", "trial"],
+    effort: "medium"
+  },
+  {
+    id: "language",
+    title: "번역/언어 품질 개선",
+    action: "핵심 화면의 번역 일관성과 언어 표시 품질을 개선",
+    keywords: ["번역", "언어", "translation", "language", "localization"],
+    effort: "low"
+  }
+];
+const BACKLOG_CONCEPT_TITLE_SET = new Set(BACKLOG_CONCEPTS.map((item) => normalizeText(item.title)));
 
 function includesAny(text: string, terms: string[]): boolean {
   return terms.some((term) => text.includes(term));
+}
+
+function tokenizeThemeTerms(input: string): string[] {
+  const text = normalizeText(input).toLowerCase();
+  const matches = text.match(/[a-z][a-z0-9_-]{2,}|[가-힣]{2,}/g) ?? [];
+  const tokens: string[] = [];
+  const seen = new Set<string>();
+
+  for (const raw of matches) {
+    const token = normalizeText(raw).toLowerCase();
+    if (!token || seen.has(token)) {
+      continue;
+    }
+
+    if (/^[a-z]/.test(token)) {
+      if (THEME_STOPWORDS_EN.has(token)) {
+        continue;
+      }
+    } else if (THEME_STOPWORDS_KO.has(token)) {
+      continue;
+    }
+
+    seen.add(token);
+    tokens.push(token);
+  }
+
+  return tokens;
+}
+
+function hasKoreanText(input: string): boolean {
+  return /[가-힣]/.test(input);
+}
+
+function estimateThemeImpact(stats: {
+  reviewCount: number;
+  requestCount: number;
+  dissatisfactionCount: number;
+}): Impact {
+  const severity = stats.requestCount * 2 + stats.dissatisfactionCount * 3;
+  if (severity >= 12 || stats.reviewCount >= 12) {
+    return "high";
+  }
+  if (severity >= 6 || stats.reviewCount >= 6) {
+    return "medium";
+  }
+  return "low";
+}
+
+function estimateThemeEffort(token: string): Effort {
+  if (includesAny(token, LOW_EFFORT_HINTS)) {
+    return "low";
+  }
+  if (includesAny(token, HIGH_EFFORT_HINTS)) {
+    return "high";
+  }
+  return "medium";
+}
+
+function normalizeThemeCandidate(input: string): string {
+  const compact = normalizeText(input)
+    .toLowerCase()
+    .replace(/[()[\]{}"'`]+/g, " ")
+    .replace(/[.,!?;:]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!compact) {
+    return "";
+  }
+
+  const cleaned = compact
+    .replace(/^(please|add|need|want|would like|can you|support|allow|option for)\s+/i, "")
+    .replace(/\s+(please|feature|app|issue|problem)$/i, "")
+    .trim();
+  if (!cleaned || cleaned.length < 2 || cleaned.length > 48) {
+    return "";
+  }
+
+  const tokens = cleaned.split(" ").filter(Boolean);
+  const hasFeatureSignal = (value: string): boolean =>
+    THEME_FEATURE_TERMS_EN.some((term) => value.includes(term)) ||
+    THEME_FEATURE_TERMS_KO.some((term) => value.includes(term));
+  const meaningful = tokens.filter((token) => {
+    if (/[a-z]/.test(token)) {
+      return !THEME_STOPWORDS_EN.has(token);
+    }
+    if (/[가-힣]/.test(token)) {
+      return !THEME_STOPWORDS_KO.has(token);
+    }
+    return token.length >= 2;
+  });
+
+  if (meaningful.length === 0) {
+    return "";
+  }
+
+  const phrase = meaningful.join(" ");
+  if (meaningful.length === 1 && !hasFeatureSignal(phrase)) {
+    return "";
+  }
+  if (!hasFeatureSignal(phrase) && !/\s/.test(phrase)) {
+    return "";
+  }
+
+  return phrase;
+}
+
+function extractThemeCandidatesFromText(text: string): string[] {
+  const normalizedText = normalizeText(text);
+  if (!normalizedText) {
+    return [];
+  }
+
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+  const addCandidate = (raw: string) => {
+    const normalized = normalizeThemeCandidate(raw);
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    candidates.push(normalized);
+  };
+
+  const koFeaturePattern = /([가-힣a-z0-9]+(?:\s+[가-힣a-z0-9]+){0,4})\s*(기능|지원|옵션|알림|저장|선택|모드|설정)/gi;
+  for (const match of normalizedText.matchAll(koFeaturePattern)) {
+    addCandidate(`${match[1] ?? ""} ${match[2] ?? ""}`);
+  }
+
+  const koIssuePattern = /([가-힣a-z0-9]+(?:\s+[가-힣a-z0-9]+){0,4})\s*(오류|버그|안됨|안 돼|느림|실망)/gi;
+  for (const match of normalizedText.matchAll(koIssuePattern)) {
+    addCandidate(match[1] ?? "");
+  }
+
+  const enRequestPattern = /(?:add|need|want|please add|please|support|allow|option for|ability to|would like)\s+([a-z0-9][a-z0-9\s-]{2,40})/gi;
+  for (const match of normalizedText.matchAll(enRequestPattern)) {
+    addCandidate(match[1] ?? "");
+  }
+
+  const enIssuePattern = /(?:fix|issue with|problem with|bug in)\s+([a-z0-9][a-z0-9\s-]{2,40})/gi;
+  for (const match of normalizedText.matchAll(enIssuePattern)) {
+    addCandidate(match[1] ?? "");
+  }
+
+  if (candidates.length === 0) {
+    for (const token of tokenizeThemeTerms(normalizedText)) {
+      addCandidate(token);
+      if (candidates.length >= 6) {
+        break;
+      }
+    }
+  }
+
+  return candidates;
+}
+
+function toTitleCasePhrase(input: string): string {
+  return input
+    .split(" ")
+    .map((word) => (word ? `${word[0].toUpperCase()}${word.slice(1)}` : ""))
+    .join(" ");
+}
+
+function formatThemeTitle(term: string): string {
+  const normalized = normalizeText(term);
+  if (!normalized) {
+    return "핵심 개선 항목";
+  }
+
+  if (hasKoreanText(normalized)) {
+    if (/(기능|지원|옵션|알림|저장|선택|모드|설정|개선)$/.test(normalized)) {
+      return normalized;
+    }
+    return `${normalized} 개선`;
+  }
+
+  const titleCase = toTitleCasePhrase(normalized);
+  if (/\b(feature|support|mode|option|save|select|search|filter|map|location)\b/i.test(titleCase)) {
+    return titleCase;
+  }
+  return `${titleCase} Improvement`;
+}
+
+function formatThemeAction(term: string, reviewCount: number, requestCount: number, dissatisfactionCount: number): string {
+  const normalized = normalizeText(term);
+  if (!normalized) {
+    return "반복 리뷰를 기준으로 개선 항목을 재정의";
+  }
+
+  if (hasKoreanText(normalized)) {
+    if (requestCount >= dissatisfactionCount) {
+      return `'${normalized}' 요청이 반복된 리뷰 ${reviewCount}건을 기준으로 기능 요구사항을 확정하고 우선 구현`;
+    }
+    return `'${normalized}' 관련 불만 리뷰 ${reviewCount}건을 기준으로 사용성/안정성 개선 항목을 우선 처리`;
+  }
+
+  if (requestCount >= dissatisfactionCount) {
+    return `Define and implement '${normalized}' requests based on ${reviewCount} repeated reviews`;
+  }
+  return `Prioritize '${normalized}' reliability/usability fixes based on ${reviewCount} repeated reviews`;
+}
+
+function extractThemeKeywordFromTitle(title: string): string {
+  const normalized = normalizeText(title);
+  if (!normalized) {
+    return "";
+  }
+
+  return normalizeText(normalized.replace(/\s+(개선|improvement)$/i, "").trim());
+}
+
+function deriveSpecificThemeTitleFromExamples(baseTitle: string, examples: QuoteItem[]): string {
+  if (
+    BACKLOG_CONCEPT_TITLE_SET.has(normalizeText(baseTitle)) &&
+    normalizeText(baseTitle) !== "위치 선택/저장 개선"
+  ) {
+    return baseTitle;
+  }
+  const keyword = extractThemeKeywordFromTitle(baseTitle);
+  if (!keyword || examples.length === 0) {
+    return baseTitle;
+  }
+
+  const keywordLower = keyword.toLowerCase();
+  const actionCounts = new Map<string, number>();
+  let hasMultiHint = false;
+
+  for (const quote of examples) {
+    const text = normalizeText(`${quote.kr} ${quote.org}`).toLowerCase();
+    if (!text || !text.includes(keywordLower)) {
+      continue;
+    }
+
+    if (hasKoreanText(keyword)) {
+      if (THEME_MULTI_HINTS_KO.some((term) => text.includes(term))) {
+        hasMultiHint = true;
+      }
+      for (const action of THEME_ACTION_HINTS_KO) {
+        if (text.includes(action)) {
+          actionCounts.set(action, (actionCounts.get(action) ?? 0) + 1);
+        }
+      }
+    } else {
+      if (THEME_MULTI_HINTS_EN.some((term) => text.includes(term))) {
+        hasMultiHint = true;
+      }
+      for (const action of THEME_ACTION_HINTS_EN) {
+        if (text.includes(action)) {
+          actionCounts.set(action, (actionCounts.get(action) ?? 0) + 1);
+        }
+      }
+    }
+  }
+
+  const topActions = [...actionCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([action]) => action)
+    .slice(0, 2);
+
+  if (hasKoreanText(keyword)) {
+    const prefix = hasMultiHint ? "다중 " : "";
+    if (topActions.includes("선택") && topActions.includes("저장")) {
+      return `${prefix}${keyword} 선택 및 저장`;
+    }
+    if (topActions.length > 0) {
+      return `${prefix}${keyword} ${topActions[0]}`;
+    }
+    if (hasMultiHint) {
+      return `${prefix}${keyword} 관리`;
+    }
+    return baseTitle;
+  }
+
+  const titleKeyword = toTitleCasePhrase(keyword);
+  if (topActions.includes("select") && topActions.includes("save")) {
+    return hasMultiHint ? `Multi ${titleKeyword} Selection and Save` : `${titleKeyword} Selection and Save`;
+  }
+  if (topActions.length > 0) {
+    return hasMultiHint
+      ? `Multi ${titleKeyword} ${toTitleCasePhrase(topActions[0])}`
+      : `${titleKeyword} ${toTitleCasePhrase(topActions[0])}`;
+  }
+  if (hasMultiHint) {
+    return `Multi ${titleKeyword} Management`;
+  }
+  return baseTitle;
+}
+
+function deriveDynamicThemes(app: AppSection): ThemeDefinition[] {
+  const conceptStats = new Map<
+    string,
+    {
+      concept: BacklogConcept;
+      score: number;
+      reviewIds: Set<string>;
+      requestCount: number;
+      dissatisfactionCount: number;
+    }
+  >();
+  const termStats = new Map<
+    string,
+    {
+      token: string;
+      label: string;
+      score: number;
+      reviewIds: Set<string>;
+      requestCount: number;
+      dissatisfactionCount: number;
+    }
+  >();
+
+  const weightByCategory: Record<CategoryKey, number> = {
+    dissatisfaction: 2,
+    requests: 2,
+    satisfaction: 0.5
+  };
+
+  for (const categoryKey of BACKLOG_CATEGORY_ORDER) {
+    for (const quote of app.categories[categoryKey]) {
+      const reviewId =
+        normalizeText(quote.reviewId) ||
+        createQuoteReviewId(app.title, {
+          meta: quote.meta,
+          kr: quote.kr,
+          org: quote.org
+        });
+      const text = normalizeText(`${quote.kr} ${quote.org}`).toLowerCase();
+      for (const concept of BACKLOG_CONCEPTS) {
+        if (!concept.keywords.some((keyword) => text.includes(keyword.toLowerCase()))) {
+          continue;
+        }
+        const current =
+          conceptStats.get(concept.id) ??
+          {
+            concept,
+            score: 0,
+            reviewIds: new Set<string>(),
+            requestCount: 0,
+            dissatisfactionCount: 0
+          };
+        current.score += weightByCategory[categoryKey];
+        current.reviewIds.add(reviewId);
+        if (categoryKey === "requests") {
+          current.requestCount += 1;
+        } else if (categoryKey === "dissatisfaction") {
+          current.dissatisfactionCount += 1;
+        }
+        conceptStats.set(concept.id, current);
+      }
+
+      const tokens = extractThemeCandidatesFromText(text);
+      const uniqueTokens = new Set(tokens);
+
+      for (const token of uniqueTokens) {
+        const current =
+          termStats.get(token) ??
+          {
+            token,
+            label: token,
+            score: 0,
+            reviewIds: new Set<string>(),
+            requestCount: 0,
+            dissatisfactionCount: 0
+          };
+
+        current.score += weightByCategory[categoryKey];
+        current.reviewIds.add(reviewId);
+        if (categoryKey === "requests") {
+          current.requestCount += 1;
+        } else if (categoryKey === "dissatisfaction") {
+          current.dissatisfactionCount += 1;
+        }
+        termStats.set(token, current);
+      }
+    }
+  }
+
+  const conceptThemes = [...conceptStats.values()]
+    .filter((item) => item.reviewIds.size >= THEME_MIN_REVIEW_COUNT)
+    .sort((a, b) => {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+      return b.reviewIds.size - a.reviewIds.size;
+    })
+    .slice(0, THEME_MAX_PER_APP)
+    .map((item) => {
+      const reviewCount = item.reviewIds.size;
+      const impact = estimateThemeImpact({
+        reviewCount,
+        requestCount: item.requestCount,
+        dissatisfactionCount: item.dissatisfactionCount
+      });
+
+      return {
+        id: `theme_${hashToken(`${app.title}::concept::${item.concept.id}`)}`,
+        title: item.concept.title,
+        keywords: item.concept.keywords,
+        impact,
+        effort: item.concept.effort,
+        action: `${item.concept.action} (근거 리뷰 ${reviewCount}건)`
+      } satisfies ThemeDefinition;
+    });
+
+  const fallbackThemes = [...termStats.values()]
+    .filter((item) => item.reviewIds.size >= THEME_MIN_REVIEW_COUNT)
+    .sort((a, b) => {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+      if (b.reviewIds.size !== a.reviewIds.size) {
+        return b.reviewIds.size - a.reviewIds.size;
+      }
+      return a.token.localeCompare(b.token);
+    })
+    .slice(0, THEME_MAX_PER_APP)
+    .map((item) => {
+      const reviewCount = item.reviewIds.size;
+      const impact = estimateThemeImpact({
+        reviewCount,
+        requestCount: item.requestCount,
+        dissatisfactionCount: item.dissatisfactionCount
+      });
+      const effort = estimateThemeEffort(item.token);
+      const title = formatThemeTitle(item.label);
+      const action = formatThemeAction(item.label, reviewCount, item.requestCount, item.dissatisfactionCount);
+
+      return {
+        id: `theme_${hashToken(`${app.title}::${item.token}`)}`,
+        title,
+        keywords: [item.token],
+        impact,
+        effort,
+        action
+      } satisfies ThemeDefinition;
+    });
+
+  const themes: ThemeDefinition[] = [];
+  const usedTitleKeys = new Set<string>();
+  const fallbackLimit = conceptThemes.length >= 2 ? 0 : Math.max(0, 2 - conceptThemes.length);
+  const selectedFallbackThemes = fallbackThemes.slice(0, fallbackLimit);
+  for (const theme of [...conceptThemes, ...selectedFallbackThemes]) {
+    if (themes.length >= THEME_MAX_PER_APP) {
+      break;
+    }
+    const titleKey = normalizeText(theme.title).toLowerCase();
+    if (!titleKey || usedTitleKeys.has(titleKey)) {
+      continue;
+    }
+    usedTitleKeys.add(titleKey);
+    themes.push(theme);
+  }
+
+  if (themes.length === 0) {
+    themes.push({
+      id: `theme_${hashToken(`${app.title}::generic`)}`,
+      title: "핵심 리뷰 이슈 정리",
+      keywords: [],
+      impact: "medium",
+      effort: "medium",
+      action: "반복된 요청/불만 리뷰를 기준으로 개선 항목을 정의"
+    });
+  }
+
+  themes.push({
+    id: THEME_FALLBACK_ID,
+    title: "미분류 핵심 리뷰 후속 정리",
+    keywords: [],
+    impact: "low",
+    effort: "medium",
+    action: "자동 분류에서 누락된 핵심 리뷰를 수동 검토해 후속 액션으로 정리"
+  });
+
+  return themes;
 }
 
 function parseReviewCount(line: string): string | undefined {
@@ -443,12 +1080,16 @@ function parseQuoteMeta(meta: string): {
   };
 }
 
-function resolveDefaultInput(ownerAppId: string): string {
-  return path.resolve(process.cwd(), "data", ownerAppId, REPORTS_DIR_NAME, DEFAULT_REPORT_MARKDOWN_FILE);
+function resolveDefaultHtmlOutput(ownerAppId: string): string {
+  return path.resolve(process.cwd(), "data", ownerAppId, REPORTS_DIR_NAME, DEFAULT_REPORT_HTML_FILE);
 }
 
-function resolveDefaultOutput(ownerAppId: string): string {
-  return path.resolve(process.cwd(), "data", ownerAppId, REPORTS_DIR_NAME, DEFAULT_REPORT_HTML_FILE);
+function resolveDefaultBundle(ownerAppId: string): string {
+  return path.resolve(process.cwd(), "data", ownerAppId, REPORTS_DIR_NAME, DEFAULT_REPORT_BUNDLE_FILE);
+}
+
+function resolveDefaultBacklog(ownerAppId: string): string {
+  return path.resolve(process.cwd(), "data", ownerAppId, REPORTS_DIR_NAME, DEFAULT_BACKLOG_JSON_FILE);
 }
 
 async function parseArgs(): Promise<CliArgs> {
@@ -462,8 +1103,7 @@ async function parseArgs(): Promise<CliArgs> {
     .option("all", {
       type: "boolean",
       default: false,
-      describe:
-        "Render HTML for all apps that have data/{appId}/reports/competitor-raw-actionable.ko.md"
+      describe: "Render report bundle JSON for all apps that have review data"
     })
     .option("registered-apps-path", {
       type: "string",
@@ -471,11 +1111,21 @@ async function parseArgs(): Promise<CliArgs> {
     })
     .option("input", {
       type: "string",
-      describe: "Input markdown report path (default: data/{myAppId}/reports/competitor-raw-actionable.ko.md)"
+      describe:
+        "Optional input source path (.md or .json). If omitted, source apps are derived from raw review JSON files."
     })
     .option("output", {
       type: "string",
-      describe: "Output html path (default: data/{myAppId}/reports/competitor-raw-actionable.ko.html)"
+      describe: "Output bundle json path (default: data/{myAppId}/reports/competitor-raw-actionable.ko.json)"
+    })
+    .option("with-html", {
+      type: "boolean",
+      default: false,
+      describe: "Also write legacy HTML output file (default: false)"
+    })
+    .option("html-output", {
+      type: "string",
+      describe: "Legacy HTML output path (used only with --with-html)"
     })
     .help()
     .strict()
@@ -499,14 +1149,21 @@ async function findOwnerAppIdsForBatchRender(): Promise<string[]> {
       continue;
     }
 
-    const markdownPath = path.resolve(dataRoot, appId, REPORTS_DIR_NAME, DEFAULT_REPORT_MARKDOWN_FILE);
-    try {
-      const stat = await fs.stat(markdownPath);
-      if (stat.isFile()) {
-        appIds.push(appId);
+    const candidateDirs = [
+      path.resolve(dataRoot, appId, "reviews-ko"),
+      path.resolve(dataRoot, appId, "reviews")
+    ];
+    let hasReviews = false;
+    for (const dir of candidateDirs) {
+      const fileEntries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+      if (fileEntries.some((file) => file.isFile() && file.name.endsWith(".json") && !file.name.startsWith("."))) {
+        hasReviews = true;
+        break;
       }
-    } catch {
-      // Skip apps without a default markdown report.
+    }
+
+    if (hasReviews) {
+      appIds.push(appId);
     }
   }
 
@@ -677,7 +1334,7 @@ async function loadReviewPools(ownerAppId: string): Promise<ReviewPools> {
 
   const entries = await fs.readdir(sourceDir, { withFileTypes: true }).catch(() => []);
   const jsonFiles = entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".json") && !entry.name.startsWith("."))
     .map((entry) => path.resolve(sourceDir, entry.name))
     .sort((a, b) => a.localeCompare(b));
 
@@ -778,6 +1435,113 @@ function resolvePoolForApp(appTitle: string, pools: ReviewPools): AppReviewPool 
   }
 
   return undefined;
+}
+
+function createAutoAppSectionsFromPools(pools: ReviewPools): AppSection[] {
+  const sections: AppSection[] = [];
+  for (const pool of pools.byToken.values()) {
+    const display = normalizeText(pool.displayName) || normalizeText(pool.sourceToken) || "Unknown App";
+    const title = `${display} (${pool.sourceToken})`;
+    sections.push({
+      title,
+      reviewCount: String(pool.reviews.length),
+      categories: {
+        satisfaction: [],
+        dissatisfaction: [],
+        requests: []
+      }
+    });
+  }
+
+  return sections.sort((a, b) => a.title.localeCompare(b.title));
+}
+
+function normalizeQuoteItem(value: unknown): QuoteItem | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const row = value as Record<string, unknown>;
+  const reviewId = normalizeText(String(row.reviewId ?? ""));
+  const meta = normalizeText(String(row.meta ?? ""));
+  const kr = normalizeText(String(row.kr ?? ""));
+  const org = normalizeText(String(row.org ?? ""));
+  if (!reviewId && !kr && !org) {
+    return undefined;
+  }
+
+  return {
+    reviewId: reviewId || createQuoteReviewId("auto", { meta, kr, org }),
+    meta,
+    kr,
+    org,
+    tags: normalizeReviewTags(Array.isArray(row.tags) ? row.tags : [])
+  };
+}
+
+function normalizeAppSection(value: unknown): AppSection | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const row = value as Record<string, unknown>;
+  const title = normalizeText(String(row.title ?? ""));
+  if (!title) {
+    return undefined;
+  }
+
+  const categoriesRaw = row.categories && typeof row.categories === "object" ? (row.categories as Record<string, unknown>) : {};
+  const mapped: Record<CategoryKey, QuoteItem[]> = {
+    satisfaction: Array.isArray(categoriesRaw.satisfaction)
+      ? (categoriesRaw.satisfaction as unknown[]).map(normalizeQuoteItem).filter((x): x is QuoteItem => Boolean(x))
+      : [],
+    dissatisfaction: Array.isArray(categoriesRaw.dissatisfaction)
+      ? (categoriesRaw.dissatisfaction as unknown[]).map(normalizeQuoteItem).filter((x): x is QuoteItem => Boolean(x))
+      : [],
+    requests: Array.isArray(categoriesRaw.requests)
+      ? (categoriesRaw.requests as unknown[]).map(normalizeQuoteItem).filter((x): x is QuoteItem => Boolean(x))
+      : []
+  };
+
+  return {
+    title,
+    reviewCount: normalizeText(String(row.reviewCount ?? "")) || undefined,
+    categories: mapped
+  };
+}
+
+async function resolveReportSource(params: {
+  ownerAppId: string;
+  reviewPools: ReviewPools;
+  inputPath?: string;
+}): Promise<{ title: string; metadata: string[]; apps: AppSection[] }> {
+  const { ownerAppId, reviewPools, inputPath } = params;
+
+  if (normalizeText(inputPath)) {
+    const absolutePath = path.resolve(String(inputPath));
+    const raw = await fs.readFile(absolutePath, "utf8");
+    if (path.extname(absolutePath).toLowerCase() === ".md") {
+      return parseMarkdown(raw);
+    }
+
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const title = normalizeText(String(parsed.title ?? "")) || `${ownerAppId} 리뷰 리포트`;
+    const metadata = Array.isArray(parsed.metadata)
+      ? (parsed.metadata as unknown[]).map((item) => normalizeText(String(item ?? ""))).filter(Boolean)
+      : [];
+    const apps = Array.isArray(parsed.apps)
+      ? (parsed.apps as unknown[]).map(normalizeAppSection).filter((x): x is AppSection => Boolean(x))
+      : [];
+
+    if (apps.length > 0) {
+      return { title, metadata, apps };
+    }
+  }
+
+  const apps = createAutoAppSectionsFromPools(reviewPools);
+  return {
+    title: `${ownerAppId} 리뷰 리포트`,
+    metadata: [],
+    apps
+  };
 }
 
 function findPoolReviewIdForQuote(item: QuoteItem, pool?: AppReviewPool): string | undefined {
@@ -997,6 +1761,198 @@ function parseMarkdown(input: string): { title: string; metadata: string[]; apps
   return { title, metadata, apps };
 }
 
+function normalizeBacklogData(value: unknown): AppBacklog[] | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const root = value as Record<string, unknown>;
+  const rows = Array.isArray(root.appBacklogs) ? (root.appBacklogs as unknown[]) : [];
+  const normalized: AppBacklog[] = [];
+
+  for (const raw of rows) {
+    if (!raw || typeof raw !== "object") {
+      continue;
+    }
+    const row = raw as Record<string, unknown>;
+    const appTitle = normalizeText(String(row.appTitle ?? ""));
+    if (!appTitle) {
+      continue;
+    }
+    const itemsRaw = Array.isArray(row.items) ? (row.items as unknown[]) : [];
+    const items: BacklogItem[] = [];
+
+    for (const itemRaw of itemsRaw) {
+      if (!itemRaw || typeof itemRaw !== "object") {
+        continue;
+      }
+      const item = itemRaw as Record<string, unknown>;
+      const priority = normalizeText(String(item.priority ?? "")).toLowerCase();
+      const impact = normalizeText(String(item.impact ?? "")).toLowerCase();
+      const effort = normalizeText(String(item.effort ?? "")).toLowerCase();
+      if (!["must", "should", "could"].includes(priority)) {
+        continue;
+      }
+      if (!["high", "medium", "low"].includes(impact) || !["high", "medium", "low"].includes(effort)) {
+        continue;
+      }
+
+      const examplesRaw = Array.isArray(item.examples) ? (item.examples as unknown[]) : [];
+      const examples = examplesRaw.map(normalizeQuoteItem).filter((x): x is QuoteItem => Boolean(x));
+      const evidenceReviewIds = Array.isArray(item.evidenceReviewIds)
+        ? [...new Set((item.evidenceReviewIds as unknown[]).map((x) => normalizeText(String(x ?? ""))).filter(Boolean))]
+        : [];
+
+      items.push({
+        priority: priority as Priority,
+        title: normalizeText(String(item.title ?? "")) || "기타 개선",
+        impact: impact as Impact,
+        effort: effort as Effort,
+        action: normalizeText(String(item.action ?? "")) || "반복 리뷰를 검토해 개선 항목을 구체화",
+        evidenceCount: Number(item.evidenceCount ?? evidenceReviewIds.length ?? 0) || evidenceReviewIds.length,
+        evidenceReviewIds,
+        examples: examples.length > 0 ? examples : undefined
+      });
+    }
+
+    normalized.push({
+      appTitle,
+      reviewCount: normalizeText(String(row.reviewCount ?? "")) || "-",
+      items
+    });
+  }
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+async function readBacklogData(backlogPath: string): Promise<AppBacklog[] | undefined> {
+  try {
+    const raw = await fs.readFile(backlogPath, "utf8");
+    return normalizeBacklogData(JSON.parse(raw) as unknown);
+  } catch {
+    return undefined;
+  }
+}
+
+async function writeBacklogData(backlogPath: string, ownerAppId: string, appBacklogs: AppBacklog[]): Promise<void> {
+  const serializedBacklogs: BacklogDataApp[] = appBacklogs.map((appBacklog) => ({
+    appTitle: appBacklog.appTitle,
+    reviewCount: appBacklog.reviewCount,
+    items: appBacklog.items.map((item) => {
+      const evidenceReviewIds = [...new Set(item.evidenceReviewIds)].slice(0, MAX_EVIDENCE_PER_ITEM);
+      return {
+        priority: item.priority,
+        title: item.title,
+        impact: item.impact,
+        effort: item.effort,
+        action: item.action,
+        evidenceCount: evidenceReviewIds.length,
+        evidenceReviewIds
+      };
+    })
+  }));
+
+  const payload: BacklogDataFile = {
+    version: 1,
+    ownerAppId,
+    generatedAt: new Date().toISOString(),
+    appBacklogs: serializedBacklogs
+  };
+  await fs.mkdir(path.dirname(backlogPath), { recursive: true });
+  await fs.writeFile(backlogPath, JSON.stringify(payload, null, 2), "utf8");
+}
+
+function hydrateBacklogEvidence(backlogs: AppBacklog[], reviewPools: ReviewPools): AppBacklog[] {
+  return backlogs.map((appBacklog) => {
+    const appScope = normalizeText(appBacklog.appTitle).toLowerCase();
+    const appPool = resolvePoolForApp(appBacklog.appTitle, reviewPools);
+    const reviewById = new Map<string, AppReviewPoolItem>();
+    for (const review of appPool?.reviews ?? []) {
+      reviewById.set(normalizeText(review.reviewId), review);
+    }
+
+    const items = appBacklog.items.map((item) => {
+      const legacyQuoteByKey = new Map<string, QuoteItem>();
+      for (const quote of item.examples ?? []) {
+        const scopedKey = normalizeText(quote.evidenceKey).toLowerCase();
+        const baseKey = normalizeText(quote.reviewId).toLowerCase();
+        if (scopedKey && !legacyQuoteByKey.has(scopedKey)) {
+          legacyQuoteByKey.set(scopedKey, quote);
+        }
+        if (baseKey && !legacyQuoteByKey.has(baseKey)) {
+          legacyQuoteByKey.set(baseKey, quote);
+        }
+      }
+
+      const ranked = [...new Set(item.evidenceReviewIds)]
+        .map((rawId) => {
+          const normalizedId = normalizeText(rawId).toLowerCase();
+          if (!normalizedId) {
+            return undefined;
+          }
+          const scopedReviewId = normalizedId.includes("::") ? normalizedId : `${appScope}::${normalizedId}`;
+          const baseReviewId = extractBaseReviewId(scopedReviewId).toLowerCase();
+          const poolReview = reviewById.get(baseReviewId);
+          const quote =
+            legacyQuoteByKey.get(scopedReviewId) ??
+            legacyQuoteByKey.get(baseReviewId) ??
+            (poolReview
+              ? {
+                  reviewId: poolReview.reviewId,
+                  evidenceKey: scopedReviewId,
+                  meta: poolReview.meta,
+                  kr: poolReview.kr,
+                  org: poolReview.org,
+                  tags: inferBacklogTagsFromPoolReview(poolReview)
+                }
+              : undefined);
+
+          const rankedInfo = scoreEvidenceCandidate({
+            scopedReviewId,
+            quote,
+            appPool
+          });
+
+          return {
+            scopedReviewId,
+            quote,
+            score: rankedInfo.score,
+            timestamp: rankedInfo.timestamp
+          };
+        })
+        .filter(
+          (
+            row
+          ): row is {
+            scopedReviewId: string;
+            quote: QuoteItem | undefined;
+            score: number;
+            timestamp: number;
+          } => row !== undefined
+        )
+        .sort((a, b) => {
+          if (b.score !== a.score) {
+            return b.score - a.score;
+          }
+          return b.timestamp - a.timestamp;
+        })
+        .slice(0, MAX_EVIDENCE_PER_ITEM);
+
+      return {
+        ...item,
+        evidenceReviewIds: ranked.map((row) => row.scopedReviewId),
+        evidenceCount: ranked.length,
+        examples: ranked.map((row) => row.quote).filter((quote): quote is QuoteItem => Boolean(quote))
+      };
+    });
+
+    return {
+      ...appBacklog,
+      items
+    };
+  });
+}
+
 function renderCategoryTitle(key: CategoryKey): string {
   if (key === "satisfaction") {
     return "#만족";
@@ -1017,14 +1973,10 @@ function priorityOrder(priority: Priority): number {
   return 2;
 }
 
-function calculatePriority(themeId: string, reqCount: number, negCount: number, posCount: number): Priority {
+function calculatePriority(reqCount: number, negCount: number, posCount: number): Priority {
   const score = reqCount * 3 + negCount * 2 + posCount;
 
   if (score >= 10) {
-    return "must";
-  }
-
-  if (PRIORITY_BOOST_THEME_IDS.has(themeId) && score >= 6) {
     return "must";
   }
 
@@ -1035,9 +1987,339 @@ function calculatePriority(themeId: string, reqCount: number, negCount: number, 
   return "could";
 }
 
+function appendQuoteToBucket(params: {
+  appTitle: string;
+  appScope: string;
+  appPool?: AppReviewPool;
+  quote: QuoteItem;
+  categoryKey: CategoryKey;
+  theme: ThemeDefinition;
+  buckets: Map<
+    string,
+    {
+      theme: ThemeDefinition;
+      reqCount: number;
+      negCount: number;
+      posCount: number;
+      evidenceReviewIds: Set<string>;
+      evidenceQuoteById: Map<string, QuoteItem>;
+      examples: QuoteItem[];
+    }
+  >;
+}): void {
+  const { appTitle, appScope, appPool, quote, categoryKey, theme, buckets } = params;
+  const bucket =
+    buckets.get(theme.id) ?? {
+      theme,
+      reqCount: 0,
+      negCount: 0,
+      posCount: 0,
+      evidenceReviewIds: new Set<string>(),
+      evidenceQuoteById: new Map<string, QuoteItem>(),
+      examples: []
+    };
+
+  const baseReviewId =
+    normalizeText(findPoolReviewIdForQuote(quote, appPool)) ||
+    normalizeText(quote.reviewId) ||
+    createQuoteReviewId(appTitle, {
+      meta: quote.meta,
+      kr: quote.kr,
+      org: quote.org
+    });
+  const scopedReviewId = `${appScope}::${baseReviewId}`.toLowerCase();
+  if (bucket.evidenceReviewIds.has(scopedReviewId)) {
+    return;
+  }
+  bucket.evidenceReviewIds.add(scopedReviewId);
+
+  const quoteTags = resolveQuoteTags(quote, categoryKey);
+  if (quoteTags.includes("requests")) {
+    bucket.reqCount += 1;
+  }
+  if (quoteTags.includes("dissatisfaction")) {
+    bucket.negCount += 1;
+  }
+  if (quoteTags.includes("satisfaction")) {
+    bucket.posCount += 1;
+  }
+
+  bucket.examples.push({
+    ...quote,
+    reviewId: baseReviewId,
+    evidenceKey: scopedReviewId
+  });
+  bucket.evidenceQuoteById.set(scopedReviewId, {
+    ...quote,
+    reviewId: baseReviewId,
+    evidenceKey: scopedReviewId
+  });
+
+  buckets.set(theme.id, bucket);
+}
+
+function reviewTextKey(review: Pick<AppReviewPoolItem, "kr" | "org">): string {
+  const base = normalizeMatchText(`${review.kr} ${review.org}`).replace(/\s+/g, " ").trim();
+  if (!base) {
+    return "";
+  }
+  return base.slice(0, 220);
+}
+
+function inferBacklogTagsFromPoolReview(review: AppReviewPoolItem): ReviewTag[] {
+  const tags: ReviewTag[] = [];
+  const text = `${review.kr} ${review.org}`.toLowerCase();
+
+  if (review.rating <= 2 || includesAny(text, DISSATISFACTION_HINTS)) {
+    tags.push("dissatisfaction");
+  }
+  if (review.rating >= 4 && !tags.includes("dissatisfaction")) {
+    tags.push("satisfaction");
+  }
+  if (includesAny(text, REQUEST_HINTS)) {
+    tags.push("requests");
+  }
+
+  if (tags.length === 0) {
+    tags.push(review.rating >= 4 ? "satisfaction" : "dissatisfaction");
+  }
+
+  return normalizeReviewTags(tags);
+}
+
+function inferPrimaryCategoryFromTags(tags: ReviewTag[]): CategoryKey {
+  if (tags.includes("requests")) {
+    return "requests";
+  }
+  if (tags.includes("dissatisfaction")) {
+    return "dissatisfaction";
+  }
+  return "satisfaction";
+}
+
+function scorePoolReviewForBacklog(review: AppReviewPoolItem, tags: ReviewTag[]): number {
+  let score = 0;
+  const text = `${review.kr} ${review.org}`.toLowerCase();
+  const normalizedLength = normalizeText(review.kr || review.org).length;
+  const requestHit = includesAny(text, REQUEST_HINTS);
+  const dissatisfactionHit = includesAny(text, DISSATISFACTION_HINTS);
+  const rating = Number(review.rating ?? 0);
+
+  if (requestHit) {
+    score += 8;
+  }
+  if (dissatisfactionHit) {
+    score += 6;
+  }
+  if (tags.includes("requests")) {
+    score += 4;
+  }
+  if (tags.includes("dissatisfaction")) {
+    score += 3;
+  }
+  if (rating <= 2) {
+    score += 4;
+  } else if (rating === 3) {
+    score += 1;
+  } else if (rating >= 4) {
+    score += 1;
+  }
+  if (normalizedLength >= 180) {
+    score += 3;
+  } else if (normalizedLength >= 90) {
+    score += 2;
+  } else if (normalizedLength >= 40) {
+    score += 1;
+  }
+
+  return score;
+}
+
+function pickKeyReviewsFromPool(reviews: AppReviewPoolItem[]): AppReviewPoolItem[] {
+  if (reviews.length <= MAX_SYNTH_REVIEWS_PER_APP) {
+    return reviews;
+  }
+
+  const scored = reviews.map((review) => {
+    const tags = inferBacklogTagsFromPoolReview(review);
+    const category = inferPrimaryCategoryFromTags(tags);
+    const score = scorePoolReviewForBacklog(review, tags);
+    const timestamp = new Date(review.date).getTime();
+
+    return {
+      review,
+      tags,
+      category,
+      score,
+      timestamp: Number.isFinite(timestamp) ? timestamp : 0
+    };
+  });
+
+  scored.sort((a, b) => {
+    if (b.score !== a.score) {
+      return b.score - a.score;
+    }
+    return b.timestamp - a.timestamp;
+  });
+
+  const seenText = new Set<string>();
+  const picked: AppReviewPoolItem[] = [];
+  const categoryCounts: Record<CategoryKey, number> = {
+    satisfaction: 0,
+    dissatisfaction: 0,
+    requests: 0
+  };
+
+  for (const row of scored) {
+    if (row.score < MIN_SYNTH_REVIEW_SCORE) {
+      continue;
+    }
+    if (picked.length >= MAX_SYNTH_REVIEWS_PER_APP) {
+      break;
+    }
+    if (categoryCounts[row.category] >= MAX_SYNTH_REVIEWS_PER_CATEGORY) {
+      continue;
+    }
+
+    const key = reviewTextKey(row.review);
+    if (key) {
+      if (seenText.has(key)) {
+        continue;
+      }
+      seenText.add(key);
+    }
+
+    picked.push(row.review);
+    categoryCounts[row.category] += 1;
+  }
+
+  if (picked.length >= Math.min(MAX_SYNTH_REVIEWS_PER_APP, reviews.length)) {
+    return picked;
+  }
+
+  for (const row of scored) {
+    if (picked.length >= MAX_SYNTH_REVIEWS_PER_APP) {
+      break;
+    }
+    if (categoryCounts[row.category] >= MAX_SYNTH_REVIEWS_PER_CATEGORY) {
+      continue;
+    }
+    if (picked.some((item) => item.reviewId === row.review.reviewId)) {
+      continue;
+    }
+
+    const key = reviewTextKey(row.review);
+    if (key) {
+      if (seenText.has(key)) {
+        continue;
+      }
+      seenText.add(key);
+    }
+
+    picked.push(row.review);
+    categoryCounts[row.category] += 1;
+  }
+
+  return picked;
+}
+
+function extractBaseReviewId(scopedReviewId: string): string {
+  const normalized = normalizeText(scopedReviewId);
+  if (!normalized) {
+    return "";
+  }
+  const parts = normalized.split("::");
+  return normalizeText(parts[parts.length - 1] ?? normalized);
+}
+
+function scoreEvidenceCandidate(params: {
+  scopedReviewId: string;
+  quote?: QuoteItem;
+  appPool?: AppReviewPool;
+}): { score: number; timestamp: number } {
+  const { scopedReviewId, quote, appPool } = params;
+  const baseReviewId = extractBaseReviewId(scopedReviewId);
+  const review = appPool?.reviews.find((item) => normalizeText(item.reviewId) === baseReviewId);
+  const tags = normalizeReviewTags(quote?.tags ?? []);
+  const timestamp = review ? new Date(review.date).getTime() : 0;
+  let score = 0;
+
+  if (tags.includes("requests")) {
+    score += 8;
+  }
+  if (tags.includes("dissatisfaction")) {
+    score += 6;
+  }
+  if (tags.includes("satisfaction")) {
+    score += 1;
+  }
+
+  if (review) {
+    const rating = Number(review.rating ?? 0);
+    if (rating <= 2) {
+      score += 4;
+    } else if (rating === 3) {
+      score += 1;
+    } else if (rating >= 4) {
+      score += 1;
+    }
+  }
+
+  return {
+    score,
+    timestamp: Number.isFinite(timestamp) ? timestamp : 0
+  };
+}
+
+function toBacklogSourceCategories(app: AppSection, appPool?: AppReviewPool): Record<CategoryKey, QuoteItem[]> {
+  const hasCurated =
+    app.categories.satisfaction.length > 0 ||
+    app.categories.dissatisfaction.length > 0 ||
+    app.categories.requests.length > 0;
+  if (hasCurated) {
+    return app.categories;
+  }
+
+  const synthesized: Record<CategoryKey, QuoteItem[]> = {
+    satisfaction: [],
+    dissatisfaction: [],
+    requests: []
+  };
+
+  const reviews = appPool?.reviews ?? [];
+  const keyReviews = pickKeyReviewsFromPool(reviews);
+
+  for (const review of keyReviews) {
+    const tags = inferBacklogTagsFromPoolReview(review);
+    let category: CategoryKey = "dissatisfaction";
+    if (tags.includes("requests")) {
+      category = "requests";
+    } else if (tags.includes("satisfaction")) {
+      category = "satisfaction";
+    }
+
+    synthesized[category].push({
+      reviewId: review.reviewId,
+      meta: review.meta,
+      kr: review.kr,
+      org: review.org,
+      tags
+    });
+  }
+
+  return synthesized;
+}
+
 function buildBacklog(apps: AppSection[], reviewPools: ReviewPools): AppBacklog[] {
   return apps.map((app) => {
     const appPool = resolvePoolForApp(app.title, reviewPools);
+    const sourceCategories = toBacklogSourceCategories(app, appPool);
+    const appThemes = deriveDynamicThemes({
+      ...app,
+      categories: sourceCategories
+    });
+    const fallbackTheme = appThemes.find((theme) => theme.id === THEME_FALLBACK_ID);
+    const matchingThemes = appThemes.filter((theme) => theme.keywords.length > 0);
     const buckets = new Map<
       string,
       {
@@ -1053,87 +2335,87 @@ function buildBacklog(apps: AppSection[], reviewPools: ReviewPools): AppBacklog[
 
     const appScope = normalizeText(app.title).toLowerCase();
     for (const categoryKey of BACKLOG_CATEGORY_ORDER) {
-      for (const quote of app.categories[categoryKey]) {
+      for (const quote of sourceCategories[categoryKey]) {
         const text = `${quote.kr} ${quote.org} ${quote.meta}`.toLowerCase();
+        let matched = false;
 
-        for (const theme of THEMES) {
-          const hit = theme.keywords.some((keyword) => text.includes(keyword));
+        for (const theme of matchingThemes) {
+          const hit = includesAny(text, theme.keywords);
           if (!hit) {
             continue;
           }
+          matched = true;
 
-          const bucket =
-            buckets.get(theme.id) ?? {
-              theme,
-              reqCount: 0,
-              negCount: 0,
-              posCount: 0,
-              evidenceReviewIds: new Set<string>(),
-              evidenceQuoteById: new Map<string, QuoteItem>(),
-              examples: []
-            };
-
-          const baseReviewId =
-            normalizeText(findPoolReviewIdForQuote(quote, appPool)) ||
-            normalizeText(quote.reviewId) ||
-            createQuoteReviewId(app.title, {
-              meta: quote.meta,
-              kr: quote.kr,
-              org: quote.org
-            });
-          const scopedReviewId = `${appScope}::${baseReviewId}`.toLowerCase();
-          if (bucket.evidenceReviewIds.has(scopedReviewId)) {
-            continue;
-          }
-          bucket.evidenceReviewIds.add(scopedReviewId);
-
-          const quoteTags = resolveQuoteTags(quote, categoryKey);
-          if (quoteTags.includes("requests")) {
-            bucket.reqCount += 1;
-          }
-          if (quoteTags.includes("dissatisfaction")) {
-            bucket.negCount += 1;
-          }
-          if (quoteTags.includes("satisfaction")) {
-            bucket.posCount += 1;
-          }
-
-          bucket.examples.push({
-            ...quote,
-            reviewId: baseReviewId,
-            evidenceKey: scopedReviewId
+          appendQuoteToBucket({
+            appTitle: app.title,
+            appScope,
+            appPool,
+            quote,
+            categoryKey,
+            theme,
+            buckets
           });
-          bucket.evidenceQuoteById.set(scopedReviewId, {
-            ...quote,
-            reviewId: baseReviewId,
-            evidenceKey: scopedReviewId
-          });
+        }
 
-          buckets.set(theme.id, bucket);
+        if (!matched && fallbackTheme) {
+          appendQuoteToBucket({
+            appTitle: app.title,
+            appScope,
+            appPool,
+            quote,
+            categoryKey,
+            theme: fallbackTheme,
+            buckets
+          });
         }
       }
     }
 
     const items: BacklogItem[] = [...buckets.values()]
       .map((bucket) => {
-        const evidenceReviewIds = [...bucket.evidenceReviewIds];
-        const evidenceCount = evidenceReviewIds.length;
-        const examples = evidenceReviewIds
-          .map((reviewId) => bucket.evidenceQuoteById.get(reviewId))
+        const rankedEvidence = [...bucket.evidenceReviewIds]
+          .map((scopedReviewId) => {
+            const quote = bucket.evidenceQuoteById.get(scopedReviewId);
+            const ranked = scoreEvidenceCandidate({
+              scopedReviewId,
+              quote,
+              appPool
+            });
+
+            return {
+              scopedReviewId,
+              quote,
+              score: ranked.score,
+              timestamp: ranked.timestamp
+            };
+          })
+          .sort((a, b) => {
+            if (b.score !== a.score) {
+              return b.score - a.score;
+            }
+            return b.timestamp - a.timestamp;
+          })
+          .slice(0, MAX_EVIDENCE_PER_ITEM);
+        const evidenceReviewIds = rankedEvidence.map((item) => item.scopedReviewId);
+        const examples = rankedEvidence
+          .map((item) => item.quote)
           .filter((quote): quote is QuoteItem => Boolean(quote));
-        const priority = calculatePriority(
-          bucket.theme.id,
-          bucket.reqCount,
-          bucket.negCount,
-          bucket.posCount
-        );
+        const evidenceCount = evidenceReviewIds.length;
+        const priority = calculatePriority(bucket.reqCount, bucket.negCount, bucket.posCount);
+        const specificTitle = deriveSpecificThemeTitleFromExamples(bucket.theme.title, examples);
+        const specificAction =
+          evidenceCount > 0
+            ? hasKoreanText(specificTitle)
+              ? `'${specificTitle}' 관련 반복 리뷰 ${evidenceCount}건을 기준으로 우선 개선 항목을 확정`
+              : `Prioritize '${specificTitle}' updates based on ${evidenceCount} repeated reviews`
+            : bucket.theme.action;
 
         return {
           priority,
-          title: bucket.theme.title,
+          title: specificTitle,
           impact: bucket.theme.impact,
           effort: bucket.theme.effort,
-          action: bucket.theme.action,
+          action: specificAction,
           evidenceCount,
           evidenceReviewIds,
           examples
@@ -1186,9 +2468,34 @@ function renderHtml(
   ownerAppId: string,
   reviewPools: ReviewPools,
   ownerAppIconMetaHref?: string
-): string {
+): { html: string; reviewDefaults: Record<string, ReviewDefaultEntry> } {
   const reportLanguage = resolveReportLanguage(title);
   const reportTitle = resolveReportTitle(ownerAppId, title);
+  const reviewDefaults = new Map<string, ReviewDefaultEntry>();
+
+  function mergeReviewDefaults(reviewIdRaw: string, excluded: boolean, tags: string[]): void {
+    const reviewId = normalizeText(reviewIdRaw);
+    if (!reviewId) {
+      return;
+    }
+
+    const normalizedTags = normalizeReviewTags(tags);
+    const existing = reviewDefaults.get(reviewId);
+    if (!existing) {
+      reviewDefaults.set(reviewId, {
+        excluded,
+        tags: normalizedTags
+      });
+      return;
+    }
+
+    const merged = normalizeReviewTags([...existing.tags, ...normalizedTags]);
+    reviewDefaults.set(reviewId, {
+      excluded: existing.excluded && excluded,
+      tags: merged
+    });
+  }
+
   const iconMetaHtml = ownerAppIconMetaHref
     ? `
     <link rel=\"icon\" type=\"image/png\" href=\"${escapeHtml(ownerAppIconMetaHref)}\" />
@@ -1207,6 +2514,7 @@ function renderHtml(
     defaultExcluded: boolean;
     defaultTags?: string[];
   }): string {
+    const reviewIdRaw = normalizeText(params.reviewId);
     const kr = escapeHtml(params.kr || "(한국어 번역 없음)");
     const org = escapeHtml(params.org || "(원문 없음)");
     const reviewId = escapeHtml(params.reviewId);
@@ -1228,6 +2536,7 @@ function renderHtml(
       ? params.defaultTags.map((tag) => normalizeText(tag).toLowerCase()).filter(Boolean)
       : [];
     const defaultTagsAttr = defaultTags.join(",");
+    mergeReviewDefaults(reviewIdRaw, params.defaultExcluded, defaultTags);
 
     return `
       <article class=\"quote-card searchable\" data-review-id=\"${reviewId}\" data-app-key=\"${escapeHtml(
@@ -1407,7 +2716,7 @@ function renderHtml(
 
       if (!existing) {
         const evidenceQuoteById = new Map<string, QuoteItem>();
-        for (const quote of item.examples) {
+        for (const quote of item.examples ?? []) {
           const quoteKey =
             normalizeText(quote.evidenceKey).toLowerCase() ||
             normalizeText(quote.reviewId).toLowerCase() ||
@@ -1440,7 +2749,7 @@ function renderHtml(
       if (priorityOrder(item.priority) < priorityOrder(existing.priority)) {
         existing.priority = item.priority;
       }
-      for (const quote of item.examples) {
+      for (const quote of item.examples ?? []) {
         const quoteKey =
           normalizeText(quote.evidenceKey).toLowerCase() ||
           normalizeText(quote.reviewId).toLowerCase() ||
@@ -1484,7 +2793,7 @@ function renderHtml(
       : unifiedBacklogItems
           .map((item, itemIndex) => {
             const evidenceId = `evidence-${itemIndex}`;
-            const examples = item.examples
+            const examples = (item.examples ?? [])
               .map((q, quoteIndex) => {
                 const detailId = `evidence-detail-${itemIndex}-${quoteIndex}`;
                 const parsed = parseQuoteMeta(q.meta);
@@ -1523,7 +2832,7 @@ function renderHtml(
                   <tr class=\"backlog-item main-row searchable\" data-priority=\"${escapeHtml(
                     item.priority
                   )}\" data-search=\"${escapeHtml(
-              `${appLabel} ${item.priority} ${item.title} ${item.action} ${item.examples
+              `${appLabel} ${item.priority} ${item.title} ${item.action} ${(item.examples ?? [])
                 .map((q) => `${q.kr} ${q.org}`)
                 .join(" ")}`
             ).toLowerCase()}\" data-evidence-id=\"${escapeHtml(evidenceId)}\">
@@ -1617,7 +2926,7 @@ function renderHtml(
         </div>`
     : "";
 
-  return `<!doctype html>
+  const html = `<!doctype html>
 <html lang=\"${reportLanguage}\">
   <head>
     <meta charset=\"utf-8\" />
@@ -3564,18 +4873,11 @@ function renderHtml(
       }
 
       function writeCardState(reviewId, next, card) {
-        const defaultExcluded = isCardDefaultExcluded(card);
-        const defaultTags = getCardDefaultTags(card);
         const cleaned = {
           tags: normalizeTagList(next.tags),
           excluded: Boolean(next.excluded),
           updatedAt: new Date().toISOString()
         };
-
-        if (cleaned.excluded === defaultExcluded && sameTagList(cleaned.tags, defaultTags)) {
-          delete reviewState[reviewId];
-          return;
-        }
 
         reviewState[reviewId] = {
           tags: cleaned.tags,
@@ -4313,15 +5615,10 @@ function renderHtml(
               return;
             }
 
-            const hasExplicitTags = Object.prototype.hasOwnProperty.call(row, 'tags') && Array.isArray(row.tags);
             const tags = normalizeTagList(Array.isArray(row.tags) ? row.tags : []);
             const excluded = Boolean(row.excluded);
-            if (!excluded && !hasExplicitTags) {
-              return;
-            }
-
             reviewState[reviewId] = {
-              tags: hasExplicitTags ? tags : undefined,
+              tags,
               excluded,
               updatedAt: typeof row.updatedAt === 'string' ? row.updatedAt : new Date().toISOString()
             };
@@ -4824,48 +6121,111 @@ function renderHtml(
     </script>
   </body>
 </html>`;
+
+  const sortedReviewDefaults = Object.fromEntries(
+    [...reviewDefaults.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([reviewId, entry]) => [reviewId, entry])
+  );
+
+  return {
+    html,
+    reviewDefaults: sortedReviewDefaults
+  };
+}
+
+async function renderBundleForApp(params: {
+  ownerAppId: string;
+  bundlePath: string;
+  backlogPath: string;
+  inputPath?: string;
+  htmlOutputPath?: string;
+}): Promise<void> {
+  const { ownerAppId, inputPath, bundlePath, backlogPath, htmlOutputPath } = params;
+  const reviewPools = await loadReviewPools(ownerAppId);
+  const parsed = await resolveReportSource({
+    ownerAppId,
+    reviewPools,
+    inputPath
+  });
+  let backlog = await readBacklogData(backlogPath);
+  if (!backlog) {
+    backlog = buildBacklog(parsed.apps, reviewPools);
+    await writeBacklogData(backlogPath, ownerAppId, backlog);
+    console.log(`[${ownerAppId}] Generated backlog JSON: ${backlogPath}`);
+  }
+  const hydratedBacklog = hydrateBacklogEvidence(backlog, reviewPools);
+  const needsBacklogNormalization = backlog.some((appBacklog) =>
+    appBacklog.items.some(
+      (item) => (item.examples?.length ?? 0) > 0 || item.evidenceReviewIds.length > MAX_EVIDENCE_PER_ITEM
+    )
+  );
+  if (needsBacklogNormalization) {
+    await writeBacklogData(backlogPath, ownerAppId, hydratedBacklog);
+    console.log(`[${ownerAppId}] Normalized backlog JSON: ${backlogPath}`);
+  }
+  const ownerAppIconMetaHref = await resolveOwnerAppIconMetaHref(ownerAppId);
+  const rendered = renderHtml(
+    parsed.title,
+    parsed.apps,
+    hydratedBacklog,
+    ownerAppId,
+    reviewPools,
+    ownerAppIconMetaHref
+  );
+  const bundlePayload: RenderBundlePayload = {
+    version: 2,
+    ownerAppId,
+    generatedAt: new Date().toISOString(),
+    reviewDefaults: rendered.reviewDefaults,
+    html: rendered.html
+  };
+
+  await fs.mkdir(path.dirname(bundlePath), { recursive: true });
+  await fs.writeFile(bundlePath, JSON.stringify(bundlePayload, null, 2), "utf8");
+
+  if (normalizeText(htmlOutputPath)) {
+    const htmlPath = path.resolve(String(htmlOutputPath));
+    await fs.mkdir(path.dirname(htmlPath), { recursive: true });
+    await fs.writeFile(htmlPath, rendered.html, "utf8");
+    console.log(`[${ownerAppId}] Rendered legacy HTML report: ${htmlPath}`);
+  }
+
+  console.log(`[${ownerAppId}] Rendered report bundle: ${bundlePath}`);
 }
 
 async function main(): Promise<void> {
   const argv = await parseArgs();
+  if (normalizeText(argv.htmlOutput) && !argv.withHtml) {
+    throw new Error("`--html-output` requires `--with-html`.");
+  }
+
   if (argv.all) {
     if (normalizeText(argv.myApp)) {
       throw new Error("`--all` cannot be used with `--my-app`.");
     }
-    if (normalizeText(argv.input) || normalizeText(argv.output)) {
-      throw new Error("`--all` cannot be used with `--input` or `--output`.");
+    if (normalizeText(argv.input) || normalizeText(argv.output) || normalizeText(argv.htmlOutput)) {
+      throw new Error("`--all` cannot be used with `--input`, `--output`, or `--html-output`.");
     }
 
     const ownerAppIds = await findOwnerAppIdsForBatchRender();
     if (ownerAppIds.length === 0) {
-      throw new Error(
-        `No render targets found. Expected files: data/{appId}/${REPORTS_DIR_NAME}/${DEFAULT_REPORT_MARKDOWN_FILE}`
-      );
+      throw new Error(`No render targets found. Expected apps with review JSON under data/{appId}/reviews[-ko]/`);
     }
 
     for (const ownerAppId of ownerAppIds) {
-      const inputPath = resolveDefaultInput(ownerAppId);
-      const outputPath = resolveDefaultOutput(ownerAppId);
-      const raw = await fs.readFile(inputPath, "utf8");
-      const parsed = parseMarkdown(raw);
-      const reviewPools = await loadReviewPools(ownerAppId);
-      const backlog = buildBacklog(parsed.apps, reviewPools);
-      const ownerAppIconMetaHref = await resolveOwnerAppIconMetaHref(ownerAppId);
-      const html = renderHtml(
-        parsed.title,
-        parsed.apps,
-        backlog,
+      const bundlePath = resolveDefaultBundle(ownerAppId);
+      const backlogPath = resolveDefaultBacklog(ownerAppId);
+      const htmlOutputPath = argv.withHtml ? resolveDefaultHtmlOutput(ownerAppId) : undefined;
+      await renderBundleForApp({
         ownerAppId,
-        reviewPools,
-        ownerAppIconMetaHref
-      );
-
-      await fs.mkdir(path.dirname(outputPath), { recursive: true });
-      await fs.writeFile(outputPath, html, "utf8");
-      console.log(`[${ownerAppId}] Rendered HTML report: ${outputPath}`);
+        bundlePath,
+        backlogPath,
+        htmlOutputPath
+      });
     }
 
-    console.log(`Rendered HTML reports for ${ownerAppIds.length} app(s).`);
+    console.log(`Rendered report bundles for ${ownerAppIds.length} app(s).`);
     return;
   }
 
@@ -4875,28 +6235,24 @@ async function main(): Promise<void> {
 
   const owner = await resolveOwnerApp(String(argv.myApp), argv.registeredAppsPath);
   const ownerAppId = owner.ownerAppId;
-  const inputPath = normalizeText(argv.input) ? path.resolve(process.cwd(), String(argv.input)) : resolveDefaultInput(ownerAppId);
-  const outputPath = normalizeText(argv.output)
+  const inputPath = normalizeText(argv.input) ? path.resolve(process.cwd(), String(argv.input)) : undefined;
+  const bundlePath = normalizeText(argv.output)
     ? path.resolve(process.cwd(), String(argv.output))
-    : resolveDefaultOutput(ownerAppId);
-  const raw = await fs.readFile(inputPath, "utf8");
-  const parsed = parseMarkdown(raw);
-  const reviewPools = await loadReviewPools(ownerAppId);
-  const backlog = buildBacklog(parsed.apps, reviewPools);
-  const ownerAppIconMetaHref = await resolveOwnerAppIconMetaHref(ownerAppId);
-  const html = renderHtml(
-    parsed.title,
-    parsed.apps,
-    backlog,
+    : resolveDefaultBundle(ownerAppId);
+  const backlogPath = resolveDefaultBacklog(ownerAppId);
+  const htmlOutputPath = argv.withHtml
+    ? normalizeText(argv.htmlOutput)
+      ? path.resolve(process.cwd(), String(argv.htmlOutput))
+      : resolveDefaultHtmlOutput(ownerAppId)
+    : undefined;
+
+  await renderBundleForApp({
     ownerAppId,
-    reviewPools,
-    ownerAppIconMetaHref
-  );
-
-  await fs.mkdir(path.dirname(outputPath), { recursive: true });
-  await fs.writeFile(outputPath, html, "utf8");
-
-  console.log(`Rendered HTML report: ${outputPath}`);
+    bundlePath,
+    backlogPath,
+    inputPath,
+    htmlOutputPath
+  });
 }
 
 main().catch((error) => {

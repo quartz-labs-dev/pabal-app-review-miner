@@ -19,9 +19,13 @@ Collect reviews and generate a report:
 ```bash
 npm run review:collect -- --my-app golden-horizon --apps apps.json --limit 200
 npm run report:translate -- --my-app golden-horizon
-npm run report:analyze -- --my-app golden-horizon
 npm run report:render-html -- --my-app golden-horizon
+npm run report:init-backlog -- --my-app golden-horizon
+npm run report:init-state -- --my-app golden-horizon
 ```
+
+`report:render-html` now writes the shared-viewer bundle JSON by default (`data/{myAppId}/reports/competitor-raw-actionable.ko.json`).  
+Use `--with-html` only when you explicitly need a legacy standalone HTML file.
 
 ## Documentation
 

@@ -32,8 +32,8 @@ interface AppReports {
 type PreviewTag = "heart" | "satisfaction" | "dissatisfaction" | "requests";
 
 interface PreviewStateEntry {
-  excluded?: boolean;
-  tags?: PreviewTag[];
+  excluded: boolean;
+  tags: PreviewTag[];
   updatedAt: string;
 }
 
@@ -52,13 +52,14 @@ interface PreviewStateFile {
 
 const REPORT_FILE_EXTENSIONS = new Set([".html", ".md", ".json"]);
 const REPORT_EXT_ORDER: Record<string, number> = {
-  ".html": 0,
+  ".json": 0,
   ".md": 1,
-  ".json": 2
+  ".html": 2
 };
 const PREVIEW_STATE_FILE_NAME = "preview-state.json";
+const DEFAULT_REPORT_BUNDLE_FILE_NAME = "competitor-raw-actionable.ko.json";
 const PREVIEW_STATE_API_PREFIX = "/api/preview-state/";
-const PREVIEW_STATE_MAX_BODY_BYTES = 1_000_000;
+const PREVIEW_STATE_MAX_BODY_BYTES = 25_000_000;
 const PREVIEW_STATE_MAX_REVIEWS = 200_000;
 const PREVIEW_STATE_MAX_NOTES = 2_000;
 const PREVIEW_STATE_MAX_NOTE_LENGTH = 20_000;
@@ -252,16 +253,11 @@ function normalizePreviewStateEntry(value: unknown): PreviewStateEntry | undefin
 
   const row = value as Record<string, unknown>;
   const excluded = Boolean(row.excluded);
-  const hasExplicitTags = Object.prototype.hasOwnProperty.call(row, "tags") && Array.isArray(row.tags);
   const tags = normalizePreviewTags(row.tags);
 
-  if (!excluded && !hasExplicitTags) {
-    return undefined;
-  }
-
   return {
-    excluded: excluded || undefined,
-    tags: hasExplicitTags ? tags : undefined,
+    excluded,
+    tags,
     updatedAt: normalizeText(typeof row.updatedAt === "string" ? row.updatedAt : new Date().toISOString())
   };
 }
@@ -577,6 +573,7 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
   const cards = apps
     .map((app) => {
       const primaryReport = pickPrimaryReport(app.reports);
+      const viewerHref = `/v/${encodeURIComponent(app.appId)}`;
       const referenceReports = app.reports.filter((report) => report !== primaryReport);
       const iconBlock = app.iconHref
         ? `<img class=\"app-icon\" src=\"${escapeHtml(app.iconHref)}\" alt=\"${escapeHtml(
@@ -609,10 +606,10 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
             ${iconBlock}
             <h2>${escapeHtml(app.appId)}</h2>
           </div>
-          <a class=\"file-link file-link-main\" href=\"${escapeHtml(primaryReport.href)}\">
+          <a class=\"file-link file-link-main\" href=\"${escapeHtml(viewerHref)}\">
             <span class=\"main-link-text\">
               <span class=\"main-link-title\">View Report</span>
-              <span class=\"main-link-meta\">${escapeHtml(primaryReport.fileName)}</span>
+              <span class=\"main-link-meta\">Shared viewer · ${escapeHtml(app.appId)}</span>
             </span>
           </a>
           ${referenceSection}
@@ -986,6 +983,122 @@ function renderHomeHtml(apps: AppReports[], filterAppId?: string): string {
 </html>`;
 }
 
+function renderSharedViewerHtml(appId: string): string {
+  const safeAppId = escapeHtml(appId);
+  const bundleHref = `/r/${encodeURIComponent(appId)}/${encodeURIComponent(DEFAULT_REPORT_BUNDLE_FILE_NAME)}`;
+  const homeHref = "/";
+
+  return `<!doctype html>
+<html lang=\"en\">
+  <head>
+    <meta charset=\"utf-8\" />
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+    <title>${safeAppId} Report Viewer</title>
+    <style>
+      :root {
+        --bg: #f3f7fc;
+        --bg-layer: #eef4fb;
+        --panel: #ffffff;
+        --ink: #0f172a;
+        --sub: #475569;
+        --line: #d8e3f0;
+        --accent: #0ea5e9;
+        --accent-soft: rgba(14, 165, 233, 0.14);
+        --shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+      }
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background:
+          radial-gradient(circle at 0% 0%, #d8e9fb 0%, rgba(216, 233, 251, 0) 34%),
+          radial-gradient(circle at 92% 8%, #d9f0ff 0%, rgba(217, 240, 255, 0) 40%),
+          linear-gradient(180deg, var(--bg-layer) 0%, var(--bg) 100%);
+        color: var(--ink);
+        font-family: "Manrope", "Pretendard", "Segoe UI", sans-serif;
+      }
+      .boot {
+        display: grid;
+        place-items: center;
+        height: 100%;
+        padding: 24px;
+      }
+      .boot-card {
+        width: min(720px, 100%);
+        text-align: center;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: linear-gradient(165deg, #ffffff, #f5faff);
+        box-shadow: var(--shadow);
+        padding: 22px;
+      }
+      .boot h1 { margin: 0 0 10px; font-size: 1.05rem; font-weight: 700; }
+      .boot p { margin: 0 0 10px; color: var(--sub); }
+      .boot a { color: var(--accent); text-decoration: none; font-weight: 600; }
+      .boot a:hover { text-decoration: underline; }
+      .err {
+        max-width: 720px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        text-align: left;
+        background: #f8fbff;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 12px;
+        margin-top: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id=\"boot\" class=\"boot\">
+      <div class=\"boot-card\">
+        <h1>Loading report for ${safeAppId}...</h1>
+        <p>Using shared viewer + per-app report bundle</p>
+        <p><a href=\"${homeHref}\">Back to home</a></p>
+      </div>
+    </div>
+    <script>
+      (async function bootstrap() {
+        const bundleUrl = ${JSON.stringify(bundleHref)};
+        try {
+          const response = await fetch(bundleUrl, { method: "GET" });
+          if (!response.ok) {
+            throw new Error("Bundle request failed (" + response.status + "): " + bundleUrl);
+          }
+          const payload = await response.json();
+          const html = payload && typeof payload.html === "string" ? payload.html : "";
+          if (!html.trim()) {
+            throw new Error("Bundle missing 'html' content: " + bundleUrl);
+          }
+          document.open();
+          document.write(html);
+          document.close();
+        } catch (error) {
+          const node = document.getElementById("boot");
+          if (!node) {
+            return;
+          }
+          const message = error instanceof Error ? error.message : String(error);
+          const safeMessage = message
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+          node.innerHTML =
+            "<div><h1>Failed to load report bundle</h1>" +
+            "<p>App: ${safeAppId}</p>" +
+            "<p><a href=\\"${homeHref}\\">Back to home</a></p>" +
+            "<div class=\\"err\\">" + safeMessage + "</div>" +
+            "</div>";
+        }
+      })();
+    </script>
+  </body>
+</html>`;
+}
+
 function createSingleFileHandler(baseDir: string, indexPath: string, dataRoot: string, filterAppId?: string) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const rawUrl = normalizeText(req.url) || "/";
@@ -1030,6 +1143,20 @@ function createDashboardHandler(dataRoot: string, filterAppId?: string) {
     }
 
     if (handleAppIconRequest(pathname, res, dataRoot, filterAppId)) {
+      return;
+    }
+
+    if (pathname.startsWith("/v/")) {
+      const appId = normalizeText(decodeURIComponent(pathname.slice(3)));
+      if (!appId || !isSafeAppId(appId)) {
+        sendNotFound(res);
+        return;
+      }
+      if (filterAppId && appId !== filterAppId) {
+        sendNotFound(res);
+        return;
+      }
+      sendHtml(res, renderSharedViewerHtml(appId));
       return;
     }
 
@@ -1126,7 +1253,7 @@ async function main(): Promise<void> {
       console.log(`- file: ${singleFilePath}`);
     } else {
       console.log(`- mode: dashboard`);
-      console.log(`- route: / (apps list), /r/:app/:file (report file), /api/preview-state/:appId`);
+      console.log(`- route: / (apps list), /v/:app (shared viewer), /r/:app/:file (report file), /api/preview-state/:appId`);
     }
     console.log(`- url: http://${argv.host}:${argv.port}/`);
     console.log(`Press Ctrl+C to stop.`);

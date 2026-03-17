@@ -70,4 +70,4 @@ npm run review:collect -- --my-app golden-horizon --apps apps.json --limit 1
 ## 문서 안내
 
 - [리뷰 명령](./01-review.md): App Store/Google Play에서 경쟁 앱 리뷰를 수집해 raw JSON으로 저장합니다.
-- [리포트 명령](./02-report.md): 수집된 리뷰를 번역/분석해 리포트 산출물(HTML 포함)을 생성합니다.
+- [리포트 명령](./02-report.md): 수집된 리뷰를 번역하고 공용 뷰어 번들을 렌더링하며 backlog/preview state를 관리합니다.

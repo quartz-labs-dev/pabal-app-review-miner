@@ -70,4 +70,4 @@ npm run review:collect -- --my-app golden-horizon --apps apps.json --limit 1
 ## Documentation Map
 
 - [Review Commands](./01-review.md): Collect competitor app reviews from App Store/Google Play and save raw JSON data.
-- [Report Commands](./02-report.md): Use collected reviews to translate/analyze data and generate report outputs (including HTML).
+- [Report Commands](./02-report.md): Use collected reviews to translate data, render shared-viewer bundles, and manage backlog/preview state.

@@ -13,8 +13,9 @@
     "review:collect-by-name": "node dist/addByName.js",
     "review:backfill-ids": "node dist/backfillReviewIds.js",
     "report:translate": "node dist/translateReviews.js",
-    "report:analyze": "node dist/analyzeCompetitors.js",
     "report:render-html": "node dist/renderReportHtml.js",
+    "report:init-backlog": "node dist/initReportBacklog.js",
+    "report:init-state": "node dist/initReportState.js",
     "report:preview": "node dist/previewReport.js",
     "setup:icon": "node scripts/setup-icon.mjs",
     "start": "npm run report:preview --"
