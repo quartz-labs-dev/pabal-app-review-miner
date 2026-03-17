@@ -73,6 +73,17 @@ interface AppBacklog {
   items: BacklogItem[];
 }
 
+interface BacklogClientItem {
+  id: string;
+  priority: Priority;
+  title: string;
+  impact: Impact;
+  effort: Effort;
+  action: string;
+  evidenceReviewIds: string[];
+  appNames: string[];
+}
+
 interface BacklogDataItem {
   priority: Priority;
   title: string;
@@ -90,12 +101,14 @@ interface BacklogDataApp {
 }
 
 interface UnifiedBacklogItem {
+  id: string;
   priority: Priority;
   title: string;
   impact: Impact;
   effort: Effort;
   action: string;
   evidenceCount: number;
+  evidenceReviewIds: string[];
   examples: QuoteItem[];
   appNames: string[];
 }
@@ -428,6 +441,64 @@ const THEME_ACTION_HINTS_KO = ["선택", "저장", "추가", "설정", "지원",
 const THEME_ACTION_HINTS_EN = ["select", "save", "add", "set", "support", "show", "filter", "search", "pin"];
 const THEME_MULTI_HINTS_KO = ["다중", "여러", "복수"];
 const THEME_MULTI_HINTS_EN = ["multiple", "multi", "several"];
+const APP_BAR_BLOCK_HINTS = [
+  "status bar",
+  "notification bar",
+  "covered",
+  "overlay",
+  "clock",
+  "상단",
+  "가려",
+  "오버레이",
+  "알림 표시줄"
+];
+const UPDATE_STALE_HINTS = [
+  "not update",
+  "doesn't update",
+  "dont update",
+  "delayed",
+  "outdated",
+  "stale",
+  "n/a",
+  "갱신",
+  "업데이트 안",
+  "업데이트되지",
+  "지연",
+  "늦게",
+  "실시간 아님"
+];
+const CRASH_HINTS = [
+  "crash",
+  "freeze",
+  "stuck",
+  "won't open",
+  "wont open",
+  "shuts down",
+  "앱이 안열",
+  "충돌",
+  "멈춤",
+  "강제종료",
+  "꺼집"
+];
+const ADS_HINTS = ["ads", "ad ", "advert", "광고", "배너", "전면광고", "팝업"];
+const SUBSCRIPTION_HINTS = [
+  "subscription",
+  "subscribed",
+  "payment",
+  "paywall",
+  "refund",
+  "trial",
+  "구독",
+  "결제",
+  "환불",
+  "체험",
+  "유료"
+];
+const LOCATION_HINTS = ["location", "gps", "위치", "지역", "장소"];
+const WIDGET_HINTS = ["widget", "위젯"];
+const MAP_HINTS = ["map", "지도", "핀", "marker", "zoom", "레이어"];
+const LANGUAGE_HINTS = ["translation", "language", "localization", "번역", "언어", "현지화"];
+const SAVE_SYNC_HINTS = ["save", "saved", "autosave", "sync", "저장", "동기화", "사라져", "유실"];
 
 const REVIEW_COUNT_PREFIXES = ["- 전체 리뷰 수:", "- Total review count:"];
 const BACKLOG_CATEGORY_ORDER: CategoryKey[] = ["dissatisfaction", "requests", "satisfaction"];
@@ -962,16 +1033,15 @@ function deriveDynamicThemes(app: AppSection): ThemeDefinition[] {
       effort: "medium",
       action: "반복된 요청/불만 리뷰를 기준으로 개선 항목을 정의"
     });
+    themes.push({
+      id: THEME_FALLBACK_ID,
+      title: "미분류 핵심 리뷰 후속 정리",
+      keywords: [],
+      impact: "low",
+      effort: "medium",
+      action: "자동 분류에서 누락된 핵심 리뷰를 수동 검토해 후속 액션으로 정리"
+    });
   }
-
-  themes.push({
-    id: THEME_FALLBACK_ID,
-    title: "미분류 핵심 리뷰 후속 정리",
-    keywords: [],
-    impact: "low",
-    effort: "medium",
-    action: "자동 분류에서 누락된 핵심 리뷰를 수동 검토해 후속 액션으로 정리"
-  });
 
   return themes;
 }
@@ -1800,7 +1870,13 @@ function normalizeBacklogData(value: unknown): AppBacklog[] | undefined {
       const examplesRaw = Array.isArray(item.examples) ? (item.examples as unknown[]) : [];
       const examples = examplesRaw.map(normalizeQuoteItem).filter((x): x is QuoteItem => Boolean(x));
       const evidenceReviewIds = Array.isArray(item.evidenceReviewIds)
-        ? [...new Set((item.evidenceReviewIds as unknown[]).map((x) => normalizeText(String(x ?? ""))).filter(Boolean))]
+        ? [
+            ...new Set(
+              (item.evidenceReviewIds as unknown[])
+                .map((x) => extractBaseReviewId(normalizeText(String(x ?? ""))))
+                .filter(Boolean)
+            )
+          ]
         : [];
 
       items.push({
@@ -1839,7 +1915,9 @@ async function writeBacklogData(backlogPath: string, ownerAppId: string, appBack
     appTitle: appBacklog.appTitle,
     reviewCount: appBacklog.reviewCount,
     items: appBacklog.items.map((item) => {
-      const evidenceReviewIds = [...new Set(item.evidenceReviewIds)].slice(0, MAX_EVIDENCE_PER_ITEM);
+      const evidenceReviewIds = [
+        ...new Set(item.evidenceReviewIds.map((rawId) => extractBaseReviewId(rawId)).filter(Boolean))
+      ].slice(0, MAX_EVIDENCE_PER_ITEM);
       return {
         priority: item.priority,
         title: item.title,
@@ -2135,6 +2213,30 @@ function scorePoolReviewForBacklog(review: AppReviewPoolItem, tags: ReviewTag[])
   return score;
 }
 
+function isActionablePoolReview(review: AppReviewPoolItem, tags: ReviewTag[]): boolean {
+  const text = normalizeText(`${review.kr} ${review.org}`).toLowerCase();
+  const length = normalizeText(review.kr || review.org).length;
+  const requestHit = includesAny(text, REQUEST_HINTS);
+  const dissatisfactionHit = includesAny(text, DISSATISFACTION_HINTS);
+  const featureHit =
+    includesAny(text, LOCATION_HINTS) ||
+    includesAny(text, MAP_HINTS) ||
+    includesAny(text, WIDGET_HINTS) ||
+    includesAny(text, UPDATE_STALE_HINTS) ||
+    includesAny(text, SAVE_SYNC_HINTS) ||
+    includesAny(text, CRASH_HINTS) ||
+    includesAny(text, SUBSCRIPTION_HINTS) ||
+    includesAny(text, ADS_HINTS);
+
+  if (requestHit || dissatisfactionHit) {
+    return length >= 24;
+  }
+  if (tags.includes("requests") || tags.includes("dissatisfaction")) {
+    return length >= 36;
+  }
+  return featureHit && length >= 60 && review.rating <= 4;
+}
+
 function pickKeyReviewsFromPool(reviews: AppReviewPoolItem[]): AppReviewPoolItem[] {
   if (reviews.length <= MAX_SYNTH_REVIEWS_PER_APP) {
     return reviews;
@@ -2151,6 +2253,7 @@ function pickKeyReviewsFromPool(reviews: AppReviewPoolItem[]): AppReviewPoolItem
       tags,
       category,
       score,
+      actionable: isActionablePoolReview(review, tags),
       timestamp: Number.isFinite(timestamp) ? timestamp : 0
     };
   });
@@ -2171,6 +2274,9 @@ function pickKeyReviewsFromPool(reviews: AppReviewPoolItem[]): AppReviewPoolItem
   };
 
   for (const row of scored) {
+    if (!row.actionable) {
+      continue;
+    }
     if (row.score < MIN_SYNTH_REVIEW_SCORE) {
       continue;
     }
@@ -2198,6 +2304,12 @@ function pickKeyReviewsFromPool(reviews: AppReviewPoolItem[]): AppReviewPoolItem
   }
 
   for (const row of scored) {
+    if (!row.actionable) {
+      continue;
+    }
+    if (row.score < MIN_SYNTH_REVIEW_SCORE) {
+      continue;
+    }
     if (picked.length >= MAX_SYNTH_REVIEWS_PER_APP) {
       break;
     }
@@ -2221,6 +2333,186 @@ function pickKeyReviewsFromPool(reviews: AppReviewPoolItem[]): AppReviewPoolItem
   }
 
   return picked;
+}
+
+function resolveThemeChecklistDefaults(title: string): string[] {
+  const text = normalizeText(title).toLowerCase();
+  if (!text) {
+    return [];
+  }
+
+  if (includesAny(text, ["위치", "location"])) {
+    return [
+      "지도/검색 기반 위치 선택과 다중 위치 저장(기본 위치 지정 포함)을 지원",
+      "상단 시스템 UI와 겹치지 않게 위치 선택 버튼 배치를 수정",
+      "위치 변경 시 위젯·예보·알림이 즉시 같은 기준으로 갱신되도록 동기화"
+    ];
+  }
+  if (includesAny(text, ["지도", "map", "핀", "marker", "zoom"])) {
+    return [
+      "핵심 지도 정보(핀/레이어/강도)를 한 화면에서 읽히도록 대비와 라벨을 정리",
+      "줌/이동/탭 반응 속도를 개선하고 오탭 구간을 줄이도록 터치 영역을 조정",
+      "지도 상태(로딩/오류/최근 갱신 시각)를 명시해 해석 혼선을 줄임"
+    ];
+  }
+  if (includesAny(text, ["알림", "alert", "notification"])) {
+    return [
+      "알림 임계값(KP/BZ)·시간대·빈도를 분리 설정할 수 있게 옵션을 세분화",
+      "알림 발송 전 데이터 최신성 검증을 추가해 늦거나 부정확한 알림을 차단",
+      "알림이 발송된 근거 값과 기준 시각을 함께 표시해 신뢰도를 높임"
+    ];
+  }
+  if (includesAny(text, ["광고", "ads", "ad "])) {
+    return [
+      "닫기 불가/연속 노출 광고를 제거하고 세션당 노출 빈도를 제한",
+      "핵심 작업 화면에서는 전면광고 대신 비방해형 노출 방식으로 전환",
+      "광고 제거 유료 옵션 위치와 혜택을 결제 전 화면에서 명확히 안내"
+    ];
+  }
+  if (includesAny(text, ["안정성", "충돌", "오류", "crash", "bug", "freeze"])) {
+    return [
+      "상위 충돌 경로(로그인, 저널 작성, 피드 + 버튼 등)부터 재현 테스트로 우선 수정",
+      "저장/동기화 실패 시 즉시 사용자에게 실패 상태와 복구 동작을 안내",
+      "회귀 테스트 케이스를 추가해 업데이트 후 동일 충돌이 재발하지 않게 관리"
+    ];
+  }
+  if (includesAny(text, ["정확", "예보", "갱신", "forecast", "accuracy", "update"])) {
+    return [
+      "예보 산출 시점과 데이터 소스 갱신 주기를 화면에 고정 표기",
+      "갱신 실패·지연 시 마지막 정상 데이터 시각과 재시도 상태를 명시",
+      "실측 대비 오차가 큰 조건을 분리 분석해 경보 임계값 로직을 재보정"
+    ];
+  }
+  if (includesAny(text, ["구독", "결제", "subscription", "payment", "trial", "price"])) {
+    return [
+      "무료/유료 기능 경계를 설치 전과 첫 실행 화면에서 명확히 안내",
+      "구독 상태 동기화 실패 시 복원·재검증 경로를 한 번에 실행 가능하게 제공",
+      "환불/해지/체험 만료 정책을 결제 화면과 설정 화면에 동일 문구로 노출"
+    ];
+  }
+  if (includesAny(text, ["번역", "언어", "translation", "language"])) {
+    return [
+      "핵심 화면 문구 번역을 통일하고 오역/깨짐 문자열을 우선 정리",
+      "언어 전환 직후 새로고침 없이 반영되도록 리소스 로딩 흐름을 개선",
+      "미번역 텍스트가 남는 화면을 점검해 최소 품질 기준을 강제"
+    ];
+  }
+  return [];
+}
+
+function deriveChecklistFromExamples(themeTitle: string, examples: QuoteItem[]): string[] {
+  const theme = normalizeText(themeTitle).toLowerCase();
+  const isLocationTheme = includesAny(theme, ["위치", "location"]);
+  const isMapTheme = includesAny(theme, ["지도", "map", "핀", "marker", "zoom"]);
+  const isAlertTheme = includesAny(theme, ["알림", "alert", "notification"]);
+  const isAdsTheme = includesAny(theme, ["광고", "ads", "ad "]);
+  const isStabilityTheme = includesAny(theme, ["안정성", "충돌", "오류", "crash", "bug", "freeze"]);
+  const isAccuracyTheme = includesAny(theme, ["정확", "예보", "갱신", "forecast", "accuracy", "update"]);
+  const isSubscriptionTheme = includesAny(theme, ["구독", "결제", "subscription", "payment", "trial", "price"]);
+  const isLanguageTheme = includesAny(theme, ["번역", "언어", "translation", "language"]);
+  const isGenericTheme =
+    !isLocationTheme &&
+    !isMapTheme &&
+    !isAlertTheme &&
+    !isAdsTheme &&
+    !isStabilityTheme &&
+    !isAccuracyTheme &&
+    !isSubscriptionTheme &&
+    !isLanguageTheme;
+
+  const counts = new Map<string, number>();
+  const add = (item: string): void => {
+    const normalized = normalizeText(item);
+    if (!normalized) {
+      return;
+    }
+    counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+  };
+
+  for (const quote of examples) {
+    const text = normalizeText(`${quote.kr} ${quote.org}`).toLowerCase();
+    if (!text) {
+      continue;
+    }
+
+    if ((isStabilityTheme || isGenericTheme) && includesAny(text, CRASH_HINTS)) {
+      add("앱 강제종료/멈춤 재현 케이스를 우선 수정하고 관련 화면 회귀 테스트를 추가");
+    }
+    if (
+      (isLocationTheme || isMapTheme || isGenericTheme) &&
+      includesAny(text, APP_BAR_BLOCK_HINTS) &&
+      includesAny(text, LOCATION_HINTS)
+    ) {
+      add("위치 선택 UI가 상태바/노치/알림바에 가리지 않도록 상단 레이아웃을 재설계");
+    }
+    if ((isAccuracyTheme || isAlertTheme || isGenericTheme) && includesAny(text, UPDATE_STALE_HINTS)) {
+      add("데이터 갱신 지연을 줄이고 마지막 갱신 시각·실패 상태를 화면에 명확히 표시");
+    }
+    if ((isSubscriptionTheme || isGenericTheme) && includesAny(text, SUBSCRIPTION_HINTS)) {
+      add("구독 상태 검증/복원 흐름을 수정하고 결제 상태 불일치 메시지를 통합");
+    }
+    if ((isAdsTheme || isGenericTheme) && includesAny(text, ADS_HINTS)) {
+      add("닫기 불가 광고와 과도한 전면광고 빈도를 줄이고 노출 제어 옵션을 제공");
+    }
+    if (
+      (isLocationTheme || isGenericTheme) &&
+      includesAny(text, LOCATION_HINTS) &&
+      includesAny(text, ["change", "select", "save", "변경", "선택", "저장"])
+    ) {
+      add("위치 변경·저장·재선택 동작을 하나의 흐름으로 통합하고 실패 케이스를 제거");
+    }
+    if (
+      (isLocationTheme || isAccuracyTheme || isAlertTheme || isGenericTheme) &&
+      includesAny(text, WIDGET_HINTS) &&
+      includesAny(text, UPDATE_STALE_HINTS)
+    ) {
+      add("위젯 데이터가 위치/시간 변경 직후 즉시 갱신되도록 동기화 로직을 수정");
+    }
+    if ((isStabilityTheme || isLocationTheme || isGenericTheme) && includesAny(text, SAVE_SYNC_HINTS)) {
+      add("저장/자동저장 실패를 감지해 즉시 경고하고 복구 가능한 재시도 동작을 제공");
+    }
+    if (
+      (isMapTheme || isGenericTheme) &&
+      includesAny(text, MAP_HINTS) &&
+      includesAny(text, ["hard", "difficult", "불편", "가독", "읽기"])
+    ) {
+      add("지도 정보 가독성을 높이도록 라벨·색상 대비·터치 영역을 조정");
+    }
+    if ((isLanguageTheme || isGenericTheme) && includesAny(text, LANGUAGE_HINTS)) {
+      add("번역 품질이 낮은 핵심 화면 문구를 우선 교정하고 언어별 용어를 통일");
+    }
+  }
+
+  const prioritized = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([item]) => item)
+    .slice(0, 3);
+
+  const defaults = resolveThemeChecklistDefaults(themeTitle);
+  for (const item of defaults) {
+    if (prioritized.length >= 3) {
+      break;
+    }
+    if (!prioritized.includes(item)) {
+      prioritized.push(item);
+    }
+  }
+
+  return prioritized.slice(0, 3);
+}
+
+function buildSpecificActionFromExamples(themeTitle: string, evidenceCount: number, examples: QuoteItem[]): string {
+  const checklist = deriveChecklistFromExamples(themeTitle, examples);
+  if (checklist.length === 0) {
+    return hasKoreanText(themeTitle)
+      ? `'${themeTitle}' 관련 반복 리뷰 ${evidenceCount}건을 기준으로 우선 개선 항목을 확정`
+      : `Prioritize '${themeTitle}' updates based on ${evidenceCount} repeated reviews`;
+  }
+
+  if (hasKoreanText(themeTitle)) {
+    return `'${themeTitle}' 개선: ${checklist.join(" / ")} (근거 리뷰 ${evidenceCount}건)`;
+  }
+  return `${themeTitle}: ${checklist.join(" / ")} (evidence ${evidenceCount} reviews)`;
 }
 
 function extractBaseReviewId(scopedReviewId: string): string {
@@ -2403,12 +2695,7 @@ function buildBacklog(apps: AppSection[], reviewPools: ReviewPools): AppBacklog[
         const evidenceCount = evidenceReviewIds.length;
         const priority = calculatePriority(bucket.reqCount, bucket.negCount, bucket.posCount);
         const specificTitle = deriveSpecificThemeTitleFromExamples(bucket.theme.title, examples);
-        const specificAction =
-          evidenceCount > 0
-            ? hasKoreanText(specificTitle)
-              ? `'${specificTitle}' 관련 반복 리뷰 ${evidenceCount}건을 기준으로 우선 개선 항목을 확정`
-              : `Prioritize '${specificTitle}' updates based on ${evidenceCount} repeated reviews`
-            : bucket.theme.action;
+        const specificAction = evidenceCount > 0 ? buildSpecificActionFromExamples(specificTitle, evidenceCount, examples) : bucket.theme.action;
 
         return {
           priority,
@@ -2536,11 +2823,14 @@ function renderHtml(
       ? params.defaultTags.map((tag) => normalizeText(tag).toLowerCase()).filter(Boolean)
       : [];
     const defaultTagsAttr = defaultTags.join(",");
+    const appDisplayTitle = parseAppTitle(params.appTitle).displayName;
     mergeReviewDefaults(reviewIdRaw, params.defaultExcluded, defaultTags);
 
     return `
       <article class=\"quote-card searchable\" data-review-id=\"${reviewId}\" data-app-key=\"${escapeHtml(
         params.appKey
+      )}\" data-app-title=\"${escapeHtml(params.appTitle)}\" data-app-display-title=\"${escapeHtml(
+      appDisplayTitle
       )}\" data-default-excluded=\"${params.defaultExcluded ? "true" : "false"}\" data-default-tags=\"${escapeHtml(
         defaultTagsAttr
       )}\" data-text-length=\"${textLength}\" data-search=\"${escapeHtml(
@@ -2563,6 +2853,12 @@ function renderHtml(
             <span class=\"toggle-label\">원어</span>
             <span class=\"toggle-icon\" aria-hidden=\"true\">▾</span>
           </button>
+          <div class=\"backlog-quick-add\">
+            <select class=\"backlog-quick-select\" aria-label=\"백로그 선택\">
+              <option value=\"\">백로그 선택</option>
+            </select>
+            <button class=\"backlog-quick-add-btn\" type=\"button\">백로그+</button>
+          </div>
           <div class=\"quote-actions-right\">
             <div class=\"tag-actions\" role=\"group\" aria-label=\"해시태그\">
               <button class=\"tag-toggle tag-heart\" type=\"button\" data-tag=\"heart\" aria-label=\"❤️ 태그\" title=\"❤️ 태그\">#❤️</button>
@@ -2669,7 +2965,9 @@ function renderHtml(
       return `
         <details class=\"app\" data-app-key=\"${escapeHtml(appKey)}\" data-app-title=\"${escapeHtml(
           parsedTitle.displayName
-        )}\" data-app-source-token=\"${escapeHtml(parsedTitle.sourceToken ?? "")}\"${defaultOpenAttr}>
+        )}\" data-app-raw-title=\"${escapeHtml(app.title)}\" data-app-source-token=\"${escapeHtml(
+        parsedTitle.sourceToken ?? ""
+      )}\"${defaultOpenAttr}>
           <summary>
             ${renderAppHeading(app.title)}
             <span class=\"app-summary-right\">
@@ -2763,19 +3061,21 @@ function renderHtml(
   }
 
   const unifiedBacklogItems: UnifiedBacklogItem[] = [...groupedBacklog.values()]
-    .map((item) => {
+    .map((item, itemIndex) => {
       const evidenceIds = [...item.evidenceReviewIds];
       const examples = evidenceIds
         .map((reviewId) => item.evidenceQuoteById.get(reviewId))
         .filter((quote): quote is QuoteItem => Boolean(quote));
 
       return {
+        id: `bg-${itemIndex + 1}`,
         priority: item.priority,
         title: item.title,
         impact: item.impact,
         effort: item.effort,
         action: item.action,
         evidenceCount: item.evidenceReviewIds.size,
+        evidenceReviewIds: evidenceIds,
         examples,
         appNames: [...item.appNames].sort((a, b) => a.localeCompare(b))
       };
@@ -2786,6 +3086,17 @@ function renderHtml(
       }
       return b.evidenceCount - a.evidenceCount;
     });
+  const backlogInitialItems: BacklogClientItem[] = unifiedBacklogItems.map((item) => ({
+    id: item.id,
+    priority: item.priority,
+    title: item.title,
+    impact: item.impact,
+    effort: item.effort,
+    action: item.action,
+    evidenceReviewIds: [...item.evidenceReviewIds],
+    appNames: [...item.appNames]
+  }));
+  const backlogInitialItemsJson = toInlineJson(backlogInitialItems);
 
   const backlogRows =
     unifiedBacklogItems.length === 0
@@ -2835,12 +3146,22 @@ function renderHtml(
               `${appLabel} ${item.priority} ${item.title} ${item.action} ${(item.examples ?? [])
                 .map((q) => `${q.kr} ${q.org}`)
                 .join(" ")}`
-            ).toLowerCase()}\" data-evidence-id=\"${escapeHtml(evidenceId)}\">
+            ).toLowerCase()}\" data-backlog-id=\"${escapeHtml(item.id)}\" data-review-ids=\"${escapeHtml(
+              item.evidenceReviewIds.join("|")
+            )}\" data-evidence-id=\"${escapeHtml(evidenceId)}\">
                     <td>${renderPriorityBadge(item.priority)}</td>
                     <td>
                       <div class=\"item-title\">${escapeHtml(item.title)}</div>
                       <div class=\"item-action\">${escapeHtml(item.action)}</div>
                       <div class=\"item-app\" title=\"${escapeHtml(appLabel)}\">앱: ${escapeHtml(appLabel)}</div>
+                      <div class=\"item-edit-actions\">
+                        <button class=\"backlog-edit-btn\" type=\"button\" data-backlog-id=\"${escapeHtml(
+                          item.id
+                        )}\">리뷰 편집</button>
+                        <button class=\"backlog-remove-btn\" type=\"button\" data-backlog-id=\"${escapeHtml(
+                          item.id
+                        )}\">삭제</button>
+                      </div>
                     </td>
                     <td>${renderLevel(item.impact)}</td>
                     <td>${renderLevel(item.effort)}</td>
@@ -2887,7 +3208,7 @@ function renderHtml(
                 <th>근거 수</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody id=\"backlogTableBody\">
               ${backlogRows}
             </tbody>
           </table>
@@ -2911,7 +3232,7 @@ function renderHtml(
   `;
   const backlogSummaryHtml = `
     <section class=\"backlog-summary\">
-      <p><strong>백로그 항목 ${totalBacklogItems}</strong> · MUST ${totalMustItems} · SHOULD ${totalShouldItems} · COULD ${totalCouldItems}</p>
+      <p id=\"backlogSummaryLine\"><strong>백로그 항목 ${totalBacklogItems}</strong> · MUST ${totalMustItems} · SHOULD ${totalShouldItems} · COULD ${totalCouldItems}</p>
       <p>우선순위 규칙(해시태그 기준): 요청×3 + 불만×2 + 만족×1</p>
     </section>
   `;
@@ -3587,6 +3908,34 @@ function renderHtml(
         flex-wrap: wrap;
         justify-content: flex-end;
       }
+      .backlog-quick-add {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .backlog-quick-select {
+        min-height: 30px;
+        border: 1px solid #c7d6e8;
+        border-radius: 8px;
+        background: #ffffff;
+        color: #0f172a;
+        font-size: 12px;
+        padding: 0 8px;
+        max-width: 180px;
+      }
+      .backlog-quick-add-btn {
+        font-size: 12px;
+        padding: 6px 8px;
+        border-radius: 8px;
+        border-color: #7dd3fc;
+        background: #e0f2fe;
+        color: #075985;
+        font-weight: 700;
+      }
+      .backlog-quick-add-btn:disabled,
+      .backlog-quick-select:disabled {
+        opacity: 0.55;
+      }
       .toggle-one,
       .exclude-toggle,
       .tag-toggle {
@@ -4016,6 +4365,182 @@ function renderHtml(
         overflow: hidden;
         text-overflow: ellipsis;
       }
+      .item-edit-actions {
+        margin-top: 8px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .item-edit-actions button {
+        min-height: 28px;
+        font-size: 12px;
+        padding: 4px 8px;
+      }
+      .backlog-remove-btn {
+        border-color: #fca5a5;
+        color: #991b1b;
+        background: #fff1f2;
+      }
+      #saveBacklog.is-active {
+        border-color: #7dd3fc;
+        background: #e0f2fe;
+        color: #0c4a6e;
+      }
+      .backlog-editor-root {
+        position: fixed;
+        inset: 0;
+        z-index: 55;
+        display: grid;
+        align-items: stretch;
+        justify-items: end;
+      }
+      .backlog-editor-root[hidden] {
+        display: none;
+      }
+      .backlog-editor-backdrop {
+        position: absolute;
+        inset: 0;
+        border: 0;
+        background: rgba(15, 23, 42, 0.38);
+      }
+      .backlog-editor {
+        position: relative;
+        width: min(720px, 100%);
+        height: 100%;
+        background: #ffffff;
+        border-left: 1px solid var(--line);
+        box-shadow: -16px 0 40px rgba(15, 23, 42, 0.16);
+        display: flex;
+        flex-direction: column;
+        transform: translateX(100%);
+        transition: transform 180ms ease;
+      }
+      .backlog-editor-root.is-open .backlog-editor {
+        transform: translateX(0);
+      }
+      .backlog-editor-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 10px;
+        border-bottom: 1px solid var(--line);
+        padding: 14px;
+        background: #f8fbff;
+      }
+      .backlog-editor-head h2 {
+        margin: 0;
+        font-size: 17px;
+      }
+      .backlog-editor-sub {
+        margin-top: 4px;
+        color: #64748b;
+        font-size: 12px;
+      }
+      .backlog-editor-head-actions {
+        display: inline-flex;
+        gap: 6px;
+      }
+      .backlog-editor-body {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 14px;
+        display: grid;
+        gap: 10px;
+        align-content: start;
+      }
+      .backlog-editor-field {
+        display: grid;
+        gap: 6px;
+        color: #334155;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .backlog-editor-field input,
+      .backlog-editor-field textarea,
+      .backlog-editor-field select {
+        width: 100%;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        min-height: 36px;
+        padding: 8px 10px;
+        font-size: 13px;
+        background: #ffffff;
+        color: #0f172a;
+      }
+      .backlog-editor-field textarea {
+        min-height: 80px;
+        resize: vertical;
+      }
+      .backlog-editor-selects {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .backlog-review-list {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #f8fbff;
+        padding: 8px;
+        display: grid;
+        gap: 6px;
+        max-height: 42vh;
+        overflow-y: auto;
+      }
+      .backlog-review-item {
+        display: grid;
+        grid-template-columns: 20px minmax(0, auto);
+        column-gap: 8px;
+        row-gap: 2px;
+        align-items: start;
+        padding: 8px;
+        border: 1px solid #dbe7f3;
+        border-radius: 10px;
+        background: #ffffff;
+      }
+      .backlog-review-item input[type="checkbox"] {
+        margin-top: 1px;
+      }
+      .backlog-review-item .review-app {
+        font-size: 11px;
+        font-weight: 700;
+        color: #0f172a;
+      }
+      .backlog-review-item .review-body {
+        grid-column: 2;
+        color: #334155;
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      .backlog-review-item .review-meta {
+        grid-column: 2;
+        color: #64748b;
+        font-size: 11px;
+      }
+      .backlog-review-empty {
+        padding: 10px;
+        border: 1px dashed #cbd5e1;
+        border-radius: 10px;
+        font-size: 12px;
+        color: #64748b;
+        background: #ffffff;
+      }
+      .backlog-editor-foot {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+      }
+      #backlogEditorDelete {
+        border-color: #fca5a5;
+        background: #fff1f2;
+        color: #991b1b;
+      }
+      #backlogEditorStatus {
+        color: #64748b;
+        font-size: 11px;
+      }
       .badge {
         display: inline-block;
         border-radius: 999px;
@@ -4312,6 +4837,25 @@ function renderHtml(
         .note-sidebar-root.is-open .note-sidebar {
           transform: translateY(0);
         }
+        .backlog-editor {
+          right: 0;
+          left: 0;
+          top: auto;
+          bottom: 0;
+          width: 100%;
+          height: min(90vh, 860px);
+          border-left: 0;
+          border-top: 1px solid var(--line);
+          border-radius: 16px 16px 0 0;
+          box-shadow: 0 -16px 34px rgba(15, 23, 42, 0.24);
+          transform: translateY(20px);
+        }
+        .backlog-editor-root.is-open .backlog-editor {
+          transform: translateY(0);
+        }
+        .backlog-editor-selects {
+          grid-template-columns: 1fr;
+        }
         .note-sidebar-head {
           padding: 10px 12px;
         }
@@ -4419,6 +4963,8 @@ function renderHtml(
         </div>
         <div class=\"top-controls\">
           <button id=\"openNoteSidebar\" type=\"button\">노트</button>
+          <button id=\"addBacklogItem\" class=\"hidden-control\" type=\"button\">백로그 추가</button>
+          <button id=\"saveBacklog\" class=\"hidden-control\" type=\"button\">백로그 저장</button>
           <button id=\"openFilterPanel\" class=\"open-filter-panel-btn\" type=\"button\">필터</button>
           <button id=\"toggleEvidenceAll\" type=\"button\">근거 펼치기</button>
           <div id=\"priorityFilter\" class=\"priority-filter hidden-control\" role=\"group\" aria-label=\"우선순위 필터\">
@@ -4482,6 +5028,67 @@ function renderHtml(
         </div>
         <textarea id=\"noteSidebarText\" placeholder=\"예) 반복 불만 키워드, 다음 비교 포인트, 액션 아이템\"></textarea>
         <div id=\"noteSidebarStatus\" class=\"note-sidebar-foot\">변경 후 저장 버튼을 눌러 반영하세요.</div>
+      </aside>
+    </div>
+
+    <div id=\"backlogEditorRoot\" class=\"backlog-editor-root\" hidden aria-hidden=\"true\">
+      <button id=\"backlogEditorBackdrop\" class=\"backlog-editor-backdrop\" type=\"button\" aria-label=\"백로그 편집 닫기\"></button>
+      <aside class=\"backlog-editor\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"backlogEditorTitleLabel\">
+        <div class=\"backlog-editor-head\">
+          <div>
+            <h2 id=\"backlogEditorTitleLabel\">백로그 편집</h2>
+            <div id=\"backlogEditorSub\" class=\"backlog-editor-sub\">활성 리뷰만 추가/제거할 수 있습니다.</div>
+          </div>
+          <div class=\"backlog-editor-head-actions\">
+            <button id=\"backlogEditorSave\" type=\"button\">적용</button>
+            <button id=\"backlogEditorClose\" type=\"button\">닫기</button>
+          </div>
+        </div>
+        <div class=\"backlog-editor-body\">
+          <label class=\"backlog-editor-field\">
+            <span>제목</span>
+            <input id=\"backlogEditorTitle\" type=\"text\" placeholder=\"예) 다중 위치 선택 및 저장\" />
+          </label>
+          <label class=\"backlog-editor-field\">
+            <span>액션</span>
+            <textarea id=\"backlogEditorAction\" placeholder=\"실행할 개선 액션\"></textarea>
+          </label>
+          <div class=\"backlog-editor-selects\">
+            <label class=\"backlog-editor-field\">
+              <span>Priority</span>
+              <select id=\"backlogEditorPriority\">
+                <option value=\"must\">MUST</option>
+                <option value=\"should\">SHOULD</option>
+                <option value=\"could\">COULD</option>
+              </select>
+            </label>
+            <label class=\"backlog-editor-field\">
+              <span>Impact</span>
+              <select id=\"backlogEditorImpact\">
+                <option value=\"high\">High</option>
+                <option value=\"medium\">Medium</option>
+                <option value=\"low\">Low</option>
+              </select>
+            </label>
+            <label class=\"backlog-editor-field\">
+              <span>Effort</span>
+              <select id=\"backlogEditorEffort\">
+                <option value=\"high\">High</option>
+                <option value=\"medium\">Medium</option>
+                <option value=\"low\">Low</option>
+              </select>
+            </label>
+          </div>
+          <label class=\"backlog-editor-field\">
+            <span>활성 리뷰 검색</span>
+            <input id=\"backlogEditorReviewSearch\" type=\"search\" placeholder=\"리뷰 검색\" />
+          </label>
+          <div id=\"backlogEditorReviewList\" class=\"backlog-review-list\"></div>
+          <div class=\"backlog-editor-foot\">
+            <button id=\"backlogEditorDelete\" type=\"button\">백로그 삭제</button>
+            <span id=\"backlogEditorStatus\">변경사항은 상단 백로그 저장 버튼으로 반영됩니다.</span>
+          </div>
+        </div>
       </aside>
     </div>
 
@@ -4555,6 +5162,10 @@ function renderHtml(
       const rawPagePrev = document.getElementById('rawPagePrev');
       const rawPageNext = document.getElementById('rawPageNext');
       const rawPageInfo = document.getElementById('rawPageInfo');
+      const addBacklogItemButton = document.getElementById('addBacklogItem');
+      const saveBacklogButton = document.getElementById('saveBacklog');
+      const backlogSummaryLine = document.getElementById('backlogSummaryLine');
+      const backlogTableBody = document.getElementById('backlogTableBody');
       const priorityFilter = document.getElementById('priorityFilter');
       const priorityFilterButtons = priorityFilter
         ? Array.from(priorityFilter.querySelectorAll('[data-priority-filter]'))
@@ -4563,6 +5174,20 @@ function renderHtml(
         ? Array.from(excludeFilter.querySelectorAll('[data-exclude-filter]'))
         : [];
       const toggleEvidenceAll = document.getElementById('toggleEvidenceAll');
+      const backlogEditorRoot = document.getElementById('backlogEditorRoot');
+      const backlogEditorBackdrop = document.getElementById('backlogEditorBackdrop');
+      const backlogEditorClose = document.getElementById('backlogEditorClose');
+      const backlogEditorSave = document.getElementById('backlogEditorSave');
+      const backlogEditorDelete = document.getElementById('backlogEditorDelete');
+      const backlogEditorSub = document.getElementById('backlogEditorSub');
+      const backlogEditorStatus = document.getElementById('backlogEditorStatus');
+      const backlogEditorTitle = document.getElementById('backlogEditorTitle');
+      const backlogEditorAction = document.getElementById('backlogEditorAction');
+      const backlogEditorPriority = document.getElementById('backlogEditorPriority');
+      const backlogEditorImpact = document.getElementById('backlogEditorImpact');
+      const backlogEditorEffort = document.getElementById('backlogEditorEffort');
+      const backlogEditorReviewSearch = document.getElementById('backlogEditorReviewSearch');
+      const backlogEditorReviewList = document.getElementById('backlogEditorReviewList');
       const openNoteSidebarButton = document.getElementById('openNoteSidebar');
       const tabRaw = document.getElementById('tabRaw');
       const tabBacklog = document.getElementById('tabBacklog');
@@ -4571,13 +5196,15 @@ function renderHtml(
       const contextRaw = document.getElementById('contextRaw');
       const contextBacklog = document.getElementById('contextBacklog');
       const rawCards = Array.from(viewRaw.querySelectorAll('.quote-card[data-review-id]'));
+      const quickAddSelects = Array.from(viewRaw.querySelectorAll('.backlog-quick-select'));
+      const quickAddButtons = Array.from(viewRaw.querySelectorAll('.backlog-quick-add-btn'));
       const rawAppSections = Array.from(viewRaw.querySelectorAll('.app[data-app-key]'));
       const rawAppSectionCards = rawAppSections.map((section) => ({
         section,
         cards: Array.from(section.querySelectorAll('.quote-card[data-review-id]')),
         countLabel: section.querySelector('.app-count')
       }));
-      const backlogItems = Array.from(viewBacklog.querySelectorAll('.backlog-item'));
+      let backlogItems = Array.from(viewBacklog.querySelectorAll('.backlog-item'));
       const noteSidebarRoot = document.getElementById('noteSidebarRoot');
       const noteSidebarBackdrop = document.getElementById('noteSidebarBackdrop');
       const noteSidebarClose = document.getElementById('noteSidebarClose');
@@ -4595,8 +5222,31 @@ function renderHtml(
       const appNotes = Object.create(null);
       const persistedAppNotes = Object.create(null);
       const noteAppCatalog = ${appNoteAppsJson};
+      const backlogSeedItems = ${backlogInitialItemsJson};
       const noteAppByKey = new Map(noteAppCatalog.map((item) => [item.appKey, item]));
       const defaultNoteAppKey = noteAppCatalog[0] ? noteAppCatalog[0].appKey : '';
+      let backlogStateItems = Array.isArray(backlogSeedItems)
+        ? backlogSeedItems.map((item) => ({
+            id: String(item && item.id ? item.id : ''),
+            priority: String(item && item.priority ? item.priority : 'should').toLowerCase(),
+            title: String(item && item.title ? item.title : '').trim(),
+            impact: String(item && item.impact ? item.impact : 'medium').toLowerCase(),
+            effort: String(item && item.effort ? item.effort : 'medium').toLowerCase(),
+            action: String(item && item.action ? item.action : '').trim(),
+            evidenceReviewIds: Array.isArray(item && item.evidenceReviewIds)
+              ? item.evidenceReviewIds.map((value) => String(value || '').trim()).filter(Boolean)
+              : [],
+            appNames: Array.isArray(item && item.appNames)
+              ? item.appNames.map((value) => String(value || '').trim()).filter(Boolean)
+              : []
+          }))
+        : [];
+      let backlogPersistedSignature = '';
+      let backlogDirty = false;
+      let backlogEditorCloseTimer = 0;
+      let backlogEditorMode = 'create';
+      let backlogEditorItemId = '';
+      let backlogEditorSelection = new Set();
       const searchableTextCache = new WeakMap();
       let saveStateTimer = null;
       let searchApplyRaf = 0;
@@ -4664,6 +5314,72 @@ function renderHtml(
 
       const ownerAppId = resolveOwnerAppId();
       const previewStateApiUrl = ownerAppId ? '/api/preview-state/' + encodeURIComponent(ownerAppId) : '';
+      const backlogApiUrl = ownerAppId ? '/api/backlog/' + encodeURIComponent(ownerAppId) : '';
+
+      function normalizeBacklogPriority(value) {
+        const normalized = String(value || '').trim().toLowerCase();
+        if (normalized === 'must' || normalized === 'should' || normalized === 'could') {
+          return normalized;
+        }
+        return 'should';
+      }
+
+      function normalizeBacklogLevel(value) {
+        const normalized = String(value || '').trim().toLowerCase();
+        if (normalized === 'high' || normalized === 'medium' || normalized === 'low') {
+          return normalized;
+        }
+        return 'medium';
+      }
+
+      function normalizeBacklogItem(input) {
+        const row = input && typeof input === 'object' ? input : {};
+        const evidenceReviewIds = Array.isArray(row.evidenceReviewIds)
+          ? Array.from(
+              new Set(
+                row.evidenceReviewIds
+                  .map((value) => parseScopedReviewId(String(value || '').trim()).reviewId)
+                  .filter(Boolean)
+              )
+            )
+          : [];
+        const appNames = Array.isArray(row.appNames)
+          ? Array.from(new Set(row.appNames.map((value) => String(value || '').trim()).filter(Boolean)))
+          : [];
+
+        const item = {
+          id: String(row.id || '').trim(),
+          priority: normalizeBacklogPriority(row.priority),
+          title: String(row.title || '').trim(),
+          impact: normalizeBacklogLevel(row.impact),
+          effort: normalizeBacklogLevel(row.effort),
+          action: String(row.action || '').trim(),
+          evidenceReviewIds,
+          appNames
+        };
+
+        if (!item.id) {
+          item.id = 'bg-' + Math.random().toString(36).slice(2, 9);
+        }
+        if (!item.title) {
+          item.title = '새 백로그 항목';
+        }
+        if (!item.action) {
+          item.action = '활성 리뷰 근거를 기반으로 개선 액션 정의';
+        }
+
+        return item;
+      }
+
+      function cloneBacklogItems(items) {
+        const source = Array.isArray(items) ? items : [];
+        return source.map((item) => normalizeBacklogItem(item));
+      }
+
+      function createBacklogSignature(items) {
+        const source = cloneBacklogItems(items).sort((a, b) => String(a.id).localeCompare(String(b.id)));
+        return JSON.stringify(source);
+      }
 
       function normalizeTag(input) {
         const tag = String(input || '').trim().toLowerCase();
@@ -4855,6 +5571,109 @@ function renderHtml(
         return normalizeTagList(raw.split(','));
       }
 
+      function parseDisplayTitle(rawTitle) {
+        const text = String(rawTitle || '').trim();
+        const match = text.match(/^(.*)\(([^()]+)\)\s*$/);
+        if (!match) {
+          return text;
+        }
+        return String(match[1] || '').trim() || text;
+      }
+
+      function normalizeAppScope(rawTitle) {
+        return String(rawTitle || '').trim().toLowerCase();
+      }
+
+      function createScopedReviewId(appTitle, reviewId) {
+        const baseReviewId = String(reviewId || '').trim();
+        if (!baseReviewId) {
+          return '';
+        }
+        return parseScopedReviewId(baseReviewId).reviewId || baseReviewId;
+      }
+
+      function parseScopedReviewId(scopedReviewId) {
+        const normalized = String(scopedReviewId || '').trim();
+        if (!normalized) {
+          return { appScope: '', reviewId: '' };
+        }
+        const delimiterIndex = normalized.indexOf('::');
+        if (delimiterIndex < 0) {
+          return { appScope: '', reviewId: normalized };
+        }
+        return {
+          appScope: normalized.slice(0, delimiterIndex).trim(),
+          reviewId: normalized.slice(delimiterIndex + 2).trim()
+        };
+      }
+
+      function buildReviewCatalogItem(card) {
+        const reviewId = getCardReviewId(card);
+        if (!reviewId) {
+          return undefined;
+        }
+        const appRawTitle = String(card.getAttribute('data-app-title') || '').trim();
+        const appDisplayTitle = String(card.getAttribute('data-app-display-title') || '').trim() || parseDisplayTitle(appRawTitle);
+        const scopedReviewId = createScopedReviewId(appRawTitle || appDisplayTitle, reviewId);
+        if (!scopedReviewId) {
+          return undefined;
+        }
+
+        const quoteKrNode = card.querySelector('.quote-kr');
+        const quoteOrgNode = card.querySelector('.quote-org');
+        const quoteMetaNode = card.querySelector('.quote-meta-fallback');
+        const quoteKr = quoteKrNode ? String(quoteKrNode.textContent || '').trim() : '';
+        const quoteOrg = quoteOrgNode ? String(quoteOrgNode.textContent || '').trim() : '';
+        const quoteMeta = quoteMetaNode ? String(quoteMetaNode.textContent || '').trim() : '';
+        const searchable = String(card.getAttribute('data-search') || '').toLowerCase();
+
+        return {
+          reviewId,
+          scopedReviewId,
+          appRawTitle,
+          appDisplayTitle: appDisplayTitle || 'Unknown App',
+          quoteKr,
+          quoteOrg,
+          quoteMeta,
+          searchable
+        };
+      }
+
+      function createReviewCatalogMap() {
+        const catalog = new Map();
+        rawCards.forEach((card) => {
+          const item = buildReviewCatalogItem(card);
+          if (!item) {
+            return;
+          }
+          catalog.set(item.scopedReviewId, item);
+        });
+        return catalog;
+      }
+
+      const reviewCatalogByScopedId = createReviewCatalogMap();
+
+      function activeScopedReviewIds() {
+        const ids = new Set();
+        rawCards.forEach((card) => {
+          const reviewId = getCardReviewId(card);
+          if (!reviewId) {
+            return;
+          }
+          const state = readCardState(reviewId, card);
+          if (state.excluded) {
+            return;
+          }
+          const appRawTitle = String(card.getAttribute('data-app-title') || '').trim();
+          const appDisplayTitle = String(card.getAttribute('data-app-display-title') || '').trim() || parseDisplayTitle(appRawTitle);
+          const scopedReviewId = createScopedReviewId(appRawTitle || appDisplayTitle, reviewId);
+          if (scopedReviewId) {
+            ids.add(scopedReviewId);
+          }
+        });
+        return ids;
+      }
+
       function readCardState(reviewId, card) {
         const defaultExcluded = isCardDefaultExcluded(card);
         const defaultTags = getCardDefaultTags(card);
@@ -4934,6 +5753,7 @@ function renderHtml(
         }
 
         syncOriginalToggleButton(card);
+        syncBacklogQuickAddButtonForCard(card);
       }
 
       function syncOriginalToggleButton(card) {
@@ -5015,6 +5835,681 @@ function renderHtml(
           const mode = (button.getAttribute('data-priority-filter') || '').trim().toLowerCase();
           button.classList.toggle('is-active', mode === backlogPriorityFilterMode);
         });
+      }
+
+      function backlogPriorityRank(priority) {
+        const normalized = normalizeBacklogPriority(priority);
+        if (normalized === 'must') {
+          return 0;
+        }
+        if (normalized === 'should') {
+          return 1;
+        }
+        return 2;
+      }
+
+      function backlogLevelLabel(level) {
+        const normalized = normalizeBacklogLevel(level);
+        if (normalized === 'high') {
+          return 'High';
+        }
+        if (normalized === 'medium') {
+          return 'Medium';
+        }
+        return 'Low';
+      }
+
+      function createBacklogId() {
+        return 'bg-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
+      }
+
+      function buildBacklogSearchText(item, evidenceRows) {
+        const textParts = [
+          item.priority,
+          item.title,
+          item.action,
+          (item.appNames || []).join(' ')
+        ];
+
+        evidenceRows.forEach((review) => {
+          textParts.push(review.quoteKr || '');
+          textParts.push(review.quoteOrg || '');
+          textParts.push(review.quoteMeta || '');
+          textParts.push(review.appDisplayTitle || '');
+        });
+
+        return textParts.join(' ').toLowerCase();
+      }
+
+      function normalizeBacklogStateItems() {
+        const seenIds = new Set();
+        backlogStateItems = backlogStateItems
+          .map((row) => normalizeBacklogItem(row))
+          .map((item) => {
+            let nextId = String(item.id || '').trim();
+            if (!nextId || seenIds.has(nextId)) {
+              nextId = createBacklogId();
+            }
+            seenIds.add(nextId);
+
+            const appNames = Array.isArray(item.appNames) ? [...item.appNames] : [];
+            const derivedAppNames = new Set(appNames.map((name) => String(name || '').trim()).filter(Boolean));
+            item.evidenceReviewIds.forEach((scopedReviewId) => {
+              const catalog = reviewCatalogByScopedId.get(scopedReviewId);
+              if (catalog && catalog.appDisplayTitle) {
+                derivedAppNames.add(catalog.appDisplayTitle);
+              }
+            });
+
+            return {
+              ...item,
+              id: nextId,
+              evidenceReviewIds: Array.from(new Set(item.evidenceReviewIds)),
+              appNames: Array.from(derivedAppNames).sort((a, b) => a.localeCompare(b))
+            };
+          })
+          .sort((a, b) => {
+            if (backlogPriorityRank(a.priority) !== backlogPriorityRank(b.priority)) {
+              return backlogPriorityRank(a.priority) - backlogPriorityRank(b.priority);
+            }
+            if (b.evidenceReviewIds.length !== a.evidenceReviewIds.length) {
+              return b.evidenceReviewIds.length - a.evidenceReviewIds.length;
+            }
+            return String(a.title || '').localeCompare(String(b.title || ''));
+          });
+      }
+
+      function syncBacklogSummary() {
+        if (!(backlogSummaryLine instanceof HTMLElement)) {
+          return;
+        }
+
+        const total = backlogStateItems.length;
+        const mustCount = backlogStateItems.filter((item) => normalizeBacklogPriority(item.priority) === 'must').length;
+        const shouldCount = backlogStateItems.filter((item) => normalizeBacklogPriority(item.priority) === 'should').length;
+        const couldCount = backlogStateItems.filter((item) => normalizeBacklogPriority(item.priority) === 'could').length;
+
+        backlogSummaryLine.innerHTML =
+          '<strong>백로그 항목 ' +
+          total +
+          '</strong> · MUST ' +
+          mustCount +
+          ' · SHOULD ' +
+          shouldCount +
+          ' · COULD ' +
+          couldCount;
+      }
+
+      function syncBacklogDirtyState() {
+        const currentSignature = createBacklogSignature(backlogStateItems);
+        backlogDirty = currentSignature !== backlogPersistedSignature;
+        if (saveBacklogButton instanceof HTMLButtonElement) {
+          saveBacklogButton.classList.toggle('is-active', backlogDirty);
+          saveBacklogButton.textContent = backlogDirty ? '백로그 저장*' : '백로그 저장';
+        }
+      }
+
+      function syncBacklogQuickAddButtonForCard(card) {
+        if (!(card instanceof HTMLElement)) {
+          return;
+        }
+
+        const button = card.querySelector('.backlog-quick-add-btn');
+        if (!(button instanceof HTMLButtonElement)) {
+          return;
+        }
+
+        const reviewId = getCardReviewId(card);
+        if (!reviewId) {
+          button.disabled = true;
+          return;
+        }
+
+        const state = readCardState(reviewId, card);
+        const select = card.querySelector('.backlog-quick-select');
+        const hasSelectableBacklog = select instanceof HTMLSelectElement && Boolean(select.value);
+        button.disabled = state.excluded || !hasSelectableBacklog;
+        button.title = state.excluded
+          ? '활성 리뷰만 백로그에 추가할 수 있습니다.'
+          : hasSelectableBacklog
+            ? '선택한 백로그에 이 리뷰를 추가'
+            : '추가할 백로그를 선택하세요.';
+      }
+
+      function syncBacklogQuickSelectOptions() {
+        const optionsHtml =
+          '<option value=\"\">백로그 선택</option>' +
+          backlogStateItems
+            .map((item) => {
+              const label = '[' + String(item.priority || '').toUpperCase() + '] ' + String(item.title || '');
+              return '<option value=\"' + escapeInlineHtml(item.id) + '\">' + escapeInlineHtml(label) + '</option>';
+            })
+            .join('');
+
+        quickAddSelects.forEach((select) => {
+          if (!(select instanceof HTMLSelectElement)) {
+            return;
+          }
+          const currentValue = select.value;
+          select.innerHTML = optionsHtml;
+          if (currentValue && backlogStateItems.some((item) => item.id === currentValue)) {
+            select.value = currentValue;
+          }
+        });
+
+        quickAddButtons.forEach((button) => {
+          if (!(button instanceof HTMLButtonElement)) {
+            return;
+          }
+          const card = button.closest('.quote-card');
+          if (!card) {
+            button.disabled = true;
+            return;
+          }
+          syncBacklogQuickAddButtonForCard(card);
+        });
+      }
+
+      function renderBacklogTable() {
+        if (!(backlogTableBody instanceof HTMLElement)) {
+          return;
+        }
+
+        normalizeBacklogStateItems();
+        syncBacklogSummary();
+        syncBacklogDirtyState();
+        syncBacklogQuickSelectOptions();
+
+        if (backlogStateItems.length === 0) {
+          backlogTableBody.innerHTML = '<tr><td colspan=\"5\" class=\"empty\">추출된 리포트 없음</td></tr>';
+          backlogItems = [];
+          syncEvidenceToggleText();
+          return;
+        }
+
+        const rowsHtml = backlogStateItems
+          .map((item, index) => {
+            const itemIdSafe = String(item.id || '').replace(/[^a-z0-9_-]/gi, '_');
+            const evidenceId = 'evidence-' + itemIdSafe + '-' + index;
+            const evidenceRows = item.evidenceReviewIds
+              .map((scopedReviewId) => reviewCatalogByScopedId.get(scopedReviewId))
+              .filter(Boolean);
+            const appLabel = (item.appNames || []).join(', ') || '-';
+            const evidenceListHtml =
+              evidenceRows.length === 0
+                ? '<li class=\"empty\">근거 리뷰 없음</li>'
+                : evidenceRows
+                    .map((review, reviewIndex) => {
+                      const detailId = 'evidence-detail-' + itemIdSafe + '-' + index + '-' + reviewIndex;
+                      const detailMeta = [
+                        review.reviewId ? '리뷰 ID: ' + review.reviewId : '',
+                        review.appDisplayTitle ? '앱: ' + review.appDisplayTitle : '',
+                        review.quoteMeta ? review.quoteMeta : ''
+                      ]
+                        .filter(Boolean)
+                        .join(' · ');
+
+                      return (
+                        '<li>' +
+                        '<div class=\"example-kr\">' +
+                        escapeInlineHtml(review.quoteKr || review.quoteOrg || '-') +
+                        '</div>' +
+                        '<div class=\"evidence-detail-actions\">' +
+                        '<button class=\"evidence-detail-toggle\" type=\"button\" data-evidence-detail-id=\"' +
+                        escapeInlineHtml(detailId) +
+                        '\" aria-expanded=\"false\">자세히보기</button>' +
+                        '</div>' +
+                        '<div id=\"' +
+                        escapeInlineHtml(detailId) +
+                        '\" class=\"evidence-detail\">' +
+                        '<div class=\"evidence-detail-meta\">' +
+                        escapeInlineHtml(detailMeta || '-') +
+                        '</div>' +
+                        '<div class=\"example-org\">원문: ' +
+                        escapeInlineHtml(review.quoteOrg || '(원문 없음)') +
+                        '</div>' +
+                        '</div>' +
+                        '</li>'
+                      );
+                    })
+                    .join('');
+
+            const searchText = buildBacklogSearchText(item, evidenceRows);
+
+            return (
+              '<tr class=\"backlog-item main-row searchable\" data-priority=\"' +
+              escapeInlineHtml(normalizeBacklogPriority(item.priority)) +
+              '\" data-search=\"' +
+              escapeInlineHtml(searchText) +
+              '\" data-backlog-id=\"' +
+              escapeInlineHtml(item.id) +
+              '\" data-review-ids=\"' +
+              escapeInlineHtml(item.evidenceReviewIds.join('|')) +
+              '\" data-evidence-id=\"' +
+              escapeInlineHtml(evidenceId) +
+              '\">' +
+              '<td><span class=\"badge badge-' +
+              escapeInlineHtml(normalizeBacklogPriority(item.priority)) +
+              '\">' +
+              escapeInlineHtml(String(item.priority || '').toUpperCase()) +
+              '</span></td>' +
+              '<td>' +
+              '<div class=\"item-title\">' +
+              escapeInlineHtml(item.title) +
+              '</div>' +
+              '<div class=\"item-action\">' +
+              escapeInlineHtml(item.action) +
+              '</div>' +
+              '<div class=\"item-app\" title=\"' +
+              escapeInlineHtml(appLabel) +
+              '\">앱: ' +
+              escapeInlineHtml(appLabel) +
+              '</div>' +
+              '<div class=\"item-edit-actions\">' +
+              '<button class=\"backlog-edit-btn\" type=\"button\" data-backlog-id=\"' +
+              escapeInlineHtml(item.id) +
+              '\">리뷰 편집</button>' +
+              '<button class=\"backlog-remove-btn\" type=\"button\" data-backlog-id=\"' +
+              escapeInlineHtml(item.id) +
+              '\">삭제</button>' +
+              '</div>' +
+              '</td>' +
+              '<td>' +
+              escapeInlineHtml(backlogLevelLabel(item.impact)) +
+              '</td>' +
+              '<td>' +
+              escapeInlineHtml(backlogLevelLabel(item.effort)) +
+              '</td>' +
+              '<td>' +
+              '<div class=\"evidence-count-cell\">' +
+              '<span class=\"evidence-count-value\">' +
+              String(item.evidenceReviewIds.length) +
+              '</span>' +
+              '<button class=\"evidence-toggle\" type=\"button\" data-evidence-id=\"' +
+              escapeInlineHtml(evidenceId) +
+              '\" aria-expanded=\"false\" aria-label=\"근거 보기\" title=\"근거 보기\">' +
+              '<span class=\"evidence-toggle-icon\" aria-hidden=\"true\">▾</span>' +
+              '</button>' +
+              '</div>' +
+              '</td>' +
+              '</tr>' +
+              '<tr id=\"' +
+              escapeInlineHtml(evidenceId) +
+              '\" class=\"evidence-row\">' +
+              '<td colspan=\"5\">' +
+              '<div class=\"evidence-panel\"><ul class=\"evidence-list\">' +
+              evidenceListHtml +
+              '</ul></div>' +
+              '</td>' +
+              '</tr>'
+            );
+          })
+          .join('');
+
+        backlogTableBody.innerHTML = rowsHtml;
+        backlogItems = Array.from(viewBacklog.querySelectorAll('.backlog-item'));
+        applyBacklogSearch(getSearchQuery());
+        syncEvidenceToggleText();
+      }
+
+      function setBacklogEditorStatus(message) {
+        if (!(backlogEditorStatus instanceof HTMLElement)) {
+          return;
+        }
+        backlogEditorStatus.textContent = String(message || '').trim();
+      }
+
+      function closeBacklogEditor() {
+        if (backlogEditorRoot instanceof HTMLElement) {
+          backlogEditorRoot.classList.remove('is-open');
+          if (backlogEditorCloseTimer) {
+            window.clearTimeout(backlogEditorCloseTimer);
+          }
+          backlogEditorCloseTimer = window.setTimeout(() => {
+            backlogEditorRoot.hidden = true;
+            backlogEditorRoot.setAttribute('aria-hidden', 'true');
+          }, 180);
+        }
+      }
+
+      function activeReviewCandidates() {
+        const activeIds = activeScopedReviewIds();
+        const rows = [];
+        activeIds.forEach((scopedReviewId) => {
+          const catalog = reviewCatalogByScopedId.get(scopedReviewId);
+          if (!catalog) {
+            return;
+          }
+          rows.push(catalog);
+        });
+
+        rows.sort((a, b) => {
+          if (a.appDisplayTitle !== b.appDisplayTitle) {
+            return a.appDisplayTitle.localeCompare(b.appDisplayTitle);
+          }
+          return a.reviewId.localeCompare(b.reviewId);
+        });
+
+        return rows;
+      }
+
+      function renderBacklogEditorReviewList() {
+        if (!(backlogEditorReviewList instanceof HTMLElement)) {
+          return;
+        }
+        const query = backlogEditorReviewSearch instanceof HTMLInputElement
+          ? backlogEditorReviewSearch.value.trim().toLowerCase()
+          : '';
+        const candidates = activeReviewCandidates().filter((review) => {
+          if (!query) {
+            return true;
+          }
+          const text = [
+            review.appDisplayTitle,
+            review.reviewId,
+            review.quoteKr,
+            review.quoteOrg,
+            review.quoteMeta,
+            review.searchable
+          ]
+            .join(' ')
+            .toLowerCase();
+          return text.includes(query);
+        });
+
+        if (!candidates.length) {
+          backlogEditorReviewList.innerHTML = '<div class=\"backlog-review-empty\">활성 리뷰가 없거나 검색 결과가 없습니다.</div>';
+          return;
+        }
+
+        backlogEditorReviewList.innerHTML = candidates
+          .map((review) => {
+            const checked = backlogEditorSelection.has(review.scopedReviewId) ? ' checked' : '';
+            return (
+              '<label class=\"backlog-review-item\" data-scoped-review-id=\"' +
+              escapeInlineHtml(review.scopedReviewId) +
+              '\">' +
+              '<input type=\"checkbox\" value=\"' +
+              escapeInlineHtml(review.scopedReviewId) +
+              '\"' +
+              checked +
+              ' />' +
+              '<span class=\"review-app\">' +
+              escapeInlineHtml(review.appDisplayTitle) +
+              '</span>' +
+              '<span class=\"review-body\">' +
+              escapeInlineHtml(review.quoteKr || review.quoteOrg || '-') +
+              '</span>' +
+              '<span class=\"review-meta\">리뷰 ID: ' +
+              escapeInlineHtml(review.reviewId) +
+              '</span>' +
+              '</label>'
+            );
+          })
+          .join('');
+      }
+
+      function openBacklogEditor(mode, backlogId) {
+        const normalizedMode = mode === 'edit' ? 'edit' : 'create';
+        backlogEditorMode = normalizedMode;
+        backlogEditorItemId = normalizedMode === 'edit' ? String(backlogId || '').trim() : '';
+        backlogEditorSelection = new Set();
+
+        const targetItem = backlogStateItems.find((item) => item.id === backlogEditorItemId);
+        const activeIds = activeScopedReviewIds();
+
+        const draft = targetItem
+          ? normalizeBacklogItem(targetItem)
+          : normalizeBacklogItem({
+              id: createBacklogId(),
+              priority: 'should',
+              title: '',
+              impact: 'medium',
+              effort: 'medium',
+              action: '',
+              evidenceReviewIds: [],
+              appNames: []
+            });
+
+        draft.evidenceReviewIds.forEach((scopedReviewId) => {
+          if (activeIds.has(scopedReviewId)) {
+            backlogEditorSelection.add(scopedReviewId);
+          }
+        });
+
+        if (backlogEditorTitle instanceof HTMLInputElement) {
+          backlogEditorTitle.value = draft.title;
+        }
+        if (backlogEditorAction instanceof HTMLTextAreaElement) {
+          backlogEditorAction.value = draft.action;
+        }
+        if (backlogEditorPriority instanceof HTMLSelectElement) {
+          backlogEditorPriority.value = normalizeBacklogPriority(draft.priority);
+        }
+        if (backlogEditorImpact instanceof HTMLSelectElement) {
+          backlogEditorImpact.value = normalizeBacklogLevel(draft.impact);
+        }
+        if (backlogEditorEffort instanceof HTMLSelectElement) {
+          backlogEditorEffort.value = normalizeBacklogLevel(draft.effort);
+        }
+        if (backlogEditorReviewSearch instanceof HTMLInputElement) {
+          backlogEditorReviewSearch.value = '';
+        }
+        if (backlogEditorDelete instanceof HTMLButtonElement) {
+          backlogEditorDelete.disabled = normalizedMode !== 'edit';
+        }
+        if (backlogEditorSub instanceof HTMLElement) {
+          backlogEditorSub.textContent =
+            normalizedMode === 'edit'
+              ? '활성 리뷰만 표시됩니다. 체크를 해제하면 해당 근거가 제거됩니다.'
+              : '활성 리뷰를 선택해 새 백로그 항목을 만드세요.';
+        }
+
+        renderBacklogEditorReviewList();
+        setBacklogEditorStatus('상단 적용 버튼을 누르면 백로그 표에 반영됩니다. 백로그 저장은 별도입니다.');
+
+        if (backlogEditorRoot instanceof HTMLElement) {
+          if (backlogEditorCloseTimer) {
+            window.clearTimeout(backlogEditorCloseTimer);
+          }
+          backlogEditorRoot.hidden = false;
+          backlogEditorRoot.setAttribute('aria-hidden', 'false');
+          window.requestAnimationFrame(() => backlogEditorRoot.classList.add('is-open'));
+        }
+        if (backlogEditorTitle instanceof HTMLInputElement) {
+          window.setTimeout(() => backlogEditorTitle.focus(), 0);
+        }
+      }
+
+      function deleteBacklogItemById(backlogId) {
+        const normalizedId = String(backlogId || '').trim();
+        if (!normalizedId) {
+          return;
+        }
+        const target = backlogStateItems.find((item) => item.id === normalizedId);
+        if (!target) {
+          return;
+        }
+        const confirmed = window.confirm('"' + target.title + '" 항목을 삭제할까요?');
+        if (!confirmed) {
+          return;
+        }
+        backlogStateItems = backlogStateItems.filter((item) => item.id !== normalizedId);
+        renderBacklogTable();
+        applySearch();
+      }
+
+      function applyBacklogEditorChanges() {
+        const title = backlogEditorTitle instanceof HTMLInputElement ? backlogEditorTitle.value.trim() : '';
+        const action = backlogEditorAction instanceof HTMLTextAreaElement ? backlogEditorAction.value.trim() : '';
+        const priority = backlogEditorPriority instanceof HTMLSelectElement ? backlogEditorPriority.value : 'should';
+        const impact = backlogEditorImpact instanceof HTMLSelectElement ? backlogEditorImpact.value : 'medium';
+        const effort = backlogEditorEffort instanceof HTMLSelectElement ? backlogEditorEffort.value : 'medium';
+
+        if (!title) {
+          setBacklogEditorStatus('제목을 입력하세요.');
+          if (backlogEditorTitle instanceof HTMLInputElement) {
+            backlogEditorTitle.focus();
+          }
+          return;
+        }
+        if (!action) {
+          setBacklogEditorStatus('개선 액션을 입력하세요.');
+          if (backlogEditorAction instanceof HTMLTextAreaElement) {
+            backlogEditorAction.focus();
+          }
+          return;
+        }
+
+        const evidenceReviewIds = Array.from(backlogEditorSelection);
+        const appNames = new Set();
+        evidenceReviewIds.forEach((scopedReviewId) => {
+          const catalog = reviewCatalogByScopedId.get(scopedReviewId);
+          if (catalog && catalog.appDisplayTitle) {
+            appNames.add(catalog.appDisplayTitle);
+          }
+        });
+
+        const draftItem = normalizeBacklogItem({
+          id: backlogEditorMode === 'edit' ? backlogEditorItemId : createBacklogId(),
+          priority,
+          title,
+          impact,
+          effort,
+          action,
+          evidenceReviewIds,
+          appNames: Array.from(appNames)
+        });
+
+        if (backlogEditorMode === 'edit') {
+          backlogStateItems = backlogStateItems.map((item) =>
+            item.id === backlogEditorItemId ? draftItem : item
+          );
+        } else {
+          backlogStateItems = backlogStateItems.concat([draftItem]);
+        }
+
+        renderBacklogTable();
+        closeBacklogEditor();
+        applySearch();
+      }
+
+      function addReviewToBacklog(backlogId, card) {
+        const normalizedId = String(backlogId || '').trim();
+        if (!normalizedId || !card) {
+          return;
+        }
+        const reviewId = getCardReviewId(card);
+        if (!reviewId) {
+          return;
+        }
+        const state = readCardState(reviewId, card);
+        if (state.excluded) {
+          window.alert('활성 리뷰만 백로그에 추가할 수 있습니다.');
+          return;
+        }
+
+        const appRawTitle = String(card.getAttribute('data-app-title') || '').trim();
+        const appDisplayTitle = String(card.getAttribute('data-app-display-title') || '').trim() || parseDisplayTitle(appRawTitle);
+        const scopedReviewId = createScopedReviewId(appRawTitle || appDisplayTitle, reviewId);
+        if (!scopedReviewId) {
+          return;
+        }
+
+        backlogStateItems = backlogStateItems.map((item) => {
+          if (item.id !== normalizedId) {
+            return item;
+          }
+          const nextEvidenceIds = new Set(Array.isArray(item.evidenceReviewIds) ? item.evidenceReviewIds : []);
+          nextEvidenceIds.add(scopedReviewId);
+          const nextAppNames = new Set(Array.isArray(item.appNames) ? item.appNames : []);
+          if (appDisplayTitle) {
+            nextAppNames.add(appDisplayTitle);
+          }
+          return normalizeBacklogItem({
+            ...item,
+            evidenceReviewIds: Array.from(nextEvidenceIds),
+            appNames: Array.from(nextAppNames)
+          });
+        });
+
+        renderBacklogTable();
+        applySearch();
+      }
+
+      async function saveBacklogState() {
+        if (!backlogApiUrl) {
+          if (saveBacklogButton instanceof HTMLButtonElement) {
+            saveBacklogButton.textContent = '저장 API 없음';
+          }
+          return false;
+        }
+
+        if (saveBacklogButton instanceof HTMLButtonElement) {
+          saveBacklogButton.disabled = true;
+          saveBacklogButton.textContent = '백로그 저장중...';
+        }
+
+        try {
+          const response = await fetch(backlogApiUrl, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              items: backlogStateItems
+            })
+          });
+          if (!response.ok) {
+            throw new Error('SAVE_FAILED');
+          }
+
+          const payload = await response.json();
+          const nextItems = payload && typeof payload === 'object' && Array.isArray(payload.items)
+            ? payload.items
+            : backlogStateItems;
+          backlogStateItems = cloneBacklogItems(nextItems);
+          backlogPersistedSignature = createBacklogSignature(backlogStateItems);
+          renderBacklogTable();
+          return true;
+        } catch {
+          if (saveBacklogButton instanceof HTMLButtonElement) {
+            saveBacklogButton.textContent = '저장 실패';
+          }
+          return false;
+        } finally {
+          if (saveBacklogButton instanceof HTMLButtonElement) {
+            saveBacklogButton.disabled = false;
+          }
+          syncBacklogDirtyState();
+        }
+      }
+
+      async function loadBacklogState() {
+        backlogStateItems = cloneBacklogItems(backlogStateItems);
+        backlogPersistedSignature = createBacklogSignature(backlogStateItems);
+
+        if (!backlogApiUrl) {
+          renderBacklogTable();
+          return;
+        }
+
+        try {
+          const response = await fetch(backlogApiUrl, { method: 'GET' });
+          if (!response.ok) {
+            renderBacklogTable();
+            return;
+          }
+          const payload = await response.json();
+          if (payload && typeof payload === 'object' && Array.isArray(payload.items)) {
+            backlogStateItems = cloneBacklogItems(payload.items);
+            backlogPersistedSignature = createBacklogSignature(backlogStateItems);
+          }
+        } catch {
+          // Keep local seed data when API loading fails.
+        }
+
+        renderBacklogTable();
       }
 
       function syncActiveFilterChips() {
@@ -5573,6 +7068,10 @@ function renderHtml(
       async function loadPreviewState() {
         if (!previewStateApiUrl || stateLoaded) {
           syncAllCardStateVisuals();
+          syncBacklogQuickSelectOptions();
+          if (backlogEditorRoot instanceof HTMLElement && !backlogEditorRoot.hidden) {
+            renderBacklogEditorReviewList();
+          }
           applySearch();
           syncNoteDirtyState();
           syncNoteSidebarTrigger();
@@ -5590,6 +7089,10 @@ function renderHtml(
 
           if (!response.ok) {
             syncAllCardStateVisuals();
+            syncBacklogQuickSelectOptions();
+            if (backlogEditorRoot instanceof HTMLElement && !backlogEditorRoot.hidden) {
+              renderBacklogEditorReviewList();
+            }
             applySearch();
             syncNoteDirtyState();
             syncNoteSidebarTrigger();
@@ -5650,6 +7153,10 @@ function renderHtml(
         copyAppNotesMap(persistedAppNotes, appNotes);
         syncNoteDirtyState();
         syncAllCardStateVisuals();
+        syncBacklogQuickSelectOptions();
+        if (backlogEditorRoot instanceof HTMLElement && !backlogEditorRoot.hidden) {
+          renderBacklogEditorReviewList();
+        }
         applySearch();
         syncNoteSidebarTrigger();
         syncNoteAppSelect();
@@ -5812,6 +7319,12 @@ function renderHtml(
         if (openFilterPanelButton instanceof HTMLElement) {
           openFilterPanelButton.classList.toggle('hidden-control', !raw);
         }
+        if (addBacklogItemButton instanceof HTMLElement) {
+          addBacklogItemButton.classList.toggle('hidden-control', raw);
+        }
+        if (saveBacklogButton instanceof HTMLElement) {
+          saveBacklogButton.classList.toggle('hidden-control', raw);
+        }
         if (topStatusRow instanceof HTMLElement) {
           topStatusRow.classList.toggle('hidden-control', !raw);
         }
@@ -5820,6 +7333,9 @@ function renderHtml(
         }
         if (!raw) {
           closeFilterPanel();
+        }
+        if (raw) {
+          closeBacklogEditor();
         }
         toggleEvidenceAll.classList.toggle('hidden-control', raw);
         syncEvidenceToggleText();
@@ -5879,6 +7395,43 @@ function renderHtml(
       root.addEventListener('click', (event) => {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
+
+        const backlogEditButton = target.closest('.backlog-edit-btn');
+        if (backlogEditButton instanceof HTMLElement) {
+          event.preventDefault();
+          const backlogId = backlogEditButton.getAttribute('data-backlog-id');
+          if (!backlogId) {
+            return;
+          }
+          openBacklogEditor('edit', backlogId);
+          return;
+        }
+
+        const backlogRemoveButton = target.closest('.backlog-remove-btn');
+        if (backlogRemoveButton instanceof HTMLElement) {
+          event.preventDefault();
+          const backlogId = backlogRemoveButton.getAttribute('data-backlog-id');
+          if (!backlogId) {
+            return;
+          }
+          deleteBacklogItemById(backlogId);
+          return;
+        }
+
+        const quickAddButton = target.closest('.backlog-quick-add-btn');
+        if (quickAddButton instanceof HTMLElement) {
+          event.preventDefault();
+          const card = quickAddButton.closest('.quote-card');
+          if (!card) {
+            return;
+          }
+          const select = card.querySelector('.backlog-quick-select');
+          if (!(select instanceof HTMLSelectElement) || !select.value) {
+            return;
+          }
+          addReviewToBacklog(select.value, card);
+          return;
+        }
 
         const evidenceToggle = target.closest('.evidence-toggle');
         if (evidenceToggle instanceof HTMLElement) {
@@ -5958,6 +7511,56 @@ function renderHtml(
       if (noteSidebarSave instanceof HTMLElement) {
         noteSidebarSave.addEventListener('click', saveAppNotesManually);
       }
+      if (addBacklogItemButton instanceof HTMLElement) {
+        addBacklogItemButton.addEventListener('click', () => {
+          openBacklogEditor('create');
+        });
+      }
+      if (saveBacklogButton instanceof HTMLElement) {
+        saveBacklogButton.addEventListener('click', () => {
+          saveBacklogState();
+        });
+      }
+      if (backlogEditorBackdrop instanceof HTMLElement) {
+        backlogEditorBackdrop.addEventListener('click', closeBacklogEditor);
+      }
+      if (backlogEditorClose instanceof HTMLElement) {
+        backlogEditorClose.addEventListener('click', closeBacklogEditor);
+      }
+      if (backlogEditorSave instanceof HTMLElement) {
+        backlogEditorSave.addEventListener('click', applyBacklogEditorChanges);
+      }
+      if (backlogEditorDelete instanceof HTMLElement) {
+        backlogEditorDelete.addEventListener('click', () => {
+          if (backlogEditorMode !== 'edit' || !backlogEditorItemId) {
+            return;
+          }
+          deleteBacklogItemById(backlogEditorItemId);
+          closeBacklogEditor();
+        });
+      }
+      if (backlogEditorReviewSearch instanceof HTMLInputElement) {
+        backlogEditorReviewSearch.addEventListener('input', () => {
+          renderBacklogEditorReviewList();
+        });
+      }
+      if (backlogEditorReviewList instanceof HTMLElement) {
+        backlogEditorReviewList.addEventListener('change', (event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') {
+            return;
+          }
+          const scopedReviewId = String(target.value || '').trim();
+          if (!scopedReviewId) {
+            return;
+          }
+          if (target.checked) {
+            backlogEditorSelection.add(scopedReviewId);
+          } else {
+            backlogEditorSelection.delete(scopedReviewId);
+          }
+        });
+      }
       if (openSearchInputButton instanceof HTMLElement) {
         openSearchInputButton.addEventListener('click', () => {
           const isOpen = topBar instanceof HTMLElement && topBar.classList.contains('is-search-open');
@@ -6003,6 +7606,16 @@ function renderHtml(
       }
       document.addEventListener('keydown', (event) => {
         if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+          if (backlogEditorRoot instanceof HTMLElement && !backlogEditorRoot.hidden) {
+            event.preventDefault();
+            applyBacklogEditorChanges();
+            return;
+          }
+          if (viewBacklog.classList.contains('active')) {
+            event.preventDefault();
+            saveBacklogState();
+            return;
+          }
           if (noteSidebarRoot instanceof HTMLElement && !noteSidebarRoot.hidden) {
             event.preventDefault();
             saveAppNotesManually();
@@ -6017,6 +7630,7 @@ function renderHtml(
         if (event.key === 'Escape') {
           closeAppNoteSidebar();
           closeFilterPanel();
+          closeBacklogEditor();
         }
       });
 
@@ -6027,6 +7641,16 @@ function renderHtml(
           document.body.classList.remove('show-all-original');
         }
         syncUiQuery();
+      });
+
+      quickAddSelects.forEach((select) => {
+        if (!(select instanceof HTMLSelectElement)) {
+          return;
+        }
+        select.addEventListener('change', () => {
+          const card = select.closest('.quote-card');
+          syncBacklogQuickAddButtonForCard(card);
+        });
       });
 
       minLength100.addEventListener('change', () => {
@@ -6116,6 +7740,7 @@ function renderHtml(
           syncUiQuery();
         });
       }
+      loadBacklogState();
       applyInitialQueryState();
       loadPreviewState();
     </script>
@@ -6149,6 +7774,15 @@ async function renderBundleForApp(params: {
     inputPath
   });
   let backlog = await readBacklogData(backlogPath);
+  let backlogRawContainsScopedEvidenceIds = false;
+  if (backlog) {
+    try {
+      const rawBacklogText = await fs.readFile(backlogPath, "utf8");
+      backlogRawContainsScopedEvidenceIds = rawBacklogText.includes("::");
+    } catch {
+      backlogRawContainsScopedEvidenceIds = false;
+    }
+  }
   if (!backlog) {
     backlog = buildBacklog(parsed.apps, reviewPools);
     await writeBacklogData(backlogPath, ownerAppId, backlog);
@@ -6157,9 +7791,12 @@ async function renderBundleForApp(params: {
   const hydratedBacklog = hydrateBacklogEvidence(backlog, reviewPools);
   const needsBacklogNormalization = backlog.some((appBacklog) =>
     appBacklog.items.some(
-      (item) => (item.examples?.length ?? 0) > 0 || item.evidenceReviewIds.length > MAX_EVIDENCE_PER_ITEM
+      (item) =>
+        (item.examples?.length ?? 0) > 0 ||
+        item.evidenceReviewIds.length > MAX_EVIDENCE_PER_ITEM ||
+        item.evidenceReviewIds.some((reviewId) => normalizeText(reviewId).includes("::"))
     )
-  );
+  ) || backlogRawContainsScopedEvidenceIds;
   if (needsBacklogNormalization) {
     await writeBacklogData(backlogPath, ownerAppId, hydratedBacklog);
     console.log(`[${ownerAppId}] Normalized backlog JSON: ${backlogPath}`);

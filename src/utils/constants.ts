@@ -1,0 +1,3 @@
+export const DEFAULT_REVIEW_LIMIT = 200;
+export const MIN_REVIEW_TEXT_LENGTH_EXCLUSIVE = 10;
+

@@ -64,6 +64,8 @@ Render actionable markdown report to a shared-viewer bundle JSON.
 - In expanded evidence rows, the Korean sentence is shown by default (without `KR:` prefix), and `See details` reveals the review ID, metadata, and original text.
 - Expanded evidence rows render prioritized evidence reviews only (top 8 max per backlog row).
 - Backlog themes are now derived dynamically from each app's review text (token-frequency heuristic), instead of using a fixed hardcoded theme list.
+- Synthetic backlog input now filters out low-signal reviews (e.g., short generic praise without request/issue) and keeps actionable evidence first.
+- Backlog `action` text is generated as a concrete checklist (up to 3 items) inferred from matched evidence patterns, not only a generic count sentence.
 - In `Reviews`, hashtag filter supports multi-select (`#❤️`, `#Requests`, `#Satisfaction`, `#Dissatisfaction`), and `All tags` clears tag filters.
 - In `Reviews`, state filter is tri-state: `All` / `Active` / `Inactive` (default: `All`).
 - In `Reviews`, you can toggle `100+ chars` to focus on longer reviews.
@@ -84,6 +86,11 @@ Render actionable markdown report to a shared-viewer bundle JSON.
 - In the notes panel, use the app selector to switch the currently active app for note editing.
 - The notes sidebar shows only store links (App Store / Google Play) for the selected app.
 - Notes are not auto-saved; use `Save` (or `Ctrl/Cmd + S`) to persist note changes.
+- In `Reports`, backlog rows are editable directly from the page:
+  - add/remove backlog items
+  - add/remove evidence reviews per backlog item (editor shows active reviews only)
+  - save backlog changes with `Backlog Save` button (or `Ctrl/Cmd + S` on `Reports`)
+- In `Reviews`, each review card has quick-add UX (`Backlog+`) to attach that review to an existing backlog item.
 - Reviews view is hydrated from full review datasets (`data/{myAppId}/reviews-ko/*.json`, fallback `reviews/*.json`) per app:
   - preselected report quotes start as `Active`
   - non-selected reviews are included as `Inactive` by default for manual curation
@@ -191,6 +198,7 @@ Run localhost preview server.
 - Dashboard mode: home lists app ids and generated report files (`.md`, `.json`, optional legacy `.html`)
 - Recommended flow: keep per-app data as JSON bundles and open `/v/:appId` (shared viewer).
 - Dashboard primary `View Report` link opens shared viewer route (`/v/:appId`)
+- `/v/:appId` reads `competitor-raw-actionable.ko.json` on the server and returns embedded `html` directly (no client-side bundle bootstrap)
 - Dashboard mode can display app icons when `data/{appId}/icon.png` exists
 - Report page header also uses `data/{appId}/icon.png`; when missing, UI falls back to `appId` text
 - Dashboard background fills the full viewport height (no abrupt cut when content is short).
@@ -199,6 +207,10 @@ Run localhost preview server.
   - `GET /api/preview-state/:appId`
   - `PUT /api/preview-state/:appId`
   - persistence file: `data/{myAppId}/reports/preview-state.json`
+- Serves backlog editing API:
+  - `GET /api/backlog/:appId`
+  - `PUT /api/backlog/:appId`
+  - persistence file: `data/{myAppId}/reports/backlog.ko.json`
 
 - `npm run report:preview -- [options]`
 - `node dist/previewReport.js ...`

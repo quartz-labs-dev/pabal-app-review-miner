@@ -5,7 +5,14 @@ import path from "node:path";
 import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 import { resolveOwnerApp } from "./registeredApps";
-import { ensureReviewId, normalizeText, writeJsonFile } from "./utils";
+import {
+  ensureReviewId,
+  listJsonFilesInDir,
+  normalizeText,
+  resolveOwnerDataPath,
+  resolvePathOrDefault,
+  writeJsonFile
+} from "./utils";
 
 type OutputMode = "text" | "json";
 
@@ -96,23 +103,6 @@ async function parseArgs(): Promise<CliArgs> {
     .parse();
 
   return parsed as unknown as CliArgs;
-}
-
-function resolveInputDir(ownerAppId: string, inputDir?: string): string {
-  if (normalizeText(inputDir)) {
-    return path.resolve(process.cwd(), String(inputDir));
-  }
-
-  return path.resolve(process.cwd(), "data", ownerAppId, "reviews");
-}
-
-async function listJsonFiles(inputDir: string): Promise<string[]> {
-  const entries = await fs.readdir(inputDir, { withFileTypes: true });
-
-  return entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
-    .map((entry) => path.resolve(inputDir, entry.name))
-    .sort((a, b) => a.localeCompare(b));
 }
 
 function normalizeSource(source: unknown): "play" | "ios" | undefined {
@@ -232,8 +222,8 @@ async function run(): Promise<void> {
   const argv = await parseArgs();
   const logger = createLogger(argv.output);
   const owner = await resolveOwnerApp(argv.myApp ?? "", argv.registeredAppsPath);
-  const inputDir = resolveInputDir(owner.ownerAppId, argv.inputDir);
-  const files = await listJsonFiles(inputDir);
+  const inputDir = resolvePathOrDefault(argv.inputDir, resolveOwnerDataPath(owner.ownerAppId, "reviews"));
+  const files = await listJsonFilesInDir(inputDir);
   const results: FileResult[] = [];
 
   for (const filePath of files) {
@@ -283,4 +273,3 @@ run().catch((error) => {
   console.error(`Fatal error: ${message}`);
   process.exit(1);
 });
-

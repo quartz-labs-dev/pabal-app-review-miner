@@ -5,7 +5,18 @@ import path from "node:path";
 import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 import { resolveOwnerApp } from "./registeredApps";
-import { ensureDir, fetchJsonWithRetry, normalizeText, readJsonFile, ReviewsOutput, writeJsonFile } from "./utils";
+import {
+  ensureDir,
+  fetchJsonWithRetry,
+  listJsonFilesInDir,
+  normalizeText,
+  readJsonFile,
+  readJsonFileIfExists,
+  resolveOwnerDataPath,
+  resolvePathOrDefault,
+  ReviewsOutput,
+  writeJsonFile
+} from "./utils";
 
 type OutputMode = "text" | "json";
 type TranslationProvider = "google-web" | "none";
@@ -110,14 +121,6 @@ function createLogger(output: OutputMode) {
   };
 }
 
-function resolvePathOrDefault(ownerAppId: string, customPath: string | undefined, folderName: string): string {
-  if (normalizeText(customPath)) {
-    return path.resolve(process.cwd(), String(customPath));
-  }
-
-  return path.resolve(process.cwd(), "data", ownerAppId, folderName);
-}
-
 async function parseArgs(): Promise<CliArgs> {
   const parsed = await yargs(hideBin(process.argv))
     .scriptName("report:translate")
@@ -169,14 +172,6 @@ async function parseArgs(): Promise<CliArgs> {
     .parse();
 
   return parsed as unknown as CliArgs;
-}
-
-async function listReviewFiles(inputDir: string): Promise<string[]> {
-  const entries = await fs.readdir(inputDir, { withFileTypes: true });
-  return entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
-    .map((entry) => path.resolve(inputDir, entry.name))
-    .sort((a, b) => a.localeCompare(b));
 }
 
 function splitIntoChunks(text: string, maxChars: number): string[] {
@@ -285,7 +280,11 @@ async function mapWithConcurrency<T, R>(
 
 async function loadTranslationCache(cachePath: string): Promise<Map<string, { text: string; detectedLang?: string }>> {
   try {
-    const payload = await readJsonFile<Record<string, { text: string; detectedLang?: string }>>(cachePath);
+    const payload = await readJsonFileIfExists<Record<string, { text: string; detectedLang?: string }>>(cachePath);
+    if (!payload) {
+      return new Map();
+    }
+
     return new Map(Object.entries(payload));
   } catch {
     return new Map();
@@ -441,12 +440,12 @@ async function main(): Promise<void> {
   const ownerAppId = owner.ownerAppId;
   const logger = createLogger(argv.output);
 
-  const inputDir = resolvePathOrDefault(ownerAppId, argv.inputDir, "reviews");
-  const outputDir = resolvePathOrDefault(ownerAppId, argv.outputDir, "reviews-ko");
+  const inputDir = resolvePathOrDefault(argv.inputDir, resolveOwnerDataPath(ownerAppId, "reviews"));
+  const outputDir = resolvePathOrDefault(argv.outputDir, resolveOwnerDataPath(ownerAppId, "reviews-ko"));
 
   await ensureDir(outputDir);
 
-  const reviewFiles = await listReviewFiles(inputDir);
+  const reviewFiles = await listJsonFilesInDir(inputDir);
   if (!reviewFiles.length) {
     throw new Error(`No review json files found in ${inputDir}`);
   }

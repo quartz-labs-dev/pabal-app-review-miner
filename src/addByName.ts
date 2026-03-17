@@ -22,7 +22,7 @@ import {
   DEFAULT_REVIEW_LIMIT,
   fetchJsonWithRetry,
   normalizeText,
-  readJsonFile,
+  readJsonFileIfExists,
   ReviewsOutput,
   safeFileName,
   UnifiedReview,
@@ -373,14 +373,12 @@ async function run(): Promise<void> {
 
   if (args.appendExisting) {
     try {
-      const existing = await readJsonFile<Partial<ReviewsOutput>>(outputPath);
-      const existingReviews = Array.isArray(existing.reviews) ? (existing.reviews as UnifiedReview[]) : [];
+      const existing = await readJsonFileIfExists<Partial<ReviewsOutput>>(outputPath);
+      const existingReviews = Array.isArray(existing?.reviews) ? (existing.reviews as UnifiedReview[]) : [];
       mergedReviews = dedupeReviews([...mergedReviews, ...existingReviews]);
     } catch (error) {
       const nodeError = error as NodeJS.ErrnoException;
-      if (nodeError?.code !== "ENOENT") {
-        logger.warn(`[append] failed to read existing output: ${nodeError.message}`);
-      }
+      logger.warn(`[append] failed to read existing output: ${nodeError.message}`);
     }
   }
 

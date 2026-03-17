@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import path from "node:path";
 import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 import { enrichTargetsWithDisplayNames } from "./appMetadata";
@@ -23,7 +22,9 @@ import {
   dedupeReviews,
   DEFAULT_REVIEW_LIMIT,
   readJsonFile,
+  readJsonFileIfExists,
   removeFileIfExists,
+  resolvePathFromCwd,
   ReviewsOutput,
   UnifiedReview,
   writeJsonFile
@@ -229,7 +230,7 @@ async function parseArgs(): Promise<CliArgs> {
 }
 
 async function loadTargetsFromAppsFile(appsPath: string): Promise<AppTarget[]> {
-  const resolved = path.resolve(process.cwd(), appsPath);
+  const resolved = resolvePathFromCwd(appsPath);
   const apps = await readJsonFile<AppTarget[]>(resolved);
 
   if (!Array.isArray(apps) || apps.length === 0) {
@@ -250,7 +251,7 @@ async function loadSingleTarget(argv: CliArgs): Promise<AppTarget> {
     };
   }
 
-  const defaultAppsPath = path.resolve(process.cwd(), "apps.json");
+  const defaultAppsPath = resolvePathFromCwd("apps.json");
   try {
     const apps = await readJsonFile<AppTarget[]>(defaultAppsPath);
     const matched = apps.find((item) => item.name === appName);
@@ -443,14 +444,12 @@ async function saveReviews(
 
   if (options.appendExisting) {
     try {
-      const existing = await readJsonFile<Partial<ReviewsOutput>>(paths.reviewsPath);
-      const existingReviews = Array.isArray(existing.reviews) ? (existing.reviews as UnifiedReview[]) : [];
+      const existing = await readJsonFileIfExists<Partial<ReviewsOutput>>(paths.reviewsPath);
+      const existingReviews = Array.isArray(existing?.reviews) ? (existing.reviews as UnifiedReview[]) : [];
       mergedReviews = dedupeReviews([...mergedReviews, ...existingReviews]);
     } catch (error) {
       const nodeError = error as NodeJS.ErrnoException;
-      if (nodeError?.code !== "ENOENT") {
-        options.logger?.warn(`[${appName}] failed to read existing output for append: ${nodeError.message}`);
-      }
+      options.logger?.warn(`[${appName}] failed to read existing output for append: ${nodeError.message}`);
     }
   }
 

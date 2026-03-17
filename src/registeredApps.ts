@@ -1,6 +1,6 @@
 import os from "node:os";
 import path from "node:path";
-import { readJsonFile } from "./utils";
+import { readJsonFile, resolvePathOrDefault } from "./utils";
 
 export const DEFAULT_REGISTERED_APPS_PATH = path.join(
   os.homedir(),
@@ -57,9 +57,7 @@ export async function resolveOwnerAppId(query: string, filePath?: string): Promi
 }
 
 export async function resolveOwnerApp(query: string, filePath?: string): Promise<ResolvedOwnerApp> {
-  const registeredPath = filePath
-    ? path.resolve(process.cwd(), filePath)
-    : DEFAULT_REGISTERED_APPS_PATH;
+  const registeredPath = resolvePathOrDefault(filePath, DEFAULT_REGISTERED_APPS_PATH);
 
   const payload = await readJsonFile<RegisteredAppsFile>(registeredPath);
   const apps = payload.apps ?? [];
