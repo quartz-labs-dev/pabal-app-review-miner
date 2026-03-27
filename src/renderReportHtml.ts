@@ -3142,8 +3142,10 @@ function renderHtml(
             return `
                   <tr class=\"backlog-item main-row searchable\" data-priority=\"${escapeHtml(
                     item.priority
-                  )}\" data-search=\"${escapeHtml(
-              `${appLabel} ${item.priority} ${item.title} ${item.action} ${(item.examples ?? [])
+                  )}\" data-impact=\"${escapeHtml(item.impact)}\" data-effort=\"${escapeHtml(
+              item.effort
+            )}\" data-search=\"${escapeHtml(
+              `${appLabel} ${item.priority} ${item.impact} ${item.effort} ${item.title} ${item.action} ${(item.examples ?? [])
                 .map((q) => `${q.kr} ${q.org}`)
                 .join(" ")}`
             ).toLowerCase()}\" data-backlog-id=\"${escapeHtml(item.id)}\" data-review-ids=\"${escapeHtml(
@@ -3203,7 +3205,7 @@ function renderHtml(
               <tr>
                 <th>Priority</th>
                 <th>백로그 항목</th>
-                <th>Impact</th>
+                <th>Importance</th>
                 <th>Effort</th>
                 <th>근거 수</th>
               </tr>
@@ -3656,32 +3658,6 @@ function renderHtml(
         border-color: #eab308;
         color: #92400e;
         background: #fef9c3;
-      }
-      .priority-filter {
-        display: inline-flex;
-        align-items: center;
-        flex-wrap: wrap;
-        padding: 5px;
-        gap: 5px;
-        border: 1px solid #c7d6e8;
-        border-radius: 12px;
-        background: #ffffff;
-        box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
-      }
-      .priority-filter-btn {
-        border: 1px solid transparent;
-        background: transparent;
-        border-radius: 10px;
-        padding: 6px 10px;
-        min-height: 32px;
-        font-size: 12px;
-        font-weight: 700;
-        color: var(--sub);
-      }
-      .priority-filter-btn.is-active {
-        border-color: #0ea5e9;
-        color: #075985;
-        background: #e0f2fe;
       }
       .clear-filters-btn {
         border-color: #c7d6e8;
@@ -4136,12 +4112,16 @@ function renderHtml(
         flex-direction: column;
         gap: 8px;
       }
+      .filter-panel-body .filter-field + .filter-field {
+        margin-top: 18px;
+      }
       .filter-field-title {
         margin: 0;
         padding: 0;
         color: #475569;
         font-size: 12px;
         font-weight: 700;
+        line-height: 1.25;
         text-align: left;
       }
       .filter-panel-body .toggle-all-label,
@@ -4157,7 +4137,7 @@ function renderHtml(
         align-self: flex-start;
       }
       .filter-panel-foot {
-        margin-top: 0;
+        margin-top: 28px;
         display: flex;
         justify-content: flex-start;
         align-items: center;
@@ -4377,15 +4357,24 @@ function renderHtml(
         font-size: 12px;
         padding: 4px 8px;
       }
+      .backlog-inline-select {
+        width: 100%;
+        min-height: 32px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 0 8px;
+        background: #ffffff;
+        color: #0f172a;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .backlog-inline-priority {
+        text-transform: uppercase;
+      }
       .backlog-remove-btn {
         border-color: #fca5a5;
         color: #991b1b;
         background: #fff1f2;
-      }
-      #saveBacklog.is-active {
-        border-color: #7dd3fc;
-        background: #e0f2fe;
-        color: #0c4a6e;
       }
       .backlog-editor-root {
         position: fixed;
@@ -4777,11 +4766,6 @@ function renderHtml(
           border-radius: 12px;
           justify-content: center;
         }
-        .priority-filter {
-          order: 3;
-          width: auto;
-          max-width: 100%;
-        }
         .raw-pagination {
           order: 4;
           margin-left: 0;
@@ -4964,15 +4948,7 @@ function renderHtml(
         <div class=\"top-controls\">
           <button id=\"openNoteSidebar\" type=\"button\">노트</button>
           <button id=\"addBacklogItem\" class=\"hidden-control\" type=\"button\">백로그 추가</button>
-          <button id=\"saveBacklog\" class=\"hidden-control\" type=\"button\">백로그 저장</button>
           <button id=\"openFilterPanel\" class=\"open-filter-panel-btn\" type=\"button\">필터</button>
-          <button id=\"toggleEvidenceAll\" type=\"button\">근거 펼치기</button>
-          <div id=\"priorityFilter\" class=\"priority-filter hidden-control\" role=\"group\" aria-label=\"우선순위 필터\">
-            <button type=\"button\" class=\"priority-filter-btn is-active\" data-priority-filter=\"all\">전체</button>
-            <button type=\"button\" class=\"priority-filter-btn\" data-priority-filter=\"must\">MUST</button>
-            <button type=\"button\" class=\"priority-filter-btn\" data-priority-filter=\"should\">SHOULD</button>
-            <button type=\"button\" class=\"priority-filter-btn\" data-priority-filter=\"could\">COULD</button>
-          </div>
         </div>
       </div>
       <div class=\"top-inner top-status-row\">
@@ -4980,9 +4956,6 @@ function renderHtml(
         <p id=\"filterSummary\" class=\"filter-summary page-filter-summary\">리뷰 0/0 표시</p>
         <div id=\"rawPagination\" class=\"raw-pagination\">
           <span id=\"rawTotalCount\" class=\"raw-total-count\">리뷰 0/0</span>
-          <button id=\"rawPagePrev\" type=\"button\">이전</button>
-          <span id=\"rawPageInfo\" class=\"raw-page-info\">1/1</span>
-          <button id=\"rawPageNext\" type=\"button\">다음</button>
         </div>
       </div>
     </div>
@@ -5063,7 +5036,7 @@ function renderHtml(
               </select>
             </label>
             <label class=\"backlog-editor-field\">
-              <span>Impact</span>
+              <span>Importance</span>
               <select id=\"backlogEditorImpact\">
                 <option value=\"high\">High</option>
                 <option value=\"medium\">Medium</option>
@@ -5086,7 +5059,7 @@ function renderHtml(
           <div id=\"backlogEditorReviewList\" class=\"backlog-review-list\"></div>
           <div class=\"backlog-editor-foot\">
             <button id=\"backlogEditorDelete\" type=\"button\">백로그 삭제</button>
-            <span id=\"backlogEditorStatus\">변경사항은 상단 백로그 저장 버튼으로 반영됩니다.</span>
+            <span id=\"backlogEditorStatus\">변경사항은 Ctrl/Cmd + S로 저장할 수 있습니다.</span>
           </div>
         </div>
       </aside>
@@ -5106,32 +5079,66 @@ function renderHtml(
           <p id=\"filterPanelCount\" class=\"filter-summary filter-panel-summary\">리뷰 0/0</p>
         </div>
         <div id=\"topFiltersLeft\" class=\"filter-panel-body\">
-          <div class=\"filter-field\">
-            <label class=\"toggle-all-label\"><input id=\"toggleAll\" type=\"checkbox\" /> 원어 보기</label>
-          </div>
-          <div class=\"filter-field\">
-            <p class=\"filter-field-title\">해시태그</p>
-            <div id=\"tagFilter\" class=\"tag-filter\" role=\"group\" aria-label=\"해시태그 필터\">
-              <button type=\"button\" class=\"tag-filter-btn is-active\" data-tag-filter=\"all\">태그 전체</button>
-              <button type=\"button\" class=\"tag-filter-btn\" data-tag-filter=\"heart\">#❤️</button>
-              <button type=\"button\" class=\"tag-filter-btn\" data-tag-filter=\"satisfaction\">#만족</button>
-              <button type=\"button\" class=\"tag-filter-btn\" data-tag-filter=\"dissatisfaction\">#불만족</button>
-              <button type=\"button\" class=\"tag-filter-btn\" data-tag-filter=\"requests\">#요청기능</button>
+          <div id=\"rawFilterFields\">
+            <div class=\"filter-field\">
+              <label class=\"toggle-all-label\"><input id=\"toggleAll\" type=\"checkbox\" /> 원어 보기</label>
+            </div>
+            <div class=\"filter-field\">
+              <p class=\"filter-field-title\">해시태그</p>
+              <div id=\"tagFilter\" class=\"tag-filter\" role=\"group\" aria-label=\"해시태그 필터\">
+                <button type=\"button\" class=\"tag-filter-btn is-active\" data-tag-filter=\"all\">태그 전체</button>
+                <button type=\"button\" class=\"tag-filter-btn\" data-tag-filter=\"heart\">#❤️</button>
+                <button type=\"button\" class=\"tag-filter-btn\" data-tag-filter=\"satisfaction\">#만족</button>
+                <button type=\"button\" class=\"tag-filter-btn\" data-tag-filter=\"dissatisfaction\">#불만족</button>
+                <button type=\"button\" class=\"tag-filter-btn\" data-tag-filter=\"requests\">#요청기능</button>
+              </div>
+            </div>
+            <div class=\"filter-field\">
+              <label class=\"toggle-length-label\"><input id=\"minLength100\" type=\"checkbox\" /> 100자 이상</label>
+            </div>
+            <div class=\"filter-field\">
+              <p class=\"filter-field-title\">활성 상태</p>
+              <div id=\"excludeFilter\" class=\"exclude-filter\" role=\"group\" aria-label=\"활성 상태 필터\">
+                <button type=\"button\" class=\"exclude-filter-btn is-active\" data-exclude-filter=\"all\">전체</button>
+                <button type=\"button\" class=\"exclude-filter-btn\" data-exclude-filter=\"active\">활성</button>
+                <button type=\"button\" class=\"exclude-filter-btn\" data-exclude-filter=\"excluded\">비활성</button>
+              </div>
+            </div>
+            <div class=\"filter-panel-foot\">
+              <button id=\"resetAllExcluded\" class=\"clear-filters-btn bulk-exclude-btn\" type=\"button\">전체 리뷰 비활성 리셋</button>
             </div>
           </div>
-          <div class=\"filter-field\">
-            <label class=\"toggle-length-label\"><input id=\"minLength100\" type=\"checkbox\" /> 100자 이상</label>
-          </div>
-          <div class=\"filter-field\">
-            <p class=\"filter-field-title\">활성 상태</p>
-            <div id=\"excludeFilter\" class=\"exclude-filter\" role=\"group\" aria-label=\"활성 상태 필터\">
-              <button type=\"button\" class=\"exclude-filter-btn is-active\" data-exclude-filter=\"all\">전체</button>
-              <button type=\"button\" class=\"exclude-filter-btn\" data-exclude-filter=\"active\">활성</button>
-              <button type=\"button\" class=\"exclude-filter-btn\" data-exclude-filter=\"excluded\">비활성</button>
+          <div id=\"backlogFilterFields\" class=\"hidden-control\">
+            <div class=\"filter-field\">
+              <p class=\"filter-field-title\">Priority</p>
+              <div id=\"backlogPriorityFilter\" class=\"exclude-filter\" role=\"group\" aria-label=\"Priority 필터\">
+                <button type=\"button\" class=\"exclude-filter-btn is-active\" data-backlog-priority-filter=\"all\">전체</button>
+                <button type=\"button\" class=\"exclude-filter-btn\" data-backlog-priority-filter=\"must\">MUST</button>
+                <button type=\"button\" class=\"exclude-filter-btn\" data-backlog-priority-filter=\"should\">SHOULD</button>
+                <button type=\"button\" class=\"exclude-filter-btn\" data-backlog-priority-filter=\"could\">COULD</button>
+              </div>
             </div>
-          </div>
-          <div class=\"filter-panel-foot\">
-            <button id=\"resetAllExcluded\" class=\"clear-filters-btn bulk-exclude-btn\" type=\"button\">전체 리뷰 비활성 리셋</button>
+            <div class=\"filter-field\">
+              <p class=\"filter-field-title\">Importance</p>
+              <div id=\"backlogImportanceFilter\" class=\"exclude-filter\" role=\"group\" aria-label=\"Importance 필터\">
+                <button type=\"button\" class=\"exclude-filter-btn is-active\" data-backlog-importance-filter=\"all\">전체</button>
+                <button type=\"button\" class=\"exclude-filter-btn\" data-backlog-importance-filter=\"high\">High</button>
+                <button type=\"button\" class=\"exclude-filter-btn\" data-backlog-importance-filter=\"medium\">Medium</button>
+                <button type=\"button\" class=\"exclude-filter-btn\" data-backlog-importance-filter=\"low\">Low</button>
+              </div>
+            </div>
+            <div class=\"filter-field\">
+              <p class=\"filter-field-title\">Effort</p>
+              <div id=\"backlogEffortFilter\" class=\"exclude-filter\" role=\"group\" aria-label=\"Effort 필터\">
+                <button type=\"button\" class=\"exclude-filter-btn is-active\" data-backlog-effort-filter=\"all\">전체</button>
+                <button type=\"button\" class=\"exclude-filter-btn\" data-backlog-effort-filter=\"high\">High</button>
+                <button type=\"button\" class=\"exclude-filter-btn\" data-backlog-effort-filter=\"medium\">Medium</button>
+                <button type=\"button\" class=\"exclude-filter-btn\" data-backlog-effort-filter=\"low\">Low</button>
+              </div>
+            </div>
+            <div class=\"filter-panel-foot\">
+              <button id=\"toggleEvidenceAll\" class=\"clear-filters-btn\" type=\"button\">근거 펼치기</button>
+            </div>
           </div>
         </div>
       </aside>
@@ -5143,7 +5150,6 @@ function renderHtml(
       const searchInput = document.getElementById('search');
       const openSearchInputButton = document.getElementById('openSearchInput');
       const searchFixed = document.querySelector('.search-fixed');
-      const topStatusRow = document.querySelector('.top-status-row');
       const openFilterPanelButton = document.getElementById('openFilterPanel');
       const toggleAll = document.getElementById('toggleAll');
       const tagFilter = document.getElementById('tagFilter');
@@ -5152,23 +5158,30 @@ function renderHtml(
         : [];
       const clearFiltersButton = document.getElementById('clearFilters');
       const resetAllExcludedButton = document.getElementById('resetAllExcluded');
+      const filterPanelTitle = document.getElementById('filterPanelTitle');
       const minLength100 = document.getElementById('minLength100');
       const excludeFilter = document.getElementById('excludeFilter');
+      const rawFilterFields = document.getElementById('rawFilterFields');
+      const backlogFilterFields = document.getElementById('backlogFilterFields');
       const filterSummary = document.getElementById('filterSummary');
       const filterPanelCount = document.getElementById('filterPanelCount');
       const activeFilterChips = document.getElementById('activeFilterChips');
       const rawPagination = document.getElementById('rawPagination');
       const rawTotalCount = document.getElementById('rawTotalCount');
-      const rawPagePrev = document.getElementById('rawPagePrev');
-      const rawPageNext = document.getElementById('rawPageNext');
-      const rawPageInfo = document.getElementById('rawPageInfo');
       const addBacklogItemButton = document.getElementById('addBacklogItem');
-      const saveBacklogButton = document.getElementById('saveBacklog');
       const backlogSummaryLine = document.getElementById('backlogSummaryLine');
       const backlogTableBody = document.getElementById('backlogTableBody');
-      const priorityFilter = document.getElementById('priorityFilter');
-      const priorityFilterButtons = priorityFilter
-        ? Array.from(priorityFilter.querySelectorAll('[data-priority-filter]'))
+      const backlogPriorityFilter = document.getElementById('backlogPriorityFilter');
+      const backlogImportanceFilter = document.getElementById('backlogImportanceFilter');
+      const backlogEffortFilter = document.getElementById('backlogEffortFilter');
+      const backlogPriorityFilterButtons = backlogPriorityFilter
+        ? Array.from(backlogPriorityFilter.querySelectorAll('[data-backlog-priority-filter]'))
+        : [];
+      const backlogImportanceFilterButtons = backlogImportanceFilter
+        ? Array.from(backlogImportanceFilter.querySelectorAll('[data-backlog-importance-filter]'))
+        : [];
+      const backlogEffortFilterButtons = backlogEffortFilter
+        ? Array.from(backlogEffortFilter.querySelectorAll('[data-backlog-effort-filter]'))
         : [];
       const excludeFilterButtons = excludeFilter
         ? Array.from(excludeFilter.querySelectorAll('[data-exclude-filter]'))
@@ -5253,17 +5266,17 @@ function renderHtml(
       let filterPanelCloseTimer = 0;
       let noteSidebarCloseTimer = 0;
       let stateLoaded = false;
-      let rawPageSize = 100;
-      let rawCurrentPage = 1;
       let rawFilteredCount = rawCards.length;
-      let rawTotalPages = 1;
       let excludeFilterMode = 'all';
       let backlogPriorityFilterMode = 'all';
+      let backlogImportanceFilterMode = 'all';
+      let backlogEffortFilterMode = 'all';
       let noteDirty = false;
       const selectedTagFilters = new Set();
       let activeNoteAppKey = '';
       const EXCLUDE_FILTER_MODES = new Set(['all', 'active', 'excluded']);
       const PRIORITY_FILTER_MODES = new Set(['all', 'must', 'should', 'could']);
+      const BACKLOG_LEVEL_FILTER_MODES = new Set(['all', 'high', 'medium', 'low']);
       const REVIEW_TAGS = ['heart', 'satisfaction', 'dissatisfaction', 'requests'];
       const TAG_FILTER_MODES = new Set(['all', 'heart', 'satisfaction', 'dissatisfaction', 'requests']);
       const TAB_QUERY_KEY = 'tab';
@@ -5272,8 +5285,9 @@ function renderHtml(
       const EXCLUDE_QUERY_KEY = 'exclude';
       const MIN_LENGTH_QUERY_KEY = 'min100';
       const SHOW_ORIGINAL_QUERY_KEY = 'orig';
-      const RAW_PAGE_QUERY_KEY = 'page';
       const PRIORITY_QUERY_KEY = 'priority';
+      const IMPORTANCE_QUERY_KEY = 'importance';
+      const EFFORT_QUERY_KEY = 'effort';
       const TAB_REVIEW_VALUES = new Set(['reviews', 'review', 'raw']);
       const TAB_REPORT_VALUES = new Set(['reports', 'report', 'backlog']);
       const TAG_LABELS = {
@@ -5416,14 +5430,6 @@ function renderHtml(
         return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
       }
 
-      function parsePageNumber(input) {
-        const parsed = Number.parseInt(String(input || ''), 10);
-        if (!Number.isFinite(parsed) || parsed < 1) {
-          return 1;
-        }
-        return parsed;
-      }
-
       function resolveUiStateFromQuery() {
         const initial = {
           rawTab: true,
@@ -5432,8 +5438,9 @@ function renderHtml(
           excludeMode: 'all',
           minLength100: false,
           showOriginal: false,
-          rawPage: 1,
-          backlogPriorityMode: 'all'
+          backlogPriorityMode: 'all',
+          backlogImportanceMode: 'all',
+          backlogEffortMode: 'all'
         };
 
         try {
@@ -5459,10 +5466,11 @@ function renderHtml(
 
           initial.minLength100 = parseQueryBoolean(params.get(MIN_LENGTH_QUERY_KEY));
           initial.showOriginal = parseQueryBoolean(params.get(SHOW_ORIGINAL_QUERY_KEY));
-          initial.rawPage = parsePageNumber(params.get(RAW_PAGE_QUERY_KEY));
 
           const priorityMode = String(params.get(PRIORITY_QUERY_KEY) || '').trim().toLowerCase();
           initial.backlogPriorityMode = PRIORITY_FILTER_MODES.has(priorityMode) ? priorityMode : 'all';
+          initial.backlogImportanceMode = normalizeBacklogLevelFilter(params.get(IMPORTANCE_QUERY_KEY));
+          initial.backlogEffortMode = normalizeBacklogLevelFilter(params.get(EFFORT_QUERY_KEY));
         } catch {}
 
         return initial;
@@ -5482,10 +5490,11 @@ function renderHtml(
           const excludeMode = EXCLUDE_FILTER_MODES.has(excludeFilterMode) ? excludeFilterMode : 'all';
           const minLengthEnabled = minLength100 instanceof HTMLInputElement && minLength100.checked;
           const showOriginal = toggleAll instanceof HTMLInputElement && toggleAll.checked;
-          const rawPage = parsePageNumber(rawCurrentPage);
           const priorityMode = PRIORITY_FILTER_MODES.has(backlogPriorityFilterMode)
             ? backlogPriorityFilterMode
             : 'all';
+          const importanceMode = normalizeBacklogLevelFilter(backlogImportanceFilterMode);
+          const effortMode = normalizeBacklogLevelFilter(backlogEffortFilterMode);
 
           nextParams.set(TAB_QUERY_KEY, activeRawTab ? 'reviews' : 'reports');
 
@@ -5519,16 +5528,22 @@ function renderHtml(
             nextParams.delete(SHOW_ORIGINAL_QUERY_KEY);
           }
 
-          if (rawPage > 1) {
-            nextParams.set(RAW_PAGE_QUERY_KEY, String(rawPage));
-          } else {
-            nextParams.delete(RAW_PAGE_QUERY_KEY);
-          }
-
           if (priorityMode !== 'all') {
             nextParams.set(PRIORITY_QUERY_KEY, priorityMode);
           } else {
             nextParams.delete(PRIORITY_QUERY_KEY);
+          }
+
+          if (importanceMode !== 'all') {
+            nextParams.set(IMPORTANCE_QUERY_KEY, importanceMode);
+          } else {
+            nextParams.delete(IMPORTANCE_QUERY_KEY);
+          }
+
+          if (effortMode !== 'all') {
+            nextParams.set(EFFORT_QUERY_KEY, effortMode);
+          } else {
+            nextParams.delete(EFFORT_QUERY_KEY);
           }
 
           const currentSearch = url.searchParams.toString();
@@ -5651,7 +5666,23 @@ function renderHtml(
         return catalog;
       }
 
+      function createReviewCardsByReviewIdMap() {
+        const bucket = new Map();
+        rawCards.forEach((card) => {
+          const reviewId = getCardReviewId(card);
+          if (!reviewId) {
+            return;
+          }
+          if (!bucket.has(reviewId)) {
+            bucket.set(reviewId, []);
+          }
+          bucket.get(reviewId).push(card);
+        });
+        return bucket;
+      }
+
       const reviewCatalogByScopedId = createReviewCatalogMap();
+      const reviewCardsByReviewId = createReviewCardsByReviewIdMap();
 
       function activeScopedReviewIds() {
         const ids = new Set();
@@ -5820,21 +5851,91 @@ function renderHtml(
         });
       }
 
+      function normalizeBacklogLevelFilter(mode) {
+        const normalized = String(mode || '').trim().toLowerCase();
+        return BACKLOG_LEVEL_FILTER_MODES.has(normalized) ? normalized : 'all';
+      }
+
       function setBacklogPriorityFilterMode(mode) {
         const normalized = String(mode || '').trim().toLowerCase();
         backlogPriorityFilterMode = PRIORITY_FILTER_MODES.has(normalized) ? normalized : 'all';
-        syncPriorityFilterButtons();
+        syncBacklogFilterButtons();
       }
 
-      function syncPriorityFilterButtons() {
-        priorityFilterButtons.forEach((button) => {
+      function setBacklogImportanceFilterMode(mode) {
+        backlogImportanceFilterMode = normalizeBacklogLevelFilter(mode);
+        syncBacklogFilterButtons();
+      }
+
+      function setBacklogEffortFilterMode(mode) {
+        backlogEffortFilterMode = normalizeBacklogLevelFilter(mode);
+        syncBacklogFilterButtons();
+      }
+
+      function syncBacklogFilterButtons() {
+        backlogPriorityFilterButtons.forEach((button) => {
           if (!(button instanceof HTMLElement)) {
             return;
           }
-
-          const mode = (button.getAttribute('data-priority-filter') || '').trim().toLowerCase();
+          const mode = String(button.getAttribute('data-backlog-priority-filter') || '').trim().toLowerCase();
           button.classList.toggle('is-active', mode === backlogPriorityFilterMode);
         });
+
+        backlogImportanceFilterButtons.forEach((button) => {
+          if (!(button instanceof HTMLElement)) {
+            return;
+          }
+          const mode = String(button.getAttribute('data-backlog-importance-filter') || '').trim().toLowerCase();
+          button.classList.toggle('is-active', mode === backlogImportanceFilterMode);
+        });
+
+        backlogEffortFilterButtons.forEach((button) => {
+          if (!(button instanceof HTMLElement)) {
+            return;
+          }
+          const mode = String(button.getAttribute('data-backlog-effort-filter') || '').trim().toLowerCase();
+          button.classList.toggle('is-active', mode === backlogEffortFilterMode);
+        });
+      }
+
+      function activateReviewId(reviewId) {
+        const normalizedReviewId = String(reviewId || '').trim();
+        if (!normalizedReviewId) {
+          return false;
+        }
+
+        const cards = reviewCardsByReviewId.get(normalizedReviewId);
+        if (!Array.isArray(cards) || cards.length === 0) {
+          return false;
+        }
+
+        let changed = false;
+        cards.forEach((card) => {
+          const state = readCardState(normalizedReviewId, card);
+          if (!state.excluded) {
+            return;
+          }
+          state.excluded = false;
+          writeCardState(normalizedReviewId, state, card);
+          syncCardStateVisual(card);
+          changed = true;
+        });
+        return changed;
+      }
+
+      function activateScopedReviewIds(scopedReviewIds) {
+        const source = Array.isArray(scopedReviewIds) ? scopedReviewIds : [];
+        let changed = false;
+        source.forEach((scopedReviewId) => {
+          const reviewId = parseScopedReviewId(scopedReviewId).reviewId;
+          if (activateReviewId(reviewId)) {
+            changed = true;
+          }
+        });
+        if (changed) {
+          schedulePreviewStateSave();
+        }
+        return changed;
       }
 
       function backlogPriorityRank(priority) {
@@ -5866,6 +5967,8 @@ function renderHtml(
       function buildBacklogSearchText(item, evidenceRows) {
         const textParts = [
           item.priority,
+          item.impact,
+          item.effort,
           item.title,
           item.action,
           (item.appNames || []).join(' ')
@@ -5943,10 +6046,6 @@ function renderHtml(
       function syncBacklogDirtyState() {
         const currentSignature = createBacklogSignature(backlogStateItems);
         backlogDirty = currentSignature !== backlogPersistedSignature;
-        if (saveBacklogButton instanceof HTMLButtonElement) {
-          saveBacklogButton.classList.toggle('is-active', backlogDirty);
-          saveBacklogButton.textContent = backlogDirty ? '백로그 저장*' : '백로그 저장';
-        }
       }
 
       function syncBacklogQuickAddButtonForCard(card) {
@@ -5968,12 +6067,12 @@ function renderHtml(
         const state = readCardState(reviewId, card);
         const select = card.querySelector('.backlog-quick-select');
         const hasSelectableBacklog = select instanceof HTMLSelectElement && Boolean(select.value);
-        button.disabled = state.excluded || !hasSelectableBacklog;
-        button.title = state.excluded
-          ? '활성 리뷰만 백로그에 추가할 수 있습니다.'
-          : hasSelectableBacklog
-            ? '선택한 백로그에 이 리뷰를 추가'
-            : '추가할 백로그를 선택하세요.';
+        button.disabled = !hasSelectableBacklog;
+        button.title = hasSelectableBacklog
+          ? state.excluded
+            ? '백로그에 추가하며 자동으로 활성 상태로 전환됩니다.'
+            : '선택한 백로그에 이 리뷰를 추가'
+          : '추가할 백로그를 선택하세요.';
       }
 
       function syncBacklogQuickSelectOptions() {
@@ -6075,24 +6174,72 @@ function renderHtml(
                     .join('');
 
             const searchText = buildBacklogSearchText(item, evidenceRows);
+            const priorityValue = normalizeBacklogPriority(item.priority);
+            const impactValue = normalizeBacklogLevel(item.impact);
+            const effortValue = normalizeBacklogLevel(item.effort);
+            const backlogIdValue = escapeInlineHtml(item.id);
+            const prioritySelectHtml =
+              '<select class=\"backlog-inline-select backlog-inline-priority\" data-backlog-id=\"' +
+              backlogIdValue +
+              '\" data-backlog-field=\"priority\" aria-label=\"백로그 우선순위\">' +
+              '<option value=\"must\"' +
+              (priorityValue === 'must' ? ' selected' : '') +
+              '>MUST</option>' +
+              '<option value=\"should\"' +
+              (priorityValue === 'should' ? ' selected' : '') +
+              '>SHOULD</option>' +
+              '<option value=\"could\"' +
+              (priorityValue === 'could' ? ' selected' : '') +
+              '>COULD</option>' +
+              '</select>';
+            const importanceSelectHtml =
+              '<select class=\"backlog-inline-select\" data-backlog-id=\"' +
+              backlogIdValue +
+              '\" data-backlog-field=\"impact\" aria-label=\"백로그 중요도\">' +
+              '<option value=\"high\"' +
+              (impactValue === 'high' ? ' selected' : '') +
+              '>High</option>' +
+              '<option value=\"medium\"' +
+              (impactValue === 'medium' ? ' selected' : '') +
+              '>Medium</option>' +
+              '<option value=\"low\"' +
+              (impactValue === 'low' ? ' selected' : '') +
+              '>Low</option>' +
+              '</select>';
+            const effortSelectHtml =
+              '<select class=\"backlog-inline-select\" data-backlog-id=\"' +
+              backlogIdValue +
+              '\" data-backlog-field=\"effort\" aria-label=\"백로그 난이도\">' +
+              '<option value=\"high\"' +
+              (effortValue === 'high' ? ' selected' : '') +
+              '>High</option>' +
+              '<option value=\"medium\"' +
+              (effortValue === 'medium' ? ' selected' : '') +
+              '>Medium</option>' +
+              '<option value=\"low\"' +
+              (effortValue === 'low' ? ' selected' : '') +
+              '>Low</option>' +
+              '</select>';
 
             return (
               '<tr class=\"backlog-item main-row searchable\" data-priority=\"' +
-              escapeInlineHtml(normalizeBacklogPriority(item.priority)) +
+              escapeInlineHtml(priorityValue) +
+              '\" data-impact=\"' +
+              escapeInlineHtml(impactValue) +
+              '\" data-effort=\"' +
+              escapeInlineHtml(effortValue) +
               '\" data-search=\"' +
               escapeInlineHtml(searchText) +
               '\" data-backlog-id=\"' +
-              escapeInlineHtml(item.id) +
+              backlogIdValue +
               '\" data-review-ids=\"' +
               escapeInlineHtml(item.evidenceReviewIds.join('|')) +
               '\" data-evidence-id=\"' +
               escapeInlineHtml(evidenceId) +
               '\">' +
-              '<td><span class=\"badge badge-' +
-              escapeInlineHtml(normalizeBacklogPriority(item.priority)) +
-              '\">' +
-              escapeInlineHtml(String(item.priority || '').toUpperCase()) +
-              '</span></td>' +
+              '<td>' +
+              prioritySelectHtml +
+              '</td>' +
               '<td>' +
               '<div class=\"item-title\">' +
               escapeInlineHtml(item.title) +
@@ -6115,10 +6262,10 @@ function renderHtml(
               '</div>' +
               '</td>' +
               '<td>' +
-              escapeInlineHtml(backlogLevelLabel(item.impact)) +
+              importanceSelectHtml +
               '</td>' +
               '<td>' +
-              escapeInlineHtml(backlogLevelLabel(item.effort)) +
+              effortSelectHtml +
               '</td>' +
               '<td>' +
               '<div class=\"evidence-count-cell\">' +
@@ -6306,7 +6453,7 @@ function renderHtml(
         }
 
         renderBacklogEditorReviewList();
-        setBacklogEditorStatus('상단 적용 버튼을 누르면 백로그 표에 반영됩니다. 백로그 저장은 별도입니다.');
+        setBacklogEditorStatus('상단 적용 버튼으로 표에 반영됩니다. 영구 저장은 리포트 탭에서 Ctrl/Cmd + S를 사용하세요.');
 
         if (backlogEditorRoot instanceof HTMLElement) {
           if (backlogEditorCloseTimer) {
@@ -6394,6 +6541,19 @@ function renderHtml(
         applySearch();
       }
 
+      function activateBacklogEvidenceReviews(items) {
+        const scopedReviewIds = [];
+        (Array.isArray(items) ? items : []).forEach((item) => {
+          if (!item || typeof item !== 'object' || !Array.isArray(item.evidenceReviewIds)) {
+            return;
+          }
+          item.evidenceReviewIds.forEach((scopedReviewId) => {
+            scopedReviewIds.push(scopedReviewId);
+          });
+        });
+        return activateScopedReviewIds(scopedReviewIds);
+      }
+
       function addReviewToBacklog(backlogId, card) {
         const normalizedId = String(backlogId || '').trim();
         if (!normalizedId || !card) {
@@ -6405,8 +6565,10 @@ function renderHtml(
         }
         const state = readCardState(reviewId, card);
         if (state.excluded) {
-          window.alert('활성 리뷰만 백로그에 추가할 수 있습니다.');
-          return;
+          state.excluded = false;
+          writeCardState(reviewId, state, card);
+          syncCardStateVisual(card);
+          schedulePreviewStateSave();
         }
 
         const appRawTitle = String(card.getAttribute('data-app-title') || '').trim();
@@ -6438,16 +6600,13 @@ function renderHtml(
       }
 
       async function saveBacklogState() {
-        if (!backlogApiUrl) {
-          if (saveBacklogButton instanceof HTMLButtonElement) {
-            saveBacklogButton.textContent = '저장 API 없음';
-          }
-          return false;
+        const activatedByBacklog = activateBacklogEvidenceReviews(backlogStateItems);
+        if (activatedByBacklog) {
+          applySearch({ syncQuery: false });
         }
 
-        if (saveBacklogButton instanceof HTMLButtonElement) {
-          saveBacklogButton.disabled = true;
-          saveBacklogButton.textContent = '백로그 저장중...';
+        if (!backlogApiUrl) {
+          return false;
         }
 
         try {
@@ -6473,14 +6632,8 @@ function renderHtml(
           renderBacklogTable();
           return true;
         } catch {
-          if (saveBacklogButton instanceof HTMLButtonElement) {
-            saveBacklogButton.textContent = '저장 실패';
-          }
           return false;
         } finally {
-          if (saveBacklogButton instanceof HTMLButtonElement) {
-            saveBacklogButton.disabled = false;
-          }
           syncBacklogDirtyState();
         }
       }
@@ -6517,26 +6670,34 @@ function renderHtml(
           return;
         }
 
-        if (!viewRaw.classList.contains('active')) {
-          activeFilterChips.innerHTML = '';
-          return;
-        }
-
         const chips = [];
         const query = searchInput instanceof HTMLInputElement ? searchInput.value.trim() : '';
         if (query) {
           chips.push('검색: ' + query);
         }
-        selectedTagFilters.forEach((tag) => {
-          chips.push('#' + TAG_LABELS[tag]);
-        });
-        if (excludeFilterMode === 'active') {
-          chips.push('상태: 활성');
-        } else if (excludeFilterMode === 'excluded') {
-          chips.push('상태: 비활성');
-        }
-        if (minLength100 instanceof HTMLInputElement && minLength100.checked) {
-          chips.push('100자 이상');
+
+        if (viewRaw.classList.contains('active')) {
+          selectedTagFilters.forEach((tag) => {
+            chips.push('#' + TAG_LABELS[tag]);
+          });
+          if (excludeFilterMode === 'active') {
+            chips.push('상태: 활성');
+          } else if (excludeFilterMode === 'excluded') {
+            chips.push('상태: 비활성');
+          }
+          if (minLength100 instanceof HTMLInputElement && minLength100.checked) {
+            chips.push('100자 이상');
+          }
+        } else {
+          if (backlogPriorityFilterMode !== 'all') {
+            chips.push('Priority: ' + String(backlogPriorityFilterMode).toUpperCase());
+          }
+          if (backlogImportanceFilterMode !== 'all') {
+            chips.push('Importance: ' + String(backlogImportanceFilterMode).toUpperCase());
+          }
+          if (backlogEffortFilterMode !== 'all') {
+            chips.push('Effort: ' + String(backlogEffortFilterMode).toUpperCase());
+          }
         }
 
         if (!chips.length) {
@@ -6565,12 +6726,58 @@ function renderHtml(
         return count;
       }
 
+      function countActiveBacklogFilters() {
+        let count = 0;
+        const query = searchInput instanceof HTMLInputElement ? searchInput.value.trim() : '';
+        if (query) {
+          count += 1;
+        }
+        if (backlogPriorityFilterMode !== 'all') {
+          count += 1;
+        }
+        if (backlogImportanceFilterMode !== 'all') {
+          count += 1;
+        }
+        if (backlogEffortFilterMode !== 'all') {
+          count += 1;
+        }
+        return count;
+      }
+
+      function syncFilterPanelMode() {
+        const rawMode = viewRaw.classList.contains('active');
+        if (filterPanelTitle instanceof HTMLElement) {
+          filterPanelTitle.textContent = rawMode ? '리뷰 필터' : '리포트 필터';
+        }
+        if (rawFilterFields instanceof HTMLElement) {
+          rawFilterFields.classList.toggle('hidden-control', !rawMode);
+        }
+        if (backlogFilterFields instanceof HTMLElement) {
+          backlogFilterFields.classList.toggle('hidden-control', rawMode);
+        }
+      }
+
+      function syncFilterPanelCount() {
+        if (!(filterPanelCount instanceof HTMLElement)) {
+          return;
+        }
+
+        if (viewRaw.classList.contains('active')) {
+          filterPanelCount.textContent = '리뷰 ' + rawFilteredCount + '/' + rawCards.length;
+          return;
+        }
+
+        const total = backlogItems.length;
+        const filtered = backlogItems.filter((item) => !item.classList.contains('hidden-by-search')).length;
+        filterPanelCount.textContent = '백로그 ' + filtered + '/' + total;
+      }
+
       function syncFilterPanelTrigger() {
         if (!(openFilterPanelButton instanceof HTMLElement)) {
           return;
         }
 
-        const activeCount = viewRaw.classList.contains('active') ? countActiveRawFilters() : 0;
+        const activeCount = viewRaw.classList.contains('active') ? countActiveRawFilters() : countActiveBacklogFilters();
         openFilterPanelButton.textContent = activeCount > 0 ? '필터 (' + activeCount + ')' : '필터';
         openFilterPanelButton.classList.toggle('is-active', activeCount > 0);
       }
@@ -6580,24 +6787,15 @@ function renderHtml(
           return;
         }
 
-        const multiPage = rawTotalPages > 1;
-        rawPagination.classList.toggle('hidden-control', !viewRaw.classList.contains('active'));
+        rawPagination.classList.remove('hidden-control');
 
         if (rawTotalCount instanceof HTMLElement) {
-          rawTotalCount.textContent = '리뷰 ' + rawFilteredCount + '/' + rawCards.length;
-        }
-        if (filterPanelCount instanceof HTMLElement) {
-          filterPanelCount.textContent = '리뷰 ' + rawFilteredCount + '/' + rawCards.length;
-        }
-
-        if (rawPageInfo instanceof HTMLElement) {
-          rawPageInfo.textContent = rawCurrentPage + '/' + rawTotalPages;
-        }
-        if (rawPagePrev instanceof HTMLButtonElement) {
-          rawPagePrev.disabled = !multiPage || rawCurrentPage <= 1;
-        }
-        if (rawPageNext instanceof HTMLButtonElement) {
-          rawPageNext.disabled = !multiPage || rawCurrentPage >= rawTotalPages;
+          if (viewRaw.classList.contains('active')) {
+            rawTotalCount.textContent = '리뷰 ' + rawFilteredCount + '/' + rawCards.length;
+          } else {
+            const filtered = backlogItems.filter((item) => !item.classList.contains('hidden-by-search')).length;
+            rawTotalCount.textContent = '백로그 ' + filtered + '/' + backlogItems.length;
+          }
         }
       }
 
@@ -6615,8 +6813,7 @@ function renderHtml(
           const hasVisible = entry.cards.some(
             (card) =>
               !card.classList.contains('hidden-by-search') &&
-              !card.classList.contains('hidden-by-state') &&
-              !card.classList.contains('hidden-by-page')
+              !card.classList.contains('hidden-by-state')
           );
           entry.section.classList.toggle('hidden-by-page', !hasVisible);
         });
@@ -6627,17 +6824,9 @@ function renderHtml(
           (card) => !card.classList.contains('hidden-by-search') && !card.classList.contains('hidden-by-state')
         );
         rawFilteredCount = filteredCards.length;
-        rawTotalPages = Math.max(1, Math.ceil(rawFilteredCount / rawPageSize));
-        rawCurrentPage = Math.max(1, Math.min(rawCurrentPage, rawTotalPages));
-
-        const startIndex = (rawCurrentPage - 1) * rawPageSize;
-        const endIndex = startIndex + rawPageSize;
         rawCards.forEach((card) => {
-          card.classList.add('hidden-by-page');
+          card.classList.remove('hidden-by-page');
         });
-        for (let index = startIndex; index < endIndex && index < filteredCards.length; index += 1) {
-          filteredCards[index].classList.remove('hidden-by-page');
-        }
 
         syncRawSectionVisibility();
         syncRawPaginationUi();
@@ -6670,9 +6859,6 @@ function renderHtml(
       }
 
       function openFilterPanel() {
-        if (!viewRaw.classList.contains('active')) {
-          return;
-        }
         if (filterPanelRoot instanceof HTMLElement) {
           if (filterPanelCloseTimer) {
             window.clearTimeout(filterPanelCloseTimer);
@@ -6683,6 +6869,8 @@ function renderHtml(
             filterPanelRoot.classList.add('is-open');
           });
         }
+        syncFilterPanelMode();
+        syncFilterPanelCount();
         if (filterPanelClose instanceof HTMLElement) {
           window.setTimeout(() => filterPanelClose.focus(), 0);
         }
@@ -6699,12 +6887,16 @@ function renderHtml(
           syncActiveFilterChips();
           syncFilterPanelTrigger();
           syncRawPaginationUi();
+          syncFilterPanelMode();
+          syncFilterPanelCount();
           return;
         }
 
         syncActiveFilterChips();
         syncFilterPanelTrigger();
         syncRawPaginationUi();
+        syncFilterPanelMode();
+        syncFilterPanelCount();
       }
 
       function resetRawFilters() {
@@ -6721,7 +6913,16 @@ function renderHtml(
         selectedTagFilters.clear();
         syncTagFilterButtons();
         setExcludeFilterMode('all');
-        rawCurrentPage = 1;
+        applySearch();
+      }
+
+      function resetBacklogFilters() {
+        if (searchInput instanceof HTMLInputElement) {
+          searchInput.value = '';
+        }
+        setBacklogPriorityFilterMode('all');
+        setBacklogImportanceFilterMode('all');
+        setBacklogEffortFilterMode('all');
         applySearch();
       }
 
@@ -6748,7 +6949,6 @@ function renderHtml(
           syncCardStateVisual(card);
         });
 
-        rawCurrentPage = 1;
         applySearch();
         schedulePreviewStateSave();
       }
@@ -7243,8 +7443,12 @@ function renderHtml(
 
         backlogItems.forEach((item) => {
           const rowPriority = (item.getAttribute('data-priority') || '').trim().toLowerCase();
+          const rowImportance = (item.getAttribute('data-impact') || '').trim().toLowerCase();
+          const rowEffort = (item.getAttribute('data-effort') || '').trim().toLowerCase();
           const hideByPriority = backlogPriorityFilterMode !== 'all' && rowPriority !== backlogPriorityFilterMode;
-          const visible = (!query || getSearchableText(item).includes(query)) && !hideByPriority;
+          const hideByImportance = backlogImportanceFilterMode !== 'all' && rowImportance !== backlogImportanceFilterMode;
+          const hideByEffort = backlogEffortFilterMode !== 'all' && rowEffort !== backlogEffortFilterMode;
+          const visible = (!query || getSearchableText(item).includes(query)) && !hideByPriority && !hideByImportance && !hideByEffort;
           item.classList.toggle('hidden-by-search', !visible);
 
           const evidenceId = item.getAttribute('data-evidence-id');
@@ -7313,26 +7517,8 @@ function renderHtml(
           contextBacklog.classList.add('active');
         }
 
-        if (activeFilterChips instanceof HTMLElement) {
-          activeFilterChips.classList.toggle('hidden-control', !raw);
-        }
-        if (openFilterPanelButton instanceof HTMLElement) {
-          openFilterPanelButton.classList.toggle('hidden-control', !raw);
-        }
         if (addBacklogItemButton instanceof HTMLElement) {
           addBacklogItemButton.classList.toggle('hidden-control', raw);
-        }
-        if (saveBacklogButton instanceof HTMLElement) {
-          saveBacklogButton.classList.toggle('hidden-control', raw);
-        }
-        if (topStatusRow instanceof HTMLElement) {
-          topStatusRow.classList.toggle('hidden-control', !raw);
-        }
-        if (priorityFilter instanceof HTMLElement) {
-          priorityFilter.classList.toggle('hidden-control', raw);
-        }
-        if (!raw) {
-          closeFilterPanel();
         }
         if (raw) {
           closeBacklogEditor();
@@ -7362,9 +7548,10 @@ function renderHtml(
           selectedTagFilters.add(tag);
         });
 
-        rawCurrentPage = queryState.rawPage;
         setExcludeFilterMode(queryState.excludeMode);
         setBacklogPriorityFilterMode(queryState.backlogPriorityMode);
+        setBacklogImportanceFilterMode(queryState.backlogImportanceMode);
+        setBacklogEffortFilterMode(queryState.backlogEffortMode);
         syncTagFilterButtons();
         syncActiveFilterChips();
         setSearchExpanded(queryState.search.length > 0);
@@ -7502,6 +7689,51 @@ function renderHtml(
         }
       });
 
+      root.addEventListener('change', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLSelectElement)) {
+          return;
+        }
+        if (!target.classList.contains('backlog-inline-select')) {
+          return;
+        }
+
+        const backlogId = String(target.getAttribute('data-backlog-id') || '').trim();
+        const field = String(target.getAttribute('data-backlog-field') || '').trim();
+        if (!backlogId || !field) {
+          return;
+        }
+
+        backlogStateItems = backlogStateItems.map((item) => {
+          if (item.id !== backlogId) {
+            return item;
+          }
+
+          if (field === 'priority') {
+            return normalizeBacklogItem({
+              ...item,
+              priority: normalizeBacklogPriority(target.value)
+            });
+          }
+          if (field === 'impact') {
+            return normalizeBacklogItem({
+              ...item,
+              impact: normalizeBacklogLevel(target.value)
+            });
+          }
+          if (field === 'effort') {
+            return normalizeBacklogItem({
+              ...item,
+              effort: normalizeBacklogLevel(target.value)
+            });
+          }
+          return item;
+        });
+
+        renderBacklogTable();
+        applySearch();
+      });
+
       if (noteSidebarBackdrop instanceof HTMLElement) {
         noteSidebarBackdrop.addEventListener('click', closeAppNoteSidebar);
       }
@@ -7514,11 +7746,6 @@ function renderHtml(
       if (addBacklogItemButton instanceof HTMLElement) {
         addBacklogItemButton.addEventListener('click', () => {
           openBacklogEditor('create');
-        });
-      }
-      if (saveBacklogButton instanceof HTMLElement) {
-        saveBacklogButton.addEventListener('click', () => {
-          saveBacklogState();
         });
       }
       if (backlogEditorBackdrop instanceof HTMLElement) {
@@ -7654,7 +7881,6 @@ function renderHtml(
       });
 
       minLength100.addEventListener('change', () => {
-        rawCurrentPage = 1;
         applySearch();
       });
       tagFilterButtons.forEach((button) => {
@@ -7665,12 +7891,17 @@ function renderHtml(
         button.addEventListener('click', () => {
           const mode = (button.getAttribute('data-tag-filter') || '').trim();
           setTagFilterMode(mode);
-          rawCurrentPage = 1;
           applySearch();
         });
       });
       if (clearFiltersButton instanceof HTMLElement) {
-        clearFiltersButton.addEventListener('click', resetRawFilters);
+        clearFiltersButton.addEventListener('click', () => {
+          if (viewRaw.classList.contains('active')) {
+            resetRawFilters();
+            return;
+          }
+          resetBacklogFilters();
+        });
       }
       if (resetAllExcludedButton instanceof HTMLElement) {
         resetAllExcludedButton.addEventListener('click', resetAllReviewsToExcluded);
@@ -7683,23 +7914,40 @@ function renderHtml(
         button.addEventListener('click', () => {
           const mode = (button.getAttribute('data-exclude-filter') || '').trim();
           setExcludeFilterMode(mode);
-          rawCurrentPage = 1;
           applySearch();
         });
       });
-      priorityFilterButtons.forEach((button) => {
+      backlogPriorityFilterButtons.forEach((button) => {
         if (!(button instanceof HTMLElement)) {
           return;
         }
-
         button.addEventListener('click', () => {
-          const mode = (button.getAttribute('data-priority-filter') || '').trim();
+          const mode = String(button.getAttribute('data-backlog-priority-filter') || '').trim();
           setBacklogPriorityFilterMode(mode);
           applySearch();
         });
       });
+      backlogImportanceFilterButtons.forEach((button) => {
+        if (!(button instanceof HTMLElement)) {
+          return;
+        }
+        button.addEventListener('click', () => {
+          const mode = String(button.getAttribute('data-backlog-importance-filter') || '').trim();
+          setBacklogImportanceFilterMode(mode);
+          applySearch();
+        });
+      });
+      backlogEffortFilterButtons.forEach((button) => {
+        if (!(button instanceof HTMLElement)) {
+          return;
+        }
+        button.addEventListener('click', () => {
+          const mode = String(button.getAttribute('data-backlog-effort-filter') || '').trim();
+          setBacklogEffortFilterMode(mode);
+          applySearch();
+        });
+      });
       searchInput.addEventListener('input', () => {
-        rawCurrentPage = 1;
         setSearchExpanded(true);
         scheduleApplySearch();
       });
@@ -7718,28 +7966,6 @@ function renderHtml(
         }
         setSearchExpanded(false);
       });
-      if (rawPagePrev instanceof HTMLButtonElement) {
-        rawPagePrev.addEventListener('click', () => {
-          if (rawCurrentPage <= 1) {
-            return;
-          }
-          rawCurrentPage -= 1;
-          applyRawPagination();
-          syncFilterSummary();
-          syncUiQuery();
-        });
-      }
-      if (rawPageNext instanceof HTMLButtonElement) {
-        rawPageNext.addEventListener('click', () => {
-          if (rawCurrentPage >= rawTotalPages) {
-            return;
-          }
-          rawCurrentPage += 1;
-          applyRawPagination();
-          syncFilterSummary();
-          syncUiQuery();
-        });
-      }
       loadBacklogState();
       applyInitialQueryState();
       loadPreviewState();

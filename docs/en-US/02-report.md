@@ -44,7 +44,8 @@ Render actionable markdown report to a shared-viewer bundle JSON.
 - On narrow screens, the filter panel opens as a bottom sheet.
 - On narrow screens, the notes panel also opens as a bottom sheet instead of a right drawer.
 - Search is shown as a `🔎` button by default and expands to the input field on tap/click.
-- Top controls are tab-scoped: `Reviews` shows `Filter` and `Notes`, while `Reports` shows `Expand evidence`, `Priority` filter, and the same `Notes` button/sidebar.
+- Top controls are tab-scoped: `Reviews` and `Reports` both show `Filter` and `Notes`.
+- In `Reports`, `Expand evidence` is available inside the filter panel.
 - Top navigation state is synced to query parameters, so refresh keeps the same UI state:
   - `tab` (`reviews|reports`, aliases `review/raw`, `report/backlog`)
   - `q` (search text)
@@ -52,13 +53,16 @@ Render actionable markdown report to a shared-viewer bundle JSON.
   - `exclude` (`all|active|excluded`)
   - `min100` (`1` when `100+ chars` is enabled)
   - `orig` (`1` when `Original` toggle is enabled)
-  - `page` (current page in `Reviews`)
   - `priority` (`all|must|should|could` in `Reports`)
-- In `Reports`, the secondary status row is hidden so the navigation area stays single-row (the `Reports N/N` count label is not shown).
+  - `importance` (`all|high|medium|low` in `Reports`)
+  - `effort` (`all|high|medium|low` in `Reports`)
+- The status row under the header is shown in both tabs:
+  - left: active filter chips (`No filter` when empty)
+  - right: selected/filtered count over total (`Reviews x/y` or `Backlog x/y`)
 - `Reports` shows one unified backlog table across all apps (not per-app grouped sections).
 - In `Reports`, identical backlog items are merged into a single row even when they come from different apps.
 - The app list in each backlog row is rendered as a single-line text with ellipsis (`...`) when it overflows.
-- In `Reports`, you can filter rows by priority (`All / MUST / SHOULD / COULD`).
+- In `Reports`, use the same filter panel UX as `Reviews` to filter rows by `Priority / Importance / Effort`.
 - In the `Reports` table, there is no separate `Evidence` column; use the chevron button next to `Evidence count` to expand/collapse evidence rows.
 - `Evidence count` is calculated as the number of unique reviews (`reviewId`-based dedupe), not raw quote line count.
 - In expanded evidence rows, the Korean sentence is shown by default (without `KR:` prefix), and `See details` reveals the review ID, metadata, and original text.
@@ -72,8 +76,6 @@ Render actionable markdown report to a shared-viewer bundle JSON.
 - `Reset filters` clears search/state/tag/length filters in one click.
 - In the filter panel, `Reset all to inactive` sets every review to `Inactive` in bulk and clears all hashtags.
 - The review filter sidebar/bottom sheet header shows `filtered reviews / total reviews` in real time.
-- `Reviews` tab supports pagination with a fixed page size of `100 items/page`.
-- Pagination is applied to the current search/filter result set, and the pagination area shows `filtered reviews / total reviews`.
 - Each app row in the `Reviews` tab also shows `filtered reviews / total reviews` on the right.
 - The context block below the title switches by tab, so each tab shows only relevant context.
 - In the `Reports` tab context, a compact text summary is shown (backlog counts and hashtag-based priority rule) without stat/meta cards.
@@ -88,9 +90,11 @@ Render actionable markdown report to a shared-viewer bundle JSON.
 - Notes are not auto-saved; use `Save` (or `Ctrl/Cmd + S`) to persist note changes.
 - In `Reports`, backlog rows are editable directly from the page:
   - add/remove backlog items
+  - update each row's `Priority / Importance / Effort` directly from inline selectors
   - add/remove evidence reviews per backlog item (editor shows active reviews only)
-  - save backlog changes with `Backlog Save` button (or `Ctrl/Cmd + S` on `Reports`)
+  - save backlog changes with `Ctrl/Cmd + S` on `Reports`
 - In `Reviews`, each review card has quick-add UX (`Backlog+`) to attach that review to an existing backlog item.
+- When a review is added to backlog from `Reviews`, that review is automatically switched to `Active`.
 - Reviews view is hydrated from full review datasets (`data/{myAppId}/reviews-ko/*.json`, fallback `reviews/*.json`) per app:
   - preselected report quotes start as `Active`
   - non-selected reviews are included as `Inactive` by default for manual curation
