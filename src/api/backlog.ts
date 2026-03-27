@@ -14,10 +14,12 @@ const BACKLOG_MAX_EVIDENCE_IDS = 200;
 
 type BacklogPriority = "must" | "should" | "could";
 type BacklogLevel = "high" | "medium" | "low";
+type BacklogStatus = "not_started" | "in_progress" | "done";
 
 interface BacklogApiItem {
   id: string;
   priority: BacklogPriority;
+  status: BacklogStatus;
   title: string;
   effort: BacklogLevel;
   action: string;
@@ -79,6 +81,14 @@ function normalizeBacklogLevel(value: unknown): BacklogLevel {
     return normalized;
   }
   return "medium";
+}
+
+function normalizeBacklogStatus(value: unknown): BacklogStatus {
+  const normalized = normalizeText(String(value ?? "")).toLowerCase();
+  if (normalized === "not_started" || normalized === "in_progress" || normalized === "done") {
+    return normalized;
+  }
+  return "not_started";
 }
 
 function normalizeBacklogEvidenceId(value: unknown): string {
@@ -232,6 +242,7 @@ function normalizeBacklogApiItem(value: unknown, fallbackId: string): BacklogApi
   return {
     id,
     priority: normalizeBacklogPriority(row.priority),
+    status: normalizeBacklogStatus(row.status),
     title: title.slice(0, 220),
     effort: normalizeBacklogLevel(row.effort),
     action: action.slice(0, 1_000),
@@ -352,6 +363,7 @@ function flattenLegacyBacklogToApiState(ownerAppId: string, value: unknown): Bac
     string,
     {
       priority: BacklogPriority;
+      status: BacklogStatus;
       effort: BacklogLevel;
       title: string;
       action: string;
@@ -388,6 +400,7 @@ function flattenLegacyBacklogToApiState(ownerAppId: string, value: unknown): Bac
       }
 
       const priority = normalizeBacklogPriority(item.priority);
+      const status = normalizeBacklogStatus(item.status);
       const effort = normalizeBacklogLevel(item.effort);
       const rawEvidence = Array.isArray(item.evidenceReviewIds) ? (item.evidenceReviewIds as unknown[]) : [];
       const evidenceReviewIds = rawEvidence
@@ -406,6 +419,7 @@ function flattenLegacyBacklogToApiState(ownerAppId: string, value: unknown): Bac
       if (!existing) {
         grouped.set(groupKey, {
           priority,
+          status,
           effort,
           title,
           action,
@@ -425,6 +439,7 @@ function flattenLegacyBacklogToApiState(ownerAppId: string, value: unknown): Bac
   const items = Array.from(grouped.values()).map((item, index) => ({
     id: `bg-${index + 1}`,
     priority: item.priority,
+    status: item.status,
     title: item.title,
     effort: item.effort,
     action: item.action,
@@ -478,6 +493,7 @@ function convertApiStateToBacklogData(ownerAppId: string, state: BacklogApiState
     items: state.items.map((item) => ({
       id: item.id,
       priority: item.priority,
+      status: item.status,
       title: item.title,
       effort: item.effort,
       action: item.action,

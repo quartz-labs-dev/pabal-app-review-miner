@@ -28,6 +28,7 @@ type ReviewTag = "heart" | "satisfaction" | "dissatisfaction" | "requests";
 type Priority = "must" | "should" | "could";
 type Impact = "high" | "medium" | "low";
 type Effort = "high" | "medium" | "low";
+type BacklogStatus = "not_started" | "in_progress" | "done";
 
 interface QuoteItem {
   reviewId: string;
@@ -63,6 +64,7 @@ interface BacklogConcept {
 
 interface BacklogItem {
   priority: Priority;
+  status: BacklogStatus;
   title: string;
   effort: Effort;
   action: string;
@@ -80,6 +82,7 @@ interface AppBacklog {
 interface BacklogClientItem {
   id: string;
   priority: Priority;
+  status: BacklogStatus;
   title: string;
   effort: Effort;
   action: string;
@@ -90,6 +93,7 @@ interface BacklogClientItem {
 interface UnifiedBacklogItem {
   id: string;
   priority: Priority;
+  status: BacklogStatus;
   title: string;
   effort: Effort;
   action: string;
@@ -1893,6 +1897,14 @@ function normalizeBacklogLevelValue(value: unknown): Impact | Effort {
   return "medium";
 }
 
+function normalizeBacklogStatusValue(value: unknown): BacklogStatus {
+  const normalized = normalizeText(String(value ?? "")).toLowerCase();
+  if (normalized === "not_started" || normalized === "in_progress" || normalized === "done") {
+    return normalized;
+  }
+  return "not_started";
+}
+
 function sanitizeBacklogTitle(value: unknown): string {
   return normalizeText(String(value ?? ""));
 }
@@ -1937,6 +1949,7 @@ function flattenAppBacklogsToBacklogItems(backlogs: AppBacklog[]): BacklogClient
     string,
     {
       priority: Priority;
+      status: BacklogStatus;
       title: string;
       effort: Effort;
       action: string;
@@ -1963,6 +1976,7 @@ function flattenAppBacklogsToBacklogItems(backlogs: AppBacklog[]): BacklogClient
       if (!existing) {
         groupedBacklog.set(groupKey, {
           priority: item.priority,
+          status: item.status,
           title: nextTitle,
           effort: item.effort,
           action: nextAction,
@@ -1995,6 +2009,7 @@ function flattenAppBacklogsToBacklogItems(backlogs: AppBacklog[]): BacklogClient
     .map((item, index) => ({
       id: `bg-${index + 1}`,
       priority: item.priority,
+      status: item.status,
       title: item.title,
       effort: item.effort,
       action: item.action,
@@ -2035,6 +2050,7 @@ function normalizeBacklogItems(value: unknown): BacklogClientItem[] {
       return {
         id,
         priority: normalizeBacklogPriorityValue(row.priority),
+        status: normalizeBacklogStatusValue(row.status),
         title,
         effort: normalizeBacklogLevelValue(row.effort) as Effort,
         action,
@@ -2138,6 +2154,7 @@ function normalizeBacklogData(value: unknown): BacklogClientItem[] | undefined {
 
       items.push({
         priority: normalizeBacklogPriorityValue(item.priority),
+        status: normalizeBacklogStatusValue(item.status),
         title: normalizeText(String(item.title ?? "")) || "기타 개선",
         effort: normalizeBacklogLevelValue(item.effort) as Effort,
         action: normalizeText(String(item.action ?? "")) || "반복 리뷰를 검토해 개선 항목을 구체화",
@@ -2333,6 +2350,7 @@ function hydrateBacklogItems(backlogItems: BacklogClientItem[], reviewPools: Rev
       return {
         id: item.id,
         priority: item.priority,
+        status: item.status,
         title: item.title,
         effort: item.effort,
         action: item.action,
@@ -3024,6 +3042,7 @@ function buildBacklog(apps: AppSection[], reviewPools: ReviewPools): AppBacklog[
 
         return {
           priority,
+          status: "not_started",
           title: specificTitle,
           effort: bucket.theme.effort,
           action: specificAction,
@@ -3387,6 +3406,7 @@ function renderHtml(
   const backlogInitialItems: BacklogClientItem[] = unifiedBacklogItems.map((item) => ({
     id: item.id,
     priority: item.priority,
+    status: item.status,
     title: item.title,
     effort: item.effort,
     action: item.action,
@@ -7610,12 +7630,17 @@ function renderHtml(
             !card.classList.contains('hidden-by-state') &&
             !card.classList.contains('hidden-by-page')
         );
-        if (visibleCards.length === 0) {
+        const firstVisibleSectionEntry = rawAppSectionCards.find(
+          (entry) => !entry.section.classList.contains('hidden-by-page')
+        );
+        const topTarget = firstVisibleSectionEntry ? firstVisibleSectionEntry.section : viewRaw;
+        const bottomTarget = visibleCards.length > 0 ? visibleCards[visibleCards.length - 1] : topTarget;
+        if (!(topTarget instanceof HTMLElement) || !(bottomTarget instanceof HTMLElement)) {
           return;
         }
 
-        const targetCard = edge === 'bottom' ? visibleCards[visibleCards.length - 1] : visibleCards[0];
-        const rect = targetCard.getBoundingClientRect();
+        const targetEl = edge === 'bottom' ? bottomTarget : topTarget;
+        const rect = targetEl.getBoundingClientRect();
         const currentY = window.scrollY || window.pageYOffset || 0;
         const topBarOffset = topBar instanceof HTMLElement ? topBar.offsetHeight + 10 : 10;
 
