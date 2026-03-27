@@ -21,17 +21,17 @@ interface PreviewStateEntry {
   updatedAt: string;
 }
 
-interface AppNoteEntry {
+interface BacklogNoteEntry {
   content: string;
   updatedAt: string;
 }
 
 interface PreviewStateFile {
-  version: 2;
+  version: 3;
   ownerAppId: string;
   updatedAt: string;
   reviews: Record<string, PreviewStateEntry>;
-  appNotes: Record<string, AppNoteEntry>;
+  backlogNotes: Record<string, BacklogNoteEntry>;
 }
 
 const PREVIEW_TAG_SET = new Set<PreviewTag>(["heart", "satisfaction", "dissatisfaction", "requests"]);
@@ -44,17 +44,17 @@ function isSafeReviewId(reviewId: string): boolean {
   return /^[a-z0-9._:-]+$/i.test(reviewId) && reviewId.length <= 180;
 }
 
-function isSafeNoteAppKey(appKey: string): boolean {
-  return /^[a-z0-9._-]+$/i.test(appKey) && appKey.length <= 180;
+function isSafeNoteBacklogKey(backlogId: string): boolean {
+  return /^[a-z0-9._:-]+$/i.test(backlogId) && backlogId.length <= 180;
 }
 
 function createDefaultPreviewState(ownerAppId: string): PreviewStateFile {
   return {
-    version: 2,
+    version: 3,
     ownerAppId,
     updatedAt: new Date().toISOString(),
     reviews: {},
-    appNotes: {}
+    backlogNotes: {}
   };
 }
 
@@ -88,7 +88,7 @@ function normalizePreviewStateEntry(value: unknown): PreviewStateEntry | undefin
   };
 }
 
-function normalizeAppNoteEntry(value: unknown): AppNoteEntry | undefined {
+function normalizeBacklogNoteEntry(value: unknown): BacklogNoteEntry | undefined {
   if (!value || typeof value !== "object") {
     return undefined;
   }
@@ -115,11 +115,13 @@ function normalizePreviewState(ownerAppId: string, value: unknown): PreviewState
   const source = value as Record<string, unknown>;
   const rawReviews =
     source.reviews && typeof source.reviews === "object" ? (source.reviews as Record<string, unknown>) : {};
-  const rawAppNotes =
-    source.appNotes && typeof source.appNotes === "object" ? (source.appNotes as Record<string, unknown>) : {};
+  const rawBacklogNotes =
+    source.backlogNotes && typeof source.backlogNotes === "object"
+      ? (source.backlogNotes as Record<string, unknown>)
+      : {};
 
   const reviews: Record<string, PreviewStateEntry> = {};
-  const appNotes: Record<string, AppNoteEntry> = {};
+  const backlogNotes: Record<string, BacklogNoteEntry> = {};
 
   const reviewPairs = Object.entries(rawReviews).slice(0, PREVIEW_STATE_MAX_REVIEWS);
   for (const [reviewIdRaw, reviewStateRaw] of reviewPairs) {
@@ -136,27 +138,27 @@ function normalizePreviewState(ownerAppId: string, value: unknown): PreviewState
     reviews[reviewId] = normalized;
   }
 
-  const notePairs = Object.entries(rawAppNotes).slice(0, PREVIEW_STATE_MAX_NOTES);
-  for (const [appKeyRaw, appNoteRaw] of notePairs) {
-    const appKey = normalizeText(appKeyRaw);
-    if (!appKey || !isSafeNoteAppKey(appKey)) {
+  const notePairs = Object.entries(rawBacklogNotes).slice(0, PREVIEW_STATE_MAX_NOTES);
+  for (const [backlogIdRaw, backlogNoteRaw] of notePairs) {
+    const backlogId = normalizeText(backlogIdRaw);
+    if (!backlogId || !isSafeNoteBacklogKey(backlogId)) {
       continue;
     }
 
-    const normalized = normalizeAppNoteEntry(appNoteRaw);
+    const normalized = normalizeBacklogNoteEntry(backlogNoteRaw);
     if (!normalized) {
       continue;
     }
 
-    appNotes[appKey] = normalized;
+    backlogNotes[backlogId] = normalized;
   }
 
   return {
-    version: 2,
+    version: 3,
     ownerAppId,
     updatedAt: normalizeText(typeof source.updatedAt === "string" ? source.updatedAt : new Date().toISOString()),
     reviews,
-    appNotes
+    backlogNotes
   };
 }
 

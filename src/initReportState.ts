@@ -25,17 +25,17 @@ interface ReviewStateEntry {
   updatedAt: string;
 }
 
-interface AppNoteEntry {
+interface BacklogNoteEntry {
   content: string;
   updatedAt: string;
 }
 
 interface PreviewStateFile {
-  version: 2;
+  version: 3;
   ownerAppId: string;
   updatedAt: string;
   reviews: Record<string, ReviewStateEntry>;
-  appNotes: Record<string, AppNoteEntry>;
+  backlogNotes: Record<string, BacklogNoteEntry>;
 }
 
 interface InitResult {
@@ -195,13 +195,13 @@ function extractReviewDefaultsFromBundle(bundle: ReportBundlePayload, updatedAt:
   };
 }
 
-function normalizeAppNotes(input: unknown): Record<string, AppNoteEntry> {
+function normalizeBacklogNotes(input: unknown): Record<string, BacklogNoteEntry> {
   if (!input || typeof input !== "object") {
     return {};
   }
 
   const source = input as Record<string, unknown>;
-  const result: Record<string, AppNoteEntry> = {};
+  const result: Record<string, BacklogNoteEntry> = {};
 
   for (const [appKeyRaw, row] of Object.entries(source)) {
     const appKey = normalizeText(appKeyRaw);
@@ -224,11 +224,11 @@ function normalizeAppNotes(input: unknown): Record<string, AppNoteEntry> {
   return result;
 }
 
-async function readExistingAppNotes(outputPath: string): Promise<Record<string, AppNoteEntry>> {
+async function readExistingBacklogNotes(outputPath: string): Promise<Record<string, BacklogNoteEntry>> {
   try {
     const raw = await fs.readFile(outputPath, "utf8");
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    return normalizeAppNotes(parsed.appNotes);
+    return normalizeBacklogNotes(parsed.backlogNotes);
   } catch (error) {
     const nodeError = error as NodeJS.ErrnoException;
     if (nodeError?.code === "ENOENT") {
@@ -270,7 +270,7 @@ async function parseArgs(): Promise<CliArgs> {
     .option("keep-notes", {
       type: "boolean",
       default: true,
-      describe: "Keep existing app notes from preview-state.json"
+      describe: "Keep existing backlog notes from preview-state.json"
     })
     .help()
     .strict()
@@ -355,13 +355,13 @@ async function initPreviewStateForApp(params: {
     reviews[reviewId] = extracted.reviewStates[reviewId];
   }
 
-  const appNotes = keepNotes ? await readExistingAppNotes(outputPath) : {};
+  const backlogNotes = keepNotes ? await readExistingBacklogNotes(outputPath) : {};
   const previewState: PreviewStateFile = {
-    version: 2,
+    version: 3,
     ownerAppId,
     updatedAt: now,
     reviews,
-    appNotes
+    backlogNotes
   };
 
   await fs.mkdir(path.dirname(outputPath), { recursive: true });

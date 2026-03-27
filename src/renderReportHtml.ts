@@ -114,13 +114,6 @@ interface StoreLink {
   href: string;
 }
 
-interface AppNoteApp {
-  appKey: string;
-  title: string;
-  sourceToken?: string;
-  links: StoreLink[];
-}
-
 interface AppReviewPoolItem {
   reviewId: string;
   source: "play" | "ios";
@@ -1318,13 +1311,22 @@ function resolveReportLanguage(parsedTitle: string): "ko" | "en" {
   return hasHangul(normalizeText(parsedTitle)) ? "ko" : "en";
 }
 
-function resolveReportTitle(ownerAppId: string, parsedTitle: string): string {
+function resolveReviewTitle(ownerAppId: string, parsedTitle: string): string {
   const title = normalizeText(parsedTitle);
   const base = ownerAppId || "app";
   if (resolveReportLanguage(title) === "ko") {
-    return `${base} 리뷰 리포트`;
+    return `${base} 리뷰`;
   }
-  return `${base} Review Report`;
+  return `${base} Review`;
+}
+
+function resolveBacklogTitle(ownerAppId: string, parsedTitle: string): string {
+  const title = normalizeText(parsedTitle);
+  const base = ownerAppId || "app";
+  if (resolveReportLanguage(title) === "ko") {
+    return `${base} 백로그`;
+  }
+  return `${base} Backlog`;
 }
 
 async function resolveOwnerAppIconMetaHref(ownerAppId: string): Promise<string | undefined> {
@@ -1643,7 +1645,7 @@ async function resolveReportSource(params: {
     }
 
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const title = normalizeText(String(parsed.title ?? "")) || `${ownerAppId} 리뷰 리포트`;
+    const title = normalizeText(String(parsed.title ?? "")) || `${ownerAppId} 리뷰`;
     const metadata = Array.isArray(parsed.metadata)
       ? (parsed.metadata as unknown[]).map((item) => normalizeText(String(item ?? ""))).filter(Boolean)
       : [];
@@ -1658,7 +1660,7 @@ async function resolveReportSource(params: {
 
   const apps = createAutoAppSectionsFromPools(reviewPools);
   return {
-    title: `${ownerAppId} 리뷰 리포트`,
+    title: `${ownerAppId} 리뷰`,
     metadata: [],
     apps
   };
@@ -1770,7 +1772,7 @@ function mapCategory(heading: string): CategoryKey | undefined {
 
 function parseMarkdown(input: string): { title: string; metadata: string[]; apps: AppSection[] } {
   const lines = input.split(/\r?\n/);
-  let title = "리뷰 리포트";
+  let title = "리뷰";
   const metadata: string[] = [];
   const apps: AppSection[] = [];
 
@@ -3042,7 +3044,7 @@ function buildBacklog(apps: AppSection[], reviewPools: ReviewPools): AppBacklog[
 
         return {
           priority,
-          status: "not_started",
+          status: "not_started" as BacklogStatus,
           title: specificTitle,
           effort: bucket.theme.effort,
           action: specificAction,
@@ -3084,6 +3086,16 @@ function renderLevel(level: Effort): string {
   return "Low";
 }
 
+function renderBacklogStatusLabel(status: BacklogStatus): string {
+  if (status === "in_progress") {
+    return "In Progress";
+  }
+  if (status === "done") {
+    return "Done";
+  }
+  return "Not Started";
+}
+
 function renderMetaChip(className: string, content: string | undefined, title?: string): string {
   const normalized = normalizeText(content);
   if (!normalized) {
@@ -3103,7 +3115,8 @@ function renderHtml(
   ownerAppIconMetaHref?: string
 ): { html: string; reviewDefaults: Record<string, ReviewDefaultEntry> } {
   const reportLanguage = resolveReportLanguage(title);
-  const reportTitle = resolveReportTitle(ownerAppId, title);
+  const reviewTitle = resolveReviewTitle(ownerAppId, title);
+  const backlogTitle = resolveBacklogTitle(ownerAppId, title);
   const reviewDefaults = new Map<string, ReviewDefaultEntry>();
 
   function mergeReviewDefaults(reviewIdRaw: string, excluded: boolean, tags: string[]): void {
@@ -3297,19 +3310,11 @@ function renderHtml(
       return a.originalIndex - b.originalIndex;
     });
 
-  const appNoteApps: AppNoteApp[] = [];
   const rawAppSections = sortedApps
     .map(({ app }, appIndex) => {
       const appPool = resolvePoolForApp(app.title, reviewPools);
       const appKey = resolveAppStateKey(app.title, appPool);
       const parsedTitle = parseAppTitle(app.title);
-      const links = extractStoreLinks(parsedTitle.sourceToken);
-      appNoteApps.push({
-        appKey,
-        title: parsedTitle.displayName,
-        sourceToken: parsedTitle.sourceToken,
-        links
-      });
       const seededReviewIds = new Set<string>();
       const selectedCards = (Object.keys(app.categories) as CategoryKey[])
         .flatMap((categoryKey) => {
@@ -3395,13 +3400,6 @@ function renderHtml(
       `;
     })
     .join("\n");
-  const appNoteSelectOptionsHtml = appNoteApps
-    .map(
-      (app, index) =>
-        `<option value=\"${escapeHtml(app.appKey)}\"${index === 0 ? " selected" : ""}>${escapeHtml(app.title)}</option>`
-    )
-    .join("");
-  const appNoteAppsJson = toInlineJson(appNoteApps);
   const unifiedBacklogItems = hydrateBacklogItems(backlogItems, reviewPools);
   const backlogInitialItems: BacklogClientItem[] = unifiedBacklogItems.map((item) => ({
     id: item.id,
@@ -3417,7 +3415,7 @@ function renderHtml(
 
   const backlogRows =
     unifiedBacklogItems.length === 0
-      ? `<tr><td colspan=\"4\" class=\"empty\">추출된 리포트 없음</td></tr>`
+      ? `<tr><td colspan=\"5\" class=\"empty\">추출된 백로그 없음</td></tr>`
       : unifiedBacklogItems
           .map((item, itemIndex) => {
             const evidenceId = `evidence-${itemIndex}`;
@@ -3455,14 +3453,21 @@ function renderHtml(
               })
               .join("\n");
             const appLabel = item.appNames.join(", ");
+            const statusLabel = renderBacklogStatusLabel(item.status);
+            const appNameChips =
+              item.appNames.length > 0
+                ? item.appNames.map((name) => `<span class=\"item-app-chip\">${escapeHtml(name)}</span>`).join("")
+                : `<span class=\"item-app-chip is-empty\">-</span>`;
 
             return `
                   <tr class=\"backlog-item main-row searchable\" data-priority=\"${escapeHtml(
                     item.priority
+                  )}\" data-status=\"${escapeHtml(
+              item.status
                   )}\" data-effort=\"${escapeHtml(
               item.effort
             )}\" data-search=\"${escapeHtml(
-              `${appLabel} ${item.priority} ${item.effort} ${item.title} ${item.action} ${(item.examples ?? [])
+              `${appLabel} ${item.priority} ${item.status} ${statusLabel} ${item.effort} ${item.title} ${item.action} ${(item.examples ?? [])
                 .map((q) => `${q.kr} ${q.org}`)
                 .join(" ")}`
             ).toLowerCase()}\" data-backlog-id=\"${escapeHtml(item.id)}\" data-review-ids=\"${escapeHtml(
@@ -3470,16 +3475,24 @@ function renderHtml(
             )}\" data-evidence-id=\"${escapeHtml(evidenceId)}\">
                     <td>${renderPriorityBadge(item.priority)}</td>
                     <td>
-                      <div class=\"item-title\">${escapeHtml(item.title)}</div>
-                      <div class=\"item-action\">${escapeHtml(item.action)}</div>
-                      <div class=\"item-app\" title=\"${escapeHtml(appLabel)}\">앱: ${escapeHtml(appLabel)}</div>
-                      <div class=\"item-edit-actions\">
-                        <button class=\"backlog-edit-btn\" type=\"button\" data-backlog-id=\"${escapeHtml(
+                      <span class=\"status-pill status-${escapeHtml(item.status)}\">${escapeHtml(statusLabel)}</span>
+                    </td>
+                    <td class=\"item-content-cell\">
+                      <div class=\"item-main\">
+                        <div class=\"item-title\">${escapeHtml(item.title)}</div>
+                        <div class=\"item-action\">${escapeHtml(item.action)}</div>
+                        <div class=\"item-app-row\" title=\"${escapeHtml(appLabel)}\">
+                          <span class=\"item-app-label\">앱</span>
+                          <span class=\"item-app-chips\">${appNameChips}</span>
+                        </div>
+                      </div>
+                      <div class=\"item-icon-actions\" role=\"group\" aria-label=\"백로그 행 작업\">
+                        <button class=\"backlog-icon-btn backlog-remove-btn\" type=\"button\" data-backlog-id=\"${escapeHtml(
                           item.id
-                        )}\">백로그 편집</button>
-                        <button class=\"backlog-remove-btn\" type=\"button\" data-backlog-id=\"${escapeHtml(
+                        )}\" aria-label=\"삭제\" title=\"삭제\">🗑</button>
+                        <button class=\"backlog-icon-btn backlog-edit-btn\" type=\"button\" data-backlog-id=\"${escapeHtml(
                           item.id
-                        )}\">삭제</button>
+                        )}\" aria-label=\"편집\" title=\"편집\">✎</button>
                       </div>
                     </td>
                     <td>${renderLevel(item.effort)}</td>
@@ -3495,7 +3508,7 @@ function renderHtml(
                     </td>
                   </tr>
                   <tr id=\"${escapeHtml(evidenceId)}\" class=\"evidence-row\">
-                    <td colspan=\"4\">
+                    <td colspan=\"5\">
                       <div class=\"evidence-panel\">
                         <ul class=\"evidence-list\">${examples}</ul>
                       </div>
@@ -3512,6 +3525,7 @@ function renderHtml(
           <table class=\"backlog-table\">
             <colgroup>
               <col class=\"col-priority\" />
+              <col class=\"col-status\" />
               <col class=\"col-item\" />
               <col class=\"col-effort\" />
               <col class=\"col-evidence\" />
@@ -3519,6 +3533,7 @@ function renderHtml(
             <thead>
               <tr>
                 <th>Priority</th>
+                <th>Status</th>
                 <th>백로그 항목</th>
                 <th>Effort</th>
                 <th>근거 수</th>
@@ -3542,7 +3557,7 @@ function renderHtml(
       <p><strong>앱 수 ${apps.length}</strong></p>
       <p><strong>해시태그 정의:</strong> #요청기능 · #불만족 · #만족 · #❤️</p>
       <p>활성 리뷰를 해시태그 기준으로 분류하고 필터링할 때 사용</p>
-      <p><strong>활성 상태 정의:</strong> 리포트 반영 후보 여부</p>
+      <p><strong>활성 상태 정의:</strong> 백로그 반영 후보 여부</p>
       <p>추가 검토/반영 대상이면 활성, 보류·중복이면 비활성</p>
     </section>
   `;
@@ -3568,9 +3583,9 @@ function renderHtml(
   <head>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-    <title>${escapeHtml(reportTitle)}</title>
-    <meta property=\"og:title\" content=\"${escapeHtml(reportTitle)}\" />
-    <meta name=\"twitter:title\" content=\"${escapeHtml(reportTitle)}\" />
+    <title>${escapeHtml(reviewTitle)}</title>
+    <meta property=\"og:title\" content=\"${escapeHtml(reviewTitle)}\" />
+    <meta name=\"twitter:title\" content=\"${escapeHtml(reviewTitle)}\" />
     ${iconMetaHtml}
     <style>
       :root {
@@ -4644,13 +4659,16 @@ function renderHtml(
       .backlog-table col.col-priority {
         width: 112px;
       }
+      .backlog-table col.col-status {
+        width: 146px;
+      }
       .backlog-table col.col-effort {
         width: 118px;
       }
       .backlog-table col.col-evidence {
         width: 120px;
       }
-      .backlog-table td:nth-child(2) {
+      .backlog-table td:nth-child(3) {
         min-width: 0;
       }
       th, td {
@@ -4664,32 +4682,76 @@ function renderHtml(
       .main-row:hover td {
         background: #f8fbff;
       }
+      .item-content-cell {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        min-width: 0;
+        position: relative;
+      }
+      .item-main {
+        min-width: 0;
+        flex: 1 1 auto;
+      }
       .item-title { font-weight: 700; margin-bottom: 4px; }
       .item-action {
         color: #334155;
         line-height: 1.4;
       }
-      .item-app {
+      .item-app-row {
         margin-top: 6px;
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+      }
+      .item-app-label {
         color: #64748b;
-        font-size: 12px;
-        display: block;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.9;
+      }
+      .item-app-chips {
+        display: inline-flex;
+        gap: 4px;
+        flex-wrap: wrap;
         max-width: 100%;
+      }
+      .item-app-chip {
+        border: 1px solid #dbe7f3;
+        border-radius: 999px;
+        padding: 1px 8px;
+        background: #f8fbff;
+        color: #334155;
+        font-size: 11px;
+        line-height: 1.6;
+        max-width: 180px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      .item-edit-actions {
-        margin-top: 8px;
+      .item-app-chip.is-empty {
+        color: #64748b;
+      }
+      .item-icon-actions {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        flex-wrap: wrap;
+        flex: 0 0 auto;
+        margin-left: auto;
       }
-      .item-edit-actions button {
-        min-height: 28px;
-        font-size: 12px;
-        padding: 4px 8px;
+      .backlog-icon-btn {
+        width: 30px;
+        height: 30px;
+        min-height: 30px;
+        padding: 0;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        line-height: 1;
+        opacity: 1;
       }
       .backlog-inline-select {
         width: 100%;
@@ -4701,14 +4763,95 @@ function renderHtml(
         color: #0f172a;
         font-size: 12px;
         font-weight: 700;
+        transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease, color 180ms ease;
       }
       .backlog-inline-priority {
         text-transform: uppercase;
+      }
+      .backlog-inline-priority.priority-must {
+        background: #fee2e2;
+        border-color: #fca5a5;
+        color: #991b1b;
+      }
+      .backlog-inline-priority.priority-should {
+        background: #fef3c7;
+        border-color: #fcd34d;
+        color: #92400e;
+      }
+      .backlog-inline-priority.priority-could {
+        background: #dcfce7;
+        border-color: #86efac;
+        color: #166534;
+      }
+      .backlog-inline-status {
+        font-weight: 700;
+      }
+      .backlog-inline-status.status-not_started {
+        background: #fee2e2;
+        border-color: #fca5a5;
+        color: #991b1b;
+      }
+      .backlog-inline-status.status-in_progress {
+        background: #fef3c7;
+        border-color: #fcd34d;
+        color: #92400e;
+      }
+      .backlog-inline-status.status-done {
+        background: #dcfce7;
+        border-color: #86efac;
+        color: #166534;
+      }
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 30px;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        padding: 0 10px;
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .status-not_started {
+        background: #fee2e2;
+        border-color: #fca5a5;
+        color: #991b1b;
+      }
+      .status-in_progress {
+        background: #fef3c7;
+        border-color: #fcd34d;
+        color: #92400e;
+      }
+      .status-done {
+        background: #dcfce7;
+        border-color: #86efac;
+        color: #166534;
+      }
+      .backlog-inline-effort.effort-high {
+        background: #fee2e2;
+        border-color: #fca5a5;
+        color: #991b1b;
+      }
+      .backlog-inline-effort.effort-medium {
+        background: #fef3c7;
+        border-color: #fcd34d;
+        color: #92400e;
+      }
+      .backlog-inline-effort.effort-low {
+        background: #dcfce7;
+        border-color: #86efac;
+        color: #166534;
       }
       .backlog-remove-btn {
         border-color: #fca5a5;
         color: #991b1b;
         background: #fff1f2;
+      }
+      .backlog-edit-btn {
+        border-color: #bfdbfe;
+        color: #1e3a8a;
+        background: #eff6ff;
       }
       .backlog-editor-root {
         position: fixed;
@@ -5314,7 +5457,7 @@ function renderHtml(
           ${ownerAppIdentityHtml}
           <div class=\"tabs\">
             <button id=\"tabRaw\" class=\"tab-btn active\" type=\"button\">리뷰</button>
-            <button id=\"tabBacklog\" class=\"tab-btn\" type=\"button\">리포트</button>
+            <button id=\"tabBacklog\" class=\"tab-btn\" type=\"button\">백로그</button>
           </div>
         </div>
         <div class=\"search-fixed\">
@@ -5323,7 +5466,7 @@ function renderHtml(
         </div>
         <div class=\"top-controls\">
           <button id=\"openNoteSidebar\" type=\"button\">노트</button>
-          <button id=\"addBacklogItem\" class=\"hidden-control\" type=\"button\">백로그 추가</button>
+          <button id=\"addBacklogItem\" type=\"button\">➕ 백로그 생성</button>
           <button id=\"openFilterPanel\" class=\"open-filter-panel-btn\" type=\"button\">필터</button>
         </div>
       </div>
@@ -5340,7 +5483,9 @@ function renderHtml(
     </div>
 
     <main class=\"wrap\" id=\"root\">
-      <h1>${escapeHtml(reportTitle)}</h1>
+      <h1 id=\"pageTitle\" data-title-review=\"${escapeHtml(reviewTitle)}\" data-title-backlog=\"${escapeHtml(
+        backlogTitle
+      )}\">${escapeHtml(reviewTitle)}</h1>
       <section id=\"contextRaw\" class=\"context-panel active\">
         ${rawSummaryHtml}
       </section>
@@ -5362,8 +5507,8 @@ function renderHtml(
       <aside class=\"note-sidebar\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"noteSidebarTitle\">
         <div class=\"note-sidebar-head\">
           <div>
-            <h2 id=\"noteSidebarTitle\">앱 노트</h2>
-            <div id=\"noteSidebarSub\" class=\"note-sidebar-sub\">셀렉터에서 앱을 선택해 메모를 관리하세요.</div>
+            <h2 id=\"noteSidebarTitle\">백로그 노트</h2>
+            <div id=\"noteSidebarSub\" class=\"note-sidebar-sub\">백로그 항목별 메모를 관리하세요.</div>
           </div>
           <div class=\"note-sidebar-head-actions\">
             <button id=\"noteSidebarSave\" type=\"button\">저장</button>
@@ -5371,15 +5516,15 @@ function renderHtml(
           </div>
         </div>
         <div class=\"note-app-select-wrap\">
-          <select id=\"noteAppSelect\" class=\"note-app-select\" aria-label=\"노트 앱 선택\">
-            ${appNoteSelectOptionsHtml}
+          <select id=\"noteBacklogSelect\" class=\"note-app-select\" aria-label=\"노트 백로그 선택\">
+            <option value=\"\">백로그 항목 없음</option>
           </select>
         </div>
         <div class=\"note-app-meta\">
-          <div id=\"noteSidebarAppLinks\" class=\"note-app-links\"></div>
+          <div id=\"noteSidebarBacklogMeta\" class=\"note-app-links\">백로그 항목을 선택하세요.</div>
         </div>
         <textarea id=\"noteSidebarText\" placeholder=\"예) 반복 불만 키워드, 다음 비교 포인트, 액션 아이템\"></textarea>
-        <div id=\"noteSidebarStatus\" class=\"note-sidebar-foot\">변경 후 저장 버튼을 눌러 반영하세요.</div>
+        <div id=\"noteSidebarStatus\" class=\"note-sidebar-foot\">입력 시 자동 저장됩니다.</div>
       </aside>
     </div>
 
@@ -5420,6 +5565,14 @@ function renderHtml(
                 <option value=\"high\">High</option>
                 <option value=\"medium\">Medium</option>
                 <option value=\"low\">Low</option>
+              </select>
+            </label>
+            <label class=\"backlog-editor-field\">
+              <span>Status</span>
+              <select id=\"backlogEditorItemStatus\">
+                <option value=\"not_started\">Not Started</option>
+                <option value=\"in_progress\">In Progress</option>
+                <option value=\"done\">Done</option>
               </select>
             </label>
           </div>
@@ -5532,6 +5685,7 @@ function renderHtml(
       const rawPageInfo = document.getElementById('rawPageInfo');
       const rawPageNext = document.getElementById('rawPageNext');
       const addBacklogItemButton = document.getElementById('addBacklogItem');
+      const pageTitleElement = document.getElementById('pageTitle');
       const backlogSummaryLine = document.getElementById('backlogSummaryLine');
       const backlogTableBody = document.getElementById('backlogTableBody');
       const backlogPriorityFilter = document.getElementById('backlogPriorityFilter');
@@ -5557,6 +5711,7 @@ function renderHtml(
       const backlogEditorAction = document.getElementById('backlogEditorAction');
       const backlogEditorPriority = document.getElementById('backlogEditorPriority');
       const backlogEditorEffort = document.getElementById('backlogEditorEffort');
+      const backlogEditorItemStatus = document.getElementById('backlogEditorItemStatus');
       const backlogEditorReviewSearch = document.getElementById('backlogEditorReviewSearch');
       const backlogEditorSelectionSummary = document.getElementById('backlogEditorSelectionSummary');
       const backlogEditorSelectVisible = document.getElementById('backlogEditorSelectVisible');
@@ -5594,24 +5749,22 @@ function renderHtml(
       const noteSidebarSave = document.getElementById('noteSidebarSave');
       const noteSidebarTitle = document.getElementById('noteSidebarTitle');
       const noteSidebarSub = document.getElementById('noteSidebarSub');
-      const noteSidebarAppLinks = document.getElementById('noteSidebarAppLinks');
-      const noteAppSelect = document.getElementById('noteAppSelect');
+      const noteSidebarBacklogMeta = document.getElementById('noteSidebarBacklogMeta');
+      const noteBacklogSelect = document.getElementById('noteBacklogSelect');
       const noteSidebarText = document.getElementById('noteSidebarText');
       const noteSidebarStatus = document.getElementById('noteSidebarStatus');
       const filterPanelRoot = document.getElementById('filterPanelRoot');
       const filterPanelBackdrop = document.getElementById('filterPanelBackdrop');
       const filterPanelClose = document.getElementById('filterPanelClose');
       const reviewState = Object.create(null);
-      const appNotes = Object.create(null);
-      const persistedAppNotes = Object.create(null);
-      const noteAppCatalog = ${appNoteAppsJson};
+      const backlogNotes = Object.create(null);
+      const persistedBacklogNotes = Object.create(null);
       const backlogSeedItems = ${backlogInitialItemsJson};
-      const noteAppByKey = new Map(noteAppCatalog.map((item) => [item.appKey, item]));
-      const defaultNoteAppKey = noteAppCatalog[0] ? noteAppCatalog[0].appKey : '';
       let backlogStateItems = Array.isArray(backlogSeedItems)
         ? backlogSeedItems.map((item) => ({
             id: String(item && item.id ? item.id : ''),
             priority: String(item && item.priority ? item.priority : 'should').toLowerCase(),
+            status: String(item && item.status ? item.status : 'not_started').toLowerCase(),
             title: String(item && item.title ? item.title : '').trim(),
             effort: String(item && item.effort ? item.effort : 'medium').toLowerCase(),
             action: String(item && item.action ? item.action : '').trim(),
@@ -5647,8 +5800,9 @@ function renderHtml(
       let backlogPriorityFilterMode = 'all';
       let backlogEffortFilterMode = 'all';
       let noteDirty = false;
+      let noteSaving = false;
       const selectedTagFilters = new Set();
-      let activeNoteAppKey = '';
+      let activeNoteBacklogId = '';
       const EXCLUDE_FILTER_MODES = new Set(['all', 'active', 'excluded']);
       const PRIORITY_FILTER_MODES = new Set(['all', 'must', 'should', 'could']);
       const BACKLOG_LEVEL_FILTER_MODES = new Set(['all', 'high', 'medium', 'low']);
@@ -5663,8 +5817,8 @@ function renderHtml(
       const SHOW_ORIGINAL_QUERY_KEY = 'orig';
       const PRIORITY_QUERY_KEY = 'priority';
       const EFFORT_QUERY_KEY = 'effort';
-      const TAB_REVIEW_VALUES = new Set(['reviews', 'review', 'raw']);
-      const TAB_REPORT_VALUES = new Set(['reports', 'report', 'backlog']);
+      const TAB_REVIEW_VALUES = new Set(['review']);
+      const TAB_BACKLOG_VALUES = new Set(['backlog']);
       const TAG_LABELS = {
         heart: '❤️',
         satisfaction: '만족',
@@ -5704,6 +5858,23 @@ function renderHtml(
       const ownerAppId = resolveOwnerAppId();
       const previewStateApiUrl = ownerAppId ? '/api/preview-state/' + encodeURIComponent(ownerAppId) : '';
       const backlogApiUrl = ownerAppId ? '/api/backlog/' + encodeURIComponent(ownerAppId) : '';
+      const reviewPageTitle = pageTitleElement instanceof HTMLElement
+        ? String(pageTitleElement.getAttribute('data-title-review') || '').trim()
+        : '';
+      const backlogPageTitle = pageTitleElement instanceof HTMLElement
+        ? String(pageTitleElement.getAttribute('data-title-backlog') || '').trim()
+        : '';
+
+      function syncPageTitle(rawMode) {
+        const nextTitle = rawMode ? reviewPageTitle : backlogPageTitle;
+        if (!nextTitle) {
+          return;
+        }
+        if (pageTitleElement instanceof HTMLElement) {
+          pageTitleElement.textContent = nextTitle;
+        }
+        document.title = nextTitle;
+      }
 
       function normalizeBacklogPriority(value) {
         const normalized = String(value || '').trim().toLowerCase();
@@ -5719,6 +5890,25 @@ function renderHtml(
           return normalized;
         }
         return 'medium';
+      }
+
+      function normalizeBacklogStatus(value) {
+        const normalized = String(value || '').trim().toLowerCase();
+        if (normalized === 'not_started' || normalized === 'in_progress' || normalized === 'done') {
+          return normalized;
+        }
+        return 'not_started';
+      }
+
+      function backlogStatusLabel(status) {
+        const normalized = normalizeBacklogStatus(status);
+        if (normalized === 'in_progress') {
+          return 'In Progress';
+        }
+        if (normalized === 'done') {
+          return 'Done';
+        }
+        return 'Not Started';
       }
 
       function sanitizeBacklogTitle(value) {
@@ -5782,6 +5972,7 @@ function renderHtml(
         const item = {
           id: String(row.id || '').trim(),
           priority: normalizeBacklogPriority(row.priority),
+          status: normalizeBacklogStatus(row.status),
           title: sanitizeBacklogTitle(row.title),
           effort: normalizeBacklogLevel(row.effort),
           action: sanitizeBacklogAction(row.action),
@@ -5862,7 +6053,7 @@ function renderHtml(
         try {
           const params = new URLSearchParams(window.location.search || '');
           const tabValue = String(params.get(TAB_QUERY_KEY) || '').trim().toLowerCase();
-          if (TAB_REPORT_VALUES.has(tabValue)) {
+          if (TAB_BACKLOG_VALUES.has(tabValue)) {
             initial.rawTab = false;
           } else if (TAB_REVIEW_VALUES.has(tabValue)) {
             initial.rawTab = true;
@@ -5910,7 +6101,7 @@ function renderHtml(
             : 'all';
           const effortMode = normalizeBacklogLevelFilter(backlogEffortFilterMode);
 
-          nextParams.set(TAB_QUERY_KEY, activeRawTab ? 'reviews' : 'reports');
+          nextParams.set(TAB_QUERY_KEY, activeRawTab ? 'review' : 'backlog');
 
           if (search) {
             nextParams.set(SEARCH_QUERY_KEY, search);
@@ -6467,6 +6658,8 @@ function renderHtml(
       function buildBacklogSearchText(item, evidenceRows) {
         const textParts = [
           item.priority,
+          item.status,
+          backlogStatusLabel(item.status),
           item.effort,
           item.title,
           item.action,
@@ -6728,9 +6921,10 @@ function renderHtml(
         syncBacklogSummary();
         syncBacklogDirtyState();
         syncBacklogQuickSelectOptions();
+        syncNoteBacklogSelectOptions();
 
         if (backlogStateItems.length === 0) {
-          backlogTableBody.innerHTML = '<tr><td colspan=\"5\" class=\"empty\">추출된 리포트 없음</td></tr>';
+          backlogTableBody.innerHTML = '<tr><td colspan=\"5\" class=\"empty\">추출된 백로그 없음</td></tr>';
           backlogItems = [];
           syncEvidenceToggleText();
           return;
@@ -6785,10 +6979,24 @@ function renderHtml(
 
             const searchText = buildBacklogSearchText(item, evidenceRows);
             const priorityValue = normalizeBacklogPriority(item.priority);
+            const statusValue = normalizeBacklogStatus(item.status);
             const effortValue = normalizeBacklogLevel(item.effort);
             const backlogIdValue = escapeInlineHtml(item.id);
+            const appChipHtml = (item.appNames || []).length > 0
+              ? item.appNames
+                  .map((appName) => (
+                    '<span class=\"item-app-chip\" title=\"' +
+                    escapeInlineHtml(appName) +
+                    '\">' +
+                    escapeInlineHtml(appName) +
+                    '</span>'
+                  ))
+                  .join('')
+              : '<span class=\"item-app-chip is-empty\">-</span>';
             const prioritySelectHtml =
-              '<select class=\"backlog-inline-select backlog-inline-priority\" data-backlog-id=\"' +
+              '<select class=\"backlog-inline-select backlog-inline-priority priority-' +
+              escapeInlineHtml(priorityValue) +
+              '\" data-backlog-id=\"' +
               backlogIdValue +
               '\" data-backlog-field=\"priority\" aria-label=\"백로그 우선순위\">' +
               '<option value=\"must\"' +
@@ -6801,8 +7009,26 @@ function renderHtml(
               (priorityValue === 'could' ? ' selected' : '') +
               '>COULD</option>' +
               '</select>';
+            const statusSelectHtml =
+              '<select class=\"backlog-inline-select backlog-inline-status status-' +
+              escapeInlineHtml(statusValue) +
+              '\" data-backlog-id=\"' +
+              backlogIdValue +
+              '\" data-backlog-field=\"status\" aria-label=\"백로그 상태\">' +
+              '<option value=\"not_started\"' +
+              (statusValue === 'not_started' ? ' selected' : '') +
+              '>Not Started</option>' +
+              '<option value=\"in_progress\"' +
+              (statusValue === 'in_progress' ? ' selected' : '') +
+              '>In Progress</option>' +
+              '<option value=\"done\"' +
+              (statusValue === 'done' ? ' selected' : '') +
+              '>Done</option>' +
+              '</select>';
             const effortSelectHtml =
-              '<select class=\"backlog-inline-select\" data-backlog-id=\"' +
+              '<select class=\"backlog-inline-select backlog-inline-effort effort-' +
+              escapeInlineHtml(effortValue) +
+              '\" data-backlog-id=\"' +
               backlogIdValue +
               '\" data-backlog-field=\"effort\" aria-label=\"백로그 난이도\">' +
               '<option value=\"high\"' +
@@ -6819,6 +7045,8 @@ function renderHtml(
             return (
               '<tr class=\"backlog-item main-row searchable\" data-priority=\"' +
               escapeInlineHtml(priorityValue) +
+              '\" data-status=\"' +
+              escapeInlineHtml(statusValue) +
               '\" data-effort=\"' +
               escapeInlineHtml(effortValue) +
               '\" data-search=\"' +
@@ -6834,24 +7062,32 @@ function renderHtml(
               prioritySelectHtml +
               '</td>' +
               '<td>' +
+              statusSelectHtml +
+              '</td>' +
+              '<td class=\"item-content-cell\">' +
+              '<div class=\"item-main\">' +
               '<div class=\"item-title\">' +
               escapeInlineHtml(item.title) +
               '</div>' +
               '<div class=\"item-action\">' +
               escapeInlineHtml(item.action) +
               '</div>' +
-              '<div class=\"item-app\" title=\"' +
+              '<div class=\"item-app-row\" title=\"' +
               escapeInlineHtml(appLabel) +
-              '\">앱: ' +
-              escapeInlineHtml(appLabel) +
+              '\">' +
+              '<span class=\"item-app-label\">앱</span>' +
+              '<span class=\"item-app-chips\">' +
+              appChipHtml +
+              '</span>' +
               '</div>' +
-              '<div class=\"item-edit-actions\">' +
-              '<button class=\"backlog-edit-btn\" type=\"button\" data-backlog-id=\"' +
+              '</div>' +
+              '<div class=\"item-icon-actions\" role=\"group\" aria-label=\"백로그 행 작업\">' +
+              '<button class=\"backlog-icon-btn backlog-remove-btn\" type=\"button\" data-backlog-id=\"' +
               escapeInlineHtml(item.id) +
-              '\">백로그 편집</button>' +
-              '<button class=\"backlog-remove-btn\" type=\"button\" data-backlog-id=\"' +
+              '\" aria-label=\"삭제\" title=\"삭제\">🗑</button>' +
+              '<button class=\"backlog-icon-btn backlog-edit-btn\" type=\"button\" data-backlog-id=\"' +
               escapeInlineHtml(item.id) +
-              '\">삭제</button>' +
+              '\" aria-label=\"편집\" title=\"편집\">✎</button>' +
               '</div>' +
               '</td>' +
               '<td>' +
@@ -6873,7 +7109,7 @@ function renderHtml(
               '<tr id=\"' +
               escapeInlineHtml(evidenceId) +
               '\" class=\"evidence-row\">' +
-              '<td colspan=\"4\">' +
+              '<td colspan=\"5\">' +
               '<div class=\"evidence-panel\"><ul class=\"evidence-list\">' +
               evidenceListHtml +
               '</ul></div>' +
@@ -6952,6 +7188,9 @@ function renderHtml(
         }
         if (backlogEditorReviewSearch instanceof HTMLInputElement) {
           backlogEditorReviewSearch.disabled = backlogEditorSaving;
+        }
+        if (backlogEditorItemStatus instanceof HTMLSelectElement) {
+          backlogEditorItemStatus.disabled = backlogEditorSaving;
         }
         if (backlogEditorSelectVisible instanceof HTMLButtonElement) {
           backlogEditorSelectVisible.disabled = backlogEditorSaving;
@@ -7149,13 +7388,14 @@ function renderHtml(
         const draft = targetItem
           ? normalizeBacklogItem(targetItem)
           : normalizeBacklogItem({
-              id: createBacklogId(),
-              priority: 'should',
-              title: '',
-              effort: 'medium',
-              action: '',
-              evidenceReviewIds: [],
-              appNames: []
+            id: createBacklogId(),
+            priority: 'should',
+            status: 'not_started',
+            title: '',
+            effort: 'medium',
+            action: '',
+            evidenceReviewIds: [],
+            appNames: []
             });
 
         draft.evidenceReviewIds.forEach((scopedReviewId) => {
@@ -7175,6 +7415,9 @@ function renderHtml(
         }
         if (backlogEditorEffort instanceof HTMLSelectElement) {
           backlogEditorEffort.value = normalizeBacklogLevel(draft.effort);
+        }
+        if (backlogEditorItemStatus instanceof HTMLSelectElement) {
+          backlogEditorItemStatus.value = normalizeBacklogStatus(draft.status);
         }
         if (backlogEditorReviewSearch instanceof HTMLInputElement) {
           backlogEditorReviewSearch.value = '';
@@ -7231,6 +7474,9 @@ function renderHtml(
         const action = backlogEditorAction instanceof HTMLTextAreaElement ? backlogEditorAction.value.trim() : '';
         const priority = backlogEditorPriority instanceof HTMLSelectElement ? backlogEditorPriority.value : 'should';
         const effort = backlogEditorEffort instanceof HTMLSelectElement ? backlogEditorEffort.value : 'medium';
+        const status = backlogEditorItemStatus instanceof HTMLSelectElement
+          ? backlogEditorItemStatus.value
+          : 'not_started';
 
         if (!title) {
           setBacklogEditorStatus('제목을 입력하세요.');
@@ -7259,6 +7505,7 @@ function renderHtml(
         const draftItem = normalizeBacklogItem({
           id: backlogEditorMode === 'edit' ? backlogEditorItemId : createBacklogId(),
           priority,
+          status,
           title,
           effort,
           action,
@@ -7517,7 +7764,7 @@ function renderHtml(
       function syncFilterPanelMode() {
         const rawMode = viewRaw.classList.contains('active');
         if (filterPanelTitle instanceof HTMLElement) {
-          filterPanelTitle.textContent = rawMode ? '리뷰 필터' : '리포트 필터';
+          filterPanelTitle.textContent = rawMode ? '리뷰 필터' : '백로그 필터';
         }
         if (rawFilterFields instanceof HTMLElement) {
           rawFilterFields.classList.toggle('hidden-control', !rawMode);
@@ -7824,33 +8071,35 @@ function renderHtml(
         return date.toLocaleString('ko-KR');
       }
 
-      function copyAppNotesMap(target, source) {
+      function currentBacklogNoteTargetIds() {
+        return new Set(
+          backlogStateItems
+            .map((item) => String(item && item.id ? item.id : '').trim())
+            .filter(Boolean)
+        );
+      }
+
+      function copyBacklogNotesMap(target, source) {
         Object.keys(target).forEach((key) => {
           delete target[key];
         });
 
-        Object.entries(source).forEach(([appKey, row]) => {
-          if (!appKey || !row || typeof row !== 'object') {
-            return;
-          }
-
-          const content = normalizeNoteContent(typeof row.content === 'string' ? row.content : '');
-          if (!content.trim()) {
-            return;
-          }
-
-          target[appKey] = {
-            content,
-            updatedAt: typeof row.updatedAt === 'string' ? row.updatedAt : new Date().toISOString()
+        const snapshot = normalizeBacklogNotesSnapshot(source);
+        Object.entries(snapshot).forEach(([backlogId, row]) => {
+          target[backlogId] = {
+            content: row.content,
+            updatedAt: row.updatedAt
           };
         });
       }
 
-      function normalizeAppNotesSnapshot(source) {
+      function normalizeBacklogNotesSnapshot(source) {
         const snapshot = Object.create(null);
+        const validBacklogIds = currentBacklogNoteTargetIds();
 
-        Object.entries(source).forEach(([appKey, row]) => {
-          if (!appKey || !row || typeof row !== 'object') {
+        Object.entries(source).forEach(([backlogId, row]) => {
+          const normalizedBacklogId = String(backlogId || '').trim();
+          if (!normalizedBacklogId || !validBacklogIds.has(normalizedBacklogId) || !row || typeof row !== 'object') {
             return;
           }
 
@@ -7859,7 +8108,7 @@ function renderHtml(
             return;
           }
 
-          snapshot[appKey] = {
+          snapshot[normalizedBacklogId] = {
             content,
             updatedAt: typeof row.updatedAt === 'string' ? row.updatedAt : new Date().toISOString()
           };
@@ -7868,8 +8117,8 @@ function renderHtml(
         return snapshot;
       }
 
-      function createAppNotesSignature(source) {
-        const snapshot = normalizeAppNotesSnapshot(source);
+      function createBacklogNotesSignature(source) {
+        const snapshot = normalizeBacklogNotesSnapshot(source);
         const keys = Object.keys(snapshot).sort();
         return keys
           .map((key) => {
@@ -7880,7 +8129,7 @@ function renderHtml(
       }
 
       function syncNoteDirtyState() {
-        noteDirty = createAppNotesSignature(appNotes) !== createAppNotesSignature(persistedAppNotes);
+        noteDirty = createBacklogNotesSignature(backlogNotes) !== createBacklogNotesSignature(persistedBacklogNotes);
       }
 
       function syncNoteSidebarTrigger() {
@@ -7888,41 +8137,42 @@ function renderHtml(
           return;
         }
 
-        const noteCount = Object.keys(normalizeAppNotesSnapshot(appNotes)).length;
+        const noteCount = Object.keys(normalizeBacklogNotesSnapshot(backlogNotes)).length;
         openNoteSidebarButton.textContent = noteCount > 0 ? '노트 (' + noteCount + ')' : '노트';
         openNoteSidebarButton.classList.toggle('is-active', noteCount > 0 || noteDirty);
       }
 
-      function syncNoteAppSelect() {
-        if (!(noteAppSelect instanceof HTMLSelectElement)) {
-          return;
+      function findBacklogItemById(backlogId) {
+        const normalizedId = String(backlogId || '').trim();
+        if (!normalizedId) {
+          return undefined;
         }
-        if (activeNoteAppKey && noteAppSelect.value !== activeNoteAppKey) {
-          noteAppSelect.value = activeNoteAppKey;
-        }
+        return backlogStateItems.find((item) => item.id === normalizedId);
       }
 
-      function renderNoteAppLinks(appKey) {
-        const appMeta = noteAppByKey.get(String(appKey || '').trim());
-        if (!(noteSidebarAppLinks instanceof HTMLElement)) {
+      function formatBacklogNoteOptionLabel(item) {
+        return '[' + String(item.priority || '').toUpperCase() + '] ' + String(item.title || '');
+      }
+
+      function renderNoteBacklogMeta(backlogId) {
+        if (!(noteSidebarBacklogMeta instanceof HTMLElement)) {
           return;
         }
-
-        if (!appMeta || !Array.isArray(appMeta.links) || appMeta.links.length === 0) {
-          noteSidebarAppLinks.innerHTML = '<span class=\"note-link-empty\">스토어 링크 없음</span>';
+        const target = findBacklogItemById(backlogId);
+        if (!target) {
+          noteSidebarBacklogMeta.textContent = '백로그 항목을 선택하세요.';
           return;
         }
-
-        noteSidebarAppLinks.innerHTML = appMeta.links
-          .map(
-            (link) =>
-              '<a class=\"note-link\" href=\"' +
-              escapeInlineHtml(String(link.href || '')) +
-              '\" target=\"_blank\" rel=\"noopener noreferrer\">' +
-              escapeInlineHtml(String(link.label || 'Link')) +
-              '</a>'
-          )
-          .join('');
+        const evidenceCount = Array.isArray(target.evidenceReviewIds) ? target.evidenceReviewIds.length : 0;
+        noteSidebarBacklogMeta.textContent =
+          'Priority: ' +
+          String(target.priority || '').toUpperCase() +
+          ' · Status: ' +
+          backlogStatusLabel(target.status) +
+          ' · Effort: ' +
+          backlogLevelLabel(target.effort) +
+          ' · Evidence: ' +
+          evidenceCount;
       }
 
       function refreshNoteSidebarStatus() {
@@ -7930,8 +8180,13 @@ function renderHtml(
           return;
         }
 
-        if (!activeNoteAppKey) {
-          noteSidebarStatus.textContent = '앱을 선택하면 메모를 작성할 수 있습니다.';
+        if (!activeNoteBacklogId) {
+          noteSidebarStatus.textContent = '백로그 항목을 선택하면 메모를 작성할 수 있습니다.';
+          return;
+        }
+
+        if (noteSaving) {
+          noteSidebarStatus.textContent = '저장 중...';
           return;
         }
 
@@ -7940,7 +8195,7 @@ function renderHtml(
           return;
         }
 
-        const note = persistedAppNotes[activeNoteAppKey];
+        const note = persistedBacklogNotes[activeNoteBacklogId];
         if (!note) {
           noteSidebarStatus.textContent = '저장된 노트가 없습니다.';
           return;
@@ -7949,35 +8204,96 @@ function renderHtml(
         noteSidebarStatus.textContent = '저장됨 · ' + formatDateLabel(note.updatedAt);
       }
 
-      function selectNoteApp(appKey) {
-        const requestedAppKey = String(appKey || '').trim();
-        const nextAppKey = noteAppByKey.has(requestedAppKey)
-          ? requestedAppKey
-          : defaultNoteAppKey;
+      function selectNoteBacklog(backlogId) {
+        const requestedBacklogId = String(backlogId || '').trim();
+        const fallbackBacklogId = backlogStateItems[0] ? String(backlogStateItems[0].id || '').trim() : '';
+        const targetItem = findBacklogItemById(requestedBacklogId);
+        const nextBacklogId = targetItem ? requestedBacklogId : fallbackBacklogId;
+        const selectedItem = findBacklogItemById(nextBacklogId);
 
-        activeNoteAppKey = nextAppKey;
+        activeNoteBacklogId = nextBacklogId;
 
         if (noteSidebarTitle instanceof HTMLElement) {
-          noteSidebarTitle.textContent = '앱 노트';
+          noteSidebarTitle.textContent = '백로그 노트';
         }
         if (noteSidebarSub instanceof HTMLElement) {
-          noteSidebarSub.textContent = '셀렉터에서 앱을 선택해 메모를 관리하세요.';
+          noteSidebarSub.textContent = selectedItem
+            ? '선택된 항목: ' + String(selectedItem.title || '')
+            : '백로그 항목을 먼저 생성하세요.';
         }
-        renderNoteAppLinks(nextAppKey);
+        renderNoteBacklogMeta(nextBacklogId);
 
+        if (noteBacklogSelect instanceof HTMLSelectElement) {
+          noteBacklogSelect.value = nextBacklogId;
+        }
         if (noteSidebarText instanceof HTMLTextAreaElement) {
-          noteSidebarText.value = appNotes[nextAppKey] ? appNotes[nextAppKey].content : '';
+          noteSidebarText.disabled = !nextBacklogId;
+          const nextValue = nextBacklogId && backlogNotes[nextBacklogId]
+            ? backlogNotes[nextBacklogId].content
+            : '';
+          if (noteSidebarText.value !== nextValue) {
+            noteSidebarText.value = nextValue;
+          }
         }
 
-        syncNoteAppSelect();
         refreshNoteSidebarStatus();
       }
 
-      function openAppNoteSidebar() {
-        if (!noteAppCatalog.length) {
+      function syncNoteBacklogSelectOptions() {
+        if (!(noteBacklogSelect instanceof HTMLSelectElement)) {
           return;
         }
 
+        if (backlogStateItems.length === 0) {
+          noteBacklogSelect.innerHTML = '<option value=\"\">백로그 항목 없음</option>';
+          noteBacklogSelect.disabled = true;
+          activeNoteBacklogId = '';
+          if (noteSidebarText instanceof HTMLTextAreaElement) {
+            noteSidebarText.value = '';
+            noteSidebarText.disabled = true;
+          }
+          if (noteSidebarSub instanceof HTMLElement) {
+            noteSidebarSub.textContent = '백로그 항목을 먼저 생성하세요.';
+          }
+          renderNoteBacklogMeta('');
+          refreshNoteSidebarStatus();
+          return;
+        }
+
+        const optionsHtml = backlogStateItems
+          .map((item) => {
+            const itemId = String(item && item.id ? item.id : '').trim();
+            if (!itemId) {
+              return '';
+            }
+            const selected = itemId === activeNoteBacklogId ? ' selected' : '';
+            return '<option value=\"' + escapeInlineHtml(itemId) + '\"' + selected + '>' +
+              escapeInlineHtml(formatBacklogNoteOptionLabel(item)) +
+              '</option>';
+          })
+          .filter(Boolean)
+          .join('');
+
+        noteBacklogSelect.innerHTML = optionsHtml || '<option value=\"\">백로그 항목 없음</option>';
+        noteBacklogSelect.disabled = !optionsHtml;
+
+        if (!optionsHtml) {
+          activeNoteBacklogId = '';
+          if (noteSidebarText instanceof HTMLTextAreaElement) {
+            noteSidebarText.value = '';
+            noteSidebarText.disabled = true;
+          }
+          renderNoteBacklogMeta('');
+          refreshNoteSidebarStatus();
+          return;
+        }
+
+        const hasActive = backlogStateItems.some((item) => item.id === activeNoteBacklogId);
+        const fallbackBacklogId = String(backlogStateItems[0] && backlogStateItems[0].id || '').trim();
+        selectNoteBacklog(hasActive ? activeNoteBacklogId : fallbackBacklogId);
+      }
+
+      function openBacklogNoteSidebar() {
         if (noteSidebarRoot instanceof HTMLElement) {
           if (noteSidebarCloseTimer) {
             window.clearTimeout(noteSidebarCloseTimer);
@@ -7989,14 +8305,15 @@ function renderHtml(
           });
         }
 
-        selectNoteApp(activeNoteAppKey || defaultNoteAppKey);
+        syncNoteBacklogSelectOptions();
+        selectNoteBacklog(activeNoteBacklogId);
 
-        if (noteSidebarText instanceof HTMLTextAreaElement) {
+        if (noteSidebarText instanceof HTMLTextAreaElement && !noteSidebarText.disabled) {
           window.setTimeout(() => noteSidebarText.focus(), 0);
         }
       }
 
-      function closeAppNoteSidebar() {
+      function closeBacklogNoteSidebar() {
         if (noteSidebarRoot instanceof HTMLElement) {
           noteSidebarRoot.classList.remove('is-open');
           if (noteSidebarCloseTimer) {
@@ -8009,17 +8326,17 @@ function renderHtml(
         }
       }
 
-      function writeAppNote(appKey, input) {
-        const normalizedAppKey = String(appKey || '').trim();
-        if (!normalizedAppKey) {
+      function writeBacklogNote(backlogId, input) {
+        const normalizedBacklogId = String(backlogId || '').trim();
+        if (!normalizedBacklogId) {
           return;
         }
 
         const content = normalizeNoteContent(input);
         if (!content.trim()) {
-          delete appNotes[normalizedAppKey];
+          delete backlogNotes[normalizedBacklogId];
         } else {
-          appNotes[normalizedAppKey] = {
+          backlogNotes[normalizedBacklogId] = {
             content,
             updatedAt: new Date().toISOString()
           };
@@ -8027,15 +8344,18 @@ function renderHtml(
 
         syncNoteDirtyState();
         syncNoteSidebarTrigger();
-        syncNoteAppSelect();
         refreshNoteSidebarStatus();
       }
 
-      async function savePreviewState(nextAppNotes) {
+      async function savePreviewState(nextBacklogNotes) {
         if (!previewStateApiUrl) {
           return false;
         }
 
+        const snapshot = nextBacklogNotes || normalizeBacklogNotesSnapshot(backlogNotes);
+
+        noteSaving = true;
+        refreshNoteSidebarStatus();
         try {
           const response = await fetch(previewStateApiUrl, {
             method: 'PUT',
@@ -8044,12 +8364,27 @@ function renderHtml(
             },
             body: JSON.stringify({
               reviews: reviewState,
-              appNotes: nextAppNotes || normalizeAppNotesSnapshot(persistedAppNotes)
+              backlogNotes: snapshot
             })
           });
           if (!response.ok) {
             throw new Error('SAVE_FAILED');
           }
+
+          let persistedSnapshot = snapshot;
+          try {
+            const payload = await response.json();
+            if (payload && typeof payload === 'object' && payload.backlogNotes && typeof payload.backlogNotes === 'object') {
+              persistedSnapshot = payload.backlogNotes;
+            }
+          } catch {
+            // Keep local snapshot when response body is unavailable.
+          }
+
+          copyBacklogNotesMap(persistedBacklogNotes, persistedSnapshot);
+          syncNoteDirtyState();
+          syncNoteSidebarTrigger();
+          syncNoteBacklogSelectOptions();
           refreshNoteSidebarStatus();
           return true;
         } catch {
@@ -8058,6 +8393,9 @@ function renderHtml(
           }
           // Keep UI behavior even when persistence fails.
           return false;
+        } finally {
+          noteSaving = false;
+          refreshNoteSidebarStatus();
         }
       }
 
@@ -8075,7 +8413,7 @@ function renderHtml(
         }, 220);
       }
 
-      async function saveAppNotesManually() {
+      async function saveBacklogNotesManually() {
         if (!previewStateApiUrl) {
           if (noteSidebarStatus instanceof HTMLElement) {
             noteSidebarStatus.textContent = '저장 API가 없어 새로고침 시 노트가 유지되지 않습니다.';
@@ -8087,17 +8425,11 @@ function renderHtml(
           noteSidebarStatus.textContent = '저장 중...';
         }
 
-        const snapshot = normalizeAppNotesSnapshot(appNotes);
+        const snapshot = normalizeBacklogNotesSnapshot(backlogNotes);
         const saved = await savePreviewState(snapshot);
         if (!saved) {
           return;
         }
-
-        copyAppNotesMap(persistedAppNotes, snapshot);
-        syncNoteDirtyState();
-        syncNoteSidebarTrigger();
-        syncNoteAppSelect();
-        refreshNoteSidebarStatus();
       }
 
       async function loadPreviewState() {
@@ -8110,8 +8442,8 @@ function renderHtml(
           applySearch();
           syncNoteDirtyState();
           syncNoteSidebarTrigger();
-          syncNoteAppSelect();
-          selectNoteApp(activeNoteAppKey || defaultNoteAppKey);
+          syncNoteBacklogSelectOptions();
+          selectNoteBacklog(activeNoteBacklogId);
           return;
         }
 
@@ -8131,8 +8463,8 @@ function renderHtml(
             applySearch();
             syncNoteDirtyState();
             syncNoteSidebarTrigger();
-            syncNoteAppSelect();
-            selectNoteApp(activeNoteAppKey || defaultNoteAppKey);
+            syncNoteBacklogSelectOptions();
+            selectNoteBacklog(activeNoteBacklogId);
             return;
           }
 
@@ -8140,8 +8472,8 @@ function renderHtml(
           const rows = payload && typeof payload === 'object' && payload.reviews && typeof payload.reviews === 'object'
             ? payload.reviews
             : {};
-          const notes = payload && typeof payload === 'object' && payload.appNotes && typeof payload.appNotes === 'object'
-            ? payload.appNotes
+          const notes = payload && typeof payload === 'object' && payload.backlogNotes && typeof payload.backlogNotes === 'object'
+            ? payload.backlogNotes
             : {};
 
           Object.keys(reviewState).forEach((key) => {
@@ -8162,12 +8494,12 @@ function renderHtml(
             };
           });
 
-          Object.keys(appNotes).forEach((key) => {
-            delete appNotes[key];
+          Object.keys(backlogNotes).forEach((key) => {
+            delete backlogNotes[key];
           });
 
-          Object.entries(notes).forEach(([appKey, row]) => {
-            if (!appKey || !row || typeof row !== 'object') {
+          Object.entries(notes).forEach(([backlogId, row]) => {
+            if (!backlogId || !row || typeof row !== 'object') {
               return;
             }
 
@@ -8176,7 +8508,7 @@ function renderHtml(
               return;
             }
 
-            appNotes[appKey] = {
+            backlogNotes[backlogId] = {
               content,
               updatedAt: typeof row.updatedAt === 'string' ? row.updatedAt : new Date().toISOString()
             };
@@ -8185,7 +8517,7 @@ function renderHtml(
           // Keep UI behavior even when loading persistence fails.
         }
 
-        copyAppNotesMap(persistedAppNotes, appNotes);
+        copyBacklogNotesMap(persistedBacklogNotes, backlogNotes);
         syncNoteDirtyState();
         syncAllCardStateVisuals();
         syncBacklogQuickSelectOptions();
@@ -8194,8 +8526,8 @@ function renderHtml(
         }
         applySearch();
         syncNoteSidebarTrigger();
-        syncNoteAppSelect();
-        selectNoteApp(activeNoteAppKey || defaultNoteAppKey);
+        syncNoteBacklogSelectOptions();
+        selectNoteBacklog(activeNoteBacklogId);
         refreshNoteSidebarStatus();
       }
 
@@ -8350,12 +8682,10 @@ function renderHtml(
           contextBacklog.classList.add('active');
         }
 
-        if (addBacklogItemButton instanceof HTMLElement) {
-          addBacklogItemButton.classList.toggle('hidden-control', raw);
-        }
         if (raw) {
           closeBacklogEditor();
         }
+        syncPageTitle(raw);
         toggleEvidenceAll.classList.toggle('hidden-control', raw);
         syncEvidenceToggleText();
         syncFilterPanelTrigger();
@@ -8534,6 +8864,12 @@ function renderHtml(
               effort: normalizeBacklogLevel(target.value)
             });
           }
+          if (field === 'status') {
+            return normalizeBacklogItem({
+              ...item,
+              status: normalizeBacklogStatus(target.value)
+            });
+          }
           return item;
         });
 
@@ -8543,13 +8879,13 @@ function renderHtml(
       });
 
       if (noteSidebarBackdrop instanceof HTMLElement) {
-        noteSidebarBackdrop.addEventListener('click', closeAppNoteSidebar);
+        noteSidebarBackdrop.addEventListener('click', closeBacklogNoteSidebar);
       }
       if (noteSidebarClose instanceof HTMLElement) {
-        noteSidebarClose.addEventListener('click', closeAppNoteSidebar);
+        noteSidebarClose.addEventListener('click', closeBacklogNoteSidebar);
       }
       if (noteSidebarSave instanceof HTMLElement) {
-        noteSidebarSave.addEventListener('click', saveAppNotesManually);
+        noteSidebarSave.addEventListener('click', saveBacklogNotesManually);
       }
       if (addBacklogItemButton instanceof HTMLElement) {
         addBacklogItemButton.addEventListener('click', () => {
@@ -8670,11 +9006,11 @@ function renderHtml(
         });
       }
       if (openNoteSidebarButton instanceof HTMLElement) {
-        openNoteSidebarButton.addEventListener('click', openAppNoteSidebar);
+        openNoteSidebarButton.addEventListener('click', openBacklogNoteSidebar);
       }
-      if (noteAppSelect instanceof HTMLSelectElement) {
-        noteAppSelect.addEventListener('change', () => {
-          selectNoteApp(noteAppSelect.value);
+      if (noteBacklogSelect instanceof HTMLSelectElement) {
+        noteBacklogSelect.addEventListener('change', () => {
+          selectNoteBacklog(noteBacklogSelect.value);
         });
       }
       if (openFilterPanelButton instanceof HTMLElement) {
@@ -8688,10 +9024,11 @@ function renderHtml(
       }
       if (noteSidebarText instanceof HTMLTextAreaElement) {
         noteSidebarText.addEventListener('input', () => {
-          if (!activeNoteAppKey) {
+          if (!activeNoteBacklogId) {
             return;
           }
-          writeAppNote(activeNoteAppKey, noteSidebarText.value);
+          writeBacklogNote(activeNoteBacklogId, noteSidebarText.value);
+          schedulePreviewStateSave();
         });
       }
       if (searchInput instanceof HTMLInputElement) {
@@ -8713,7 +9050,7 @@ function renderHtml(
           }
           if (noteSidebarRoot instanceof HTMLElement && !noteSidebarRoot.hidden) {
             event.preventDefault();
-            saveAppNotesManually();
+            saveBacklogNotesManually();
             return;
           }
         }
@@ -8730,7 +9067,7 @@ function renderHtml(
             closeBacklogReviewPickerModal();
             return;
           }
-          closeAppNoteSidebar();
+          closeBacklogNoteSidebar();
           closeFilterPanel();
           closeBacklogEditor();
         }
