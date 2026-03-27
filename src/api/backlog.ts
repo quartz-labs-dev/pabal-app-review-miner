@@ -19,7 +19,6 @@ interface BacklogApiItem {
   id: string;
   priority: BacklogPriority;
   title: string;
-  impact: BacklogLevel;
   effort: BacklogLevel;
   action: string;
   evidenceReviewIds: string[];
@@ -27,33 +26,39 @@ interface BacklogApiItem {
 }
 
 interface BacklogApiState {
-  version: 1;
+  version: 2;
   ownerAppId: string;
   updatedAt: string;
   items: BacklogApiItem[];
 }
 
-interface BacklogDataItem {
+interface LegacyBacklogDataItem {
   priority: BacklogPriority;
   title: string;
-  impact: BacklogLevel;
   effort: BacklogLevel;
   action: string;
   evidenceCount: number;
   evidenceReviewIds: string[];
 }
 
-interface BacklogDataApp {
+interface LegacyBacklogDataApp {
   appTitle: string;
   reviewCount: string;
-  items: BacklogDataItem[];
+  items: LegacyBacklogDataItem[];
 }
 
-interface BacklogDataFile {
+interface LegacyBacklogDataFile {
   version: 1;
   ownerAppId: string;
   generatedAt: string;
-  appBacklogs: BacklogDataApp[];
+  appBacklogs: LegacyBacklogDataApp[];
+}
+
+interface BacklogDataFile {
+  version: 2;
+  ownerAppId: string;
+  updatedAt: string;
+  items: BacklogApiItem[];
 }
 
 function isSafeAppId(appId: string): boolean {
@@ -87,7 +92,73 @@ function normalizeBacklogEvidenceId(value: unknown): string {
   return normalized;
 }
 
-function toBaseReviewId(value: unknown): string {
+function normalizeBacklogScopeToken(value: unknown): string {
+  const normalized = normalizeText(String(value ?? "")).toLowerCase();
+  if (!normalized) {
+    return "";
+  }
+  return normalized.replace(/\s+/g, "-").replace(/[^a-z0-9._-]+/g, "");
+}
+
+function sanitizeBacklogText(value: unknown): string {
+  return normalizeText(String(value ?? ""));
+}
+
+function sanitizeBacklogAction(value: unknown): string {
+  let text = normalizeText(String(value ?? ""));
+  text = text
+    .replace(/\(\s*근거\s*리뷰\s*\d+\s*건\s*\)/gi, "")
+    .replace(/\(\s*evidence\s*\d+\s*reviews?\s*\)/gi, "")
+    .replace(/근거\s*리뷰\s*\d+\s*건/gi, "")
+    .replace(/evidence\s*\d+\s*reviews?/gi, "");
+  return normalizeText(text.replace(/\s{2,}/g, " "));
+}
+
+function backlogSimilarityText(value: unknown): string {
+  return normalizeText(String(value ?? ""))
+    .toLowerCase()
+    .replace(/\(\s*근거\s*리뷰\s*\d+\s*건\s*\)/gi, "")
+    .replace(/\(\s*evidence\s*\d+\s*reviews?\s*\)/gi, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function createBacklogSimilarityKey(title: unknown, action: unknown): string {
+  return `${backlogSimilarityText(title)}||${backlogSimilarityText(action)}`;
+}
+
+function backlogLevelRank(level: BacklogLevel): number {
+  if (level === "high") {
+    return 3;
+  }
+  if (level === "medium") {
+    return 2;
+  }
+  return 1;
+}
+
+function toScopedEvidenceId(value: unknown, fallbackScope = "global"): string {
+  const normalized = normalizeBacklogEvidenceId(value);
+  if (!normalized) {
+    return "";
+  }
+
+  const delimiter = normalized.indexOf("::");
+  if (delimiter >= 0) {
+    const scope = normalizeBacklogScopeToken(normalized.slice(0, delimiter)) || "global";
+    const reviewId = normalizeBacklogEvidenceId(normalized.slice(delimiter + 2));
+    if (!reviewId) {
+      return "";
+    }
+    return `${scope}::${reviewId}`;
+  }
+
+  const scope = normalizeBacklogScopeToken(fallbackScope) || "global";
+  return `${scope}::${normalized}`;
+}
+
+function extractBaseReviewId(value: unknown): string {
   const normalized = normalizeBacklogEvidenceId(value);
   if (!normalized) {
     return "";
@@ -106,6 +177,15 @@ function parseBacklogAppTitle(rawTitle: string): { displayName: string; sourceTo
     displayName: normalizeText(match[1]),
     sourceToken: normalizeText(match[2])
   };
+}
+
+function resolveLegacyScopeToken(rawTitle: string): string {
+  const parsed = parseBacklogAppTitle(rawTitle);
+  return (
+    normalizeBacklogScopeToken(parsed.sourceToken) ||
+    normalizeBacklogScopeToken(parsed.displayName) ||
+    "global"
+  );
 }
 
 function backlogPath(dataRoot: string, ownerAppId: string): string {
@@ -128,16 +208,17 @@ function normalizeBacklogApiItem(value: unknown, fallbackId: string): BacklogApi
   }
 
   const row = value as Record<string, unknown>;
-  const title = normalizeText(String(row.title ?? ""));
-  const action = normalizeText(String(row.action ?? ""));
+  const title = sanitizeBacklogText(row.title);
+  const action = sanitizeBacklogAction(row.action);
   if (!title || !action) {
     return undefined;
   }
 
   const evidenceRaw = Array.isArray(row.evidenceReviewIds) ? (row.evidenceReviewIds as unknown[]) : [];
-  const evidenceReviewIds = Array.from(
-    new Set(evidenceRaw.map((item) => toBaseReviewId(item)).filter(Boolean))
-  ).slice(0, BACKLOG_MAX_EVIDENCE_IDS);
+  const evidenceReviewIds = Array.from(new Set(evidenceRaw.map((item) => toScopedEvidenceId(item)).filter(Boolean))).slice(
+    0,
+    BACKLOG_MAX_EVIDENCE_IDS
+  );
 
   const appNamesRaw = Array.isArray(row.appNames) ? (row.appNames as unknown[]) : [];
   const appNames = Array.from(new Set(appNamesRaw.map((item) => normalizeText(String(item ?? ""))).filter(Boolean))).slice(
@@ -152,7 +233,6 @@ function normalizeBacklogApiItem(value: unknown, fallbackId: string): BacklogApi
     id,
     priority: normalizeBacklogPriority(row.priority),
     title: title.slice(0, 220),
-    impact: normalizeBacklogLevel(row.impact),
     effort: normalizeBacklogLevel(row.effort),
     action: action.slice(0, 1_000),
     evidenceReviewIds,
@@ -162,11 +242,72 @@ function normalizeBacklogApiItem(value: unknown, fallbackId: string): BacklogApi
 
 function createDefaultBacklogState(ownerAppId: string): BacklogApiState {
   return {
-    version: 1,
+    version: 2,
     ownerAppId,
     updatedAt: new Date().toISOString(),
     items: []
   };
+}
+
+function mergeSimilarBacklogItems(items: BacklogApiItem[]): BacklogApiItem[] {
+  const grouped = new Map<string, BacklogApiItem>();
+  const dedupeKeyToId = new Map<string, string>();
+
+  for (const item of items) {
+    const key = createBacklogSimilarityKey(item.title, item.action);
+    const groupId = dedupeKeyToId.get(key) || item.id;
+    if (!dedupeKeyToId.has(key)) {
+      dedupeKeyToId.set(key, groupId);
+    }
+
+    const existing = grouped.get(groupId);
+    if (!existing) {
+      grouped.set(groupId, {
+        ...item,
+        id: groupId,
+        title: sanitizeBacklogText(item.title).slice(0, 220),
+        action: sanitizeBacklogAction(item.action).slice(0, 1_000),
+        evidenceReviewIds: Array.from(new Set(item.evidenceReviewIds.map((id) => toScopedEvidenceId(id)).filter(Boolean))).slice(
+          0,
+          BACKLOG_MAX_EVIDENCE_IDS
+        ),
+        appNames: Array.from(new Set(item.appNames.map((name) => normalizeText(name)).filter(Boolean))).sort((a, b) =>
+          a.localeCompare(b)
+        )
+      });
+      continue;
+    }
+
+    const mergedEvidenceIds = Array.from(
+      new Set([...existing.evidenceReviewIds, ...item.evidenceReviewIds].map((id) => toScopedEvidenceId(id)).filter(Boolean))
+    ).slice(0, BACKLOG_MAX_EVIDENCE_IDS);
+    const mergedAppNames = Array.from(
+      new Set([...existing.appNames, ...item.appNames].map((name) => normalizeText(name)).filter(Boolean))
+    ).sort((a, b) => a.localeCompare(b));
+
+    grouped.set(groupId, {
+      ...existing,
+      priority: backlogPriorityRank(item.priority) < backlogPriorityRank(existing.priority) ? item.priority : existing.priority,
+      effort: backlogLevelRank(item.effort) > backlogLevelRank(existing.effort) ? item.effort : existing.effort,
+      title: item.title.length > existing.title.length ? sanitizeBacklogText(item.title).slice(0, 220) : existing.title,
+      action:
+        sanitizeBacklogAction(item.action).length > sanitizeBacklogAction(existing.action).length
+          ? sanitizeBacklogAction(item.action).slice(0, 1_000)
+          : existing.action,
+      evidenceReviewIds: mergedEvidenceIds,
+      appNames: mergedAppNames
+    });
+  }
+
+  return Array.from(grouped.values()).sort((a, b) => {
+    if (backlogPriorityRank(a.priority) !== backlogPriorityRank(b.priority)) {
+      return backlogPriorityRank(a.priority) - backlogPriorityRank(b.priority);
+    }
+    if (b.evidenceReviewIds.length !== a.evidenceReviewIds.length) {
+      return b.evidenceReviewIds.length - a.evidenceReviewIds.length;
+    }
+    return a.title.localeCompare(b.title);
+  });
 }
 
 function normalizeBacklogApiState(ownerAppId: string, value: unknown): BacklogApiState {
@@ -185,30 +326,22 @@ function normalizeBacklogApiState(ownerAppId: string, value: unknown): BacklogAp
 
     items.push({
       ...normalized,
-      evidenceReviewIds: normalized.evidenceReviewIds.map((id) => toBaseReviewId(id)).filter(Boolean),
+      evidenceReviewIds: normalized.evidenceReviewIds.map((id) => toScopedEvidenceId(id)).filter(Boolean),
       appNames: [...normalized.appNames].sort((a, b) => a.localeCompare(b))
     });
   }
 
-  items.sort((a, b) => {
-    if (backlogPriorityRank(a.priority) !== backlogPriorityRank(b.priority)) {
-      return backlogPriorityRank(a.priority) - backlogPriorityRank(b.priority);
-    }
-    if (b.evidenceReviewIds.length !== a.evidenceReviewIds.length) {
-      return b.evidenceReviewIds.length - a.evidenceReviewIds.length;
-    }
-    return a.title.localeCompare(b.title);
-  });
+  const mergedItems = mergeSimilarBacklogItems(items);
 
   return {
-    version: 1,
+    version: 2,
     ownerAppId,
     updatedAt: normalizeText(typeof source.updatedAt === "string" ? source.updatedAt : new Date().toISOString()),
-    items
+    items: mergedItems
   };
 }
 
-function flattenBacklogDataToApiState(ownerAppId: string, value: unknown): BacklogApiState {
+function flattenLegacyBacklogToApiState(ownerAppId: string, value: unknown): BacklogApiState {
   if (!value || typeof value !== "object") {
     return createDefaultBacklogState(ownerAppId);
   }
@@ -219,7 +352,6 @@ function flattenBacklogDataToApiState(ownerAppId: string, value: unknown): Backl
     string,
     {
       priority: BacklogPriority;
-      impact: BacklogLevel;
       effort: BacklogLevel;
       title: string;
       action: string;
@@ -238,7 +370,9 @@ function flattenBacklogDataToApiState(ownerAppId: string, value: unknown): Backl
     if (!appTitle) {
       continue;
     }
-    const appDisplayName = parseBacklogAppTitle(appTitle).displayName || appTitle;
+    const parsedTitle = parseBacklogAppTitle(appTitle);
+    const appDisplayName = parsedTitle.displayName || appTitle;
+    const appScope = resolveLegacyScopeToken(appTitle);
     const itemsRaw = Array.isArray(appBacklog.items) ? (appBacklog.items as unknown[]) : [];
 
     for (const itemRaw of itemsRaw) {
@@ -247,27 +381,31 @@ function flattenBacklogDataToApiState(ownerAppId: string, value: unknown): Backl
       }
 
       const item = itemRaw as Record<string, unknown>;
-      const title = normalizeText(String(item.title ?? ""));
-      const action = normalizeText(String(item.action ?? ""));
+      const title = sanitizeBacklogText(item.title);
+      const action = sanitizeBacklogAction(item.action);
       if (!title || !action) {
         continue;
       }
 
       const priority = normalizeBacklogPriority(item.priority);
-      const impact = normalizeBacklogLevel(item.impact);
       const effort = normalizeBacklogLevel(item.effort);
       const rawEvidence = Array.isArray(item.evidenceReviewIds) ? (item.evidenceReviewIds as unknown[]) : [];
       const evidenceReviewIds = rawEvidence
-        .map((value) => toBaseReviewId(value))
+        .map((entry) => {
+          const baseReviewId = extractBaseReviewId(entry);
+          if (!baseReviewId) {
+            return "";
+          }
+          return toScopedEvidenceId(`${appScope}::${baseReviewId}`);
+        })
         .filter(Boolean);
 
-      const groupKey = [priority, impact, effort, title.toLowerCase(), action.toLowerCase()].join("||");
+      const groupKey = createBacklogSimilarityKey(title, action);
 
       const existing = grouped.get(groupKey);
       if (!existing) {
         grouped.set(groupKey, {
           priority,
-          impact,
           effort,
           title,
           action,
@@ -288,7 +426,6 @@ function flattenBacklogDataToApiState(ownerAppId: string, value: unknown): Backl
     id: `bg-${index + 1}`,
     priority: item.priority,
     title: item.title,
-    impact: item.impact,
     effort: item.effort,
     action: item.action,
     evidenceReviewIds: Array.from(item.evidenceReviewIds).slice(0, BACKLOG_MAX_EVIDENCE_IDS),
@@ -296,18 +433,34 @@ function flattenBacklogDataToApiState(ownerAppId: string, value: unknown): Backl
   }));
 
   return normalizeBacklogApiState(ownerAppId, {
-    version: 1,
+    version: 2,
     ownerAppId,
     updatedAt: normalizeText(typeof source.generatedAt === "string" ? source.generatedAt : new Date().toISOString()),
     items
   });
 }
 
+function parseBacklogFileToApiState(ownerAppId: string, value: unknown): BacklogApiState {
+  if (!value || typeof value !== "object") {
+    return createDefaultBacklogState(ownerAppId);
+  }
+
+  const source = value as Record<string, unknown>;
+  const hasItems = Array.isArray(source.items);
+  if (hasItems) {
+    return normalizeBacklogApiState(ownerAppId, source);
+  }
+  if (Array.isArray(source.appBacklogs)) {
+    return flattenLegacyBacklogToApiState(ownerAppId, source);
+  }
+  return createDefaultBacklogState(ownerAppId);
+}
+
 async function readBacklogState(dataRoot: string, ownerAppId: string): Promise<BacklogApiState> {
   const target = backlogPath(dataRoot, ownerAppId);
   try {
     const raw = await fs.readFile(target, "utf8");
-    return flattenBacklogDataToApiState(ownerAppId, JSON.parse(raw) as unknown);
+    return parseBacklogFileToApiState(ownerAppId, JSON.parse(raw) as unknown);
   } catch (error) {
     const nodeError = error as NodeJS.ErrnoException;
     if (nodeError?.code !== "ENOENT") {
@@ -318,44 +471,21 @@ async function readBacklogState(dataRoot: string, ownerAppId: string): Promise<B
 }
 
 function convertApiStateToBacklogData(ownerAppId: string, state: BacklogApiState): BacklogDataFile {
-  const appBacklogs = new Map<string, BacklogDataApp>();
-
-  for (const item of state.items) {
-    const baseEvidenceIds = Array.from(
-      new Set(item.evidenceReviewIds.map((id) => toBaseReviewId(id)).filter(Boolean))
-    ).slice(0, BACKLOG_MAX_EVIDENCE_IDS);
-
-    const targetAppTitles: string[] =
-      item.appNames.length > 0 ? item.appNames : ["global"];
-
-    targetAppTitles.forEach((appTitle) => {
-      const normalizedTitle = normalizeText(appTitle) || "global";
-      const current = appBacklogs.get(normalizedTitle) ?? {
-        appTitle: normalizedTitle,
-        reviewCount: "-",
-        items: []
-      };
-      if (!appBacklogs.has(normalizedTitle)) {
-        appBacklogs.set(normalizedTitle, current);
-      }
-
-      current.items.push({
-        priority: item.priority,
-        title: item.title,
-        impact: item.impact,
-        effort: item.effort,
-        action: item.action,
-        evidenceCount: baseEvidenceIds.length,
-        evidenceReviewIds: baseEvidenceIds
-      });
-    });
-  }
-
   return {
-    version: 1,
+    version: 2,
     ownerAppId,
-    generatedAt: new Date().toISOString(),
-    appBacklogs: Array.from(appBacklogs.values()).sort((a, b) => a.appTitle.localeCompare(b.appTitle))
+    updatedAt: state.updatedAt || new Date().toISOString(),
+    items: state.items.map((item) => ({
+      id: item.id,
+      priority: item.priority,
+      title: item.title,
+      effort: item.effort,
+      action: item.action,
+      evidenceReviewIds: Array.from(new Set(item.evidenceReviewIds.map((id) => toScopedEvidenceId(id)).filter(Boolean))),
+      appNames: Array.from(new Set(item.appNames.map((name) => normalizeText(name)).filter(Boolean))).sort((a, b) =>
+        a.localeCompare(b)
+      )
+    }))
   };
 }
 

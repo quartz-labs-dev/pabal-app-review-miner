@@ -7,6 +7,11 @@ import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 import { resolveOwnerApp } from "./registeredApps";
 import { ensureReviewId, normalizeText, safeFileName, UnifiedReview } from "./utils";
+import {
+  backlogReviewPickerStyles,
+  renderBacklogEvidenceSelectorHtml,
+  renderBacklogReviewPickerModalHtml
+} from "./html/backlogReviewPickerComponent";
 
 interface CliArgs {
   myApp?: string;
@@ -59,7 +64,6 @@ interface BacklogConcept {
 interface BacklogItem {
   priority: Priority;
   title: string;
-  impact: Impact;
   effort: Effort;
   action: string;
   evidenceCount: number;
@@ -77,40 +81,28 @@ interface BacklogClientItem {
   id: string;
   priority: Priority;
   title: string;
-  impact: Impact;
   effort: Effort;
   action: string;
   evidenceReviewIds: string[];
   appNames: string[];
-}
-
-interface BacklogDataItem {
-  priority: Priority;
-  title: string;
-  impact: Impact;
-  effort: Effort;
-  action: string;
-  evidenceCount: number;
-  evidenceReviewIds: string[];
-}
-
-interface BacklogDataApp {
-  appTitle: string;
-  reviewCount: string;
-  items: BacklogDataItem[];
 }
 
 interface UnifiedBacklogItem {
   id: string;
   priority: Priority;
   title: string;
-  impact: Impact;
   effort: Effort;
   action: string;
   evidenceCount: number;
   evidenceReviewIds: string[];
   examples: QuoteItem[];
   appNames: string[];
+}
+
+interface ScopedReviewCatalogEntry {
+  review: AppReviewPoolItem;
+  appDisplayName: string;
+  appPool: AppReviewPool;
 }
 
 interface StoreLink {
@@ -160,10 +152,10 @@ interface RenderBundlePayload {
 }
 
 interface BacklogDataFile {
-  version: 1;
+  version: 2;
   ownerAppId: string;
-  generatedAt: string;
-  appBacklogs: BacklogDataApp[];
+  updatedAt: string;
+  items: BacklogClientItem[];
 }
 
 interface ReportSourceFile {
@@ -1280,6 +1272,40 @@ function parseAppTitle(rawTitle: string): { displayName: string; sourceToken?: s
   };
 }
 
+function normalizeScopeToken(value: unknown): string {
+  const normalized = normalizeText(String(value ?? "")).toLowerCase();
+  if (!normalized) {
+    return "";
+  }
+  return normalized.replace(/\s+/g, "-").replace(/[^a-z0-9._-]+/g, "");
+}
+
+function splitScopedReviewId(value: unknown): { scope: string; reviewId: string } {
+  const normalized = normalizeText(String(value ?? ""));
+  if (!normalized) {
+    return { scope: "", reviewId: "" };
+  }
+  const delimiter = normalized.indexOf("::");
+  if (delimiter < 0) {
+    return { scope: "", reviewId: normalized };
+  }
+
+  return {
+    scope: normalizeScopeToken(normalized.slice(0, delimiter)),
+    reviewId: normalizeText(normalized.slice(delimiter + 2))
+  };
+}
+
+function toScopedReviewId(value: unknown, fallbackScope?: string): string {
+  const parsed = splitScopedReviewId(value);
+  const reviewId = normalizeText(parsed.reviewId);
+  if (!reviewId) {
+    return "";
+  }
+  const scope = parsed.scope || normalizeScopeToken(fallbackScope) || "global";
+  return `${scope}::${reviewId}`;
+}
+
 function hasHangul(input: string): boolean {
   return /[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(input);
 }
@@ -1831,14 +1857,233 @@ function parseMarkdown(input: string): { title: string; metadata: string[]; apps
   return { title, metadata, apps };
 }
 
-function normalizeBacklogData(value: unknown): AppBacklog[] | undefined {
+function normalizeBacklogPriorityValue(value: unknown): Priority {
+  const normalized = normalizeText(String(value ?? "")).toLowerCase();
+  if (normalized === "must" || normalized === "should" || normalized === "could") {
+    return normalized;
+  }
+  return "should";
+}
+
+function normalizeBacklogLevelValue(value: unknown): Impact | Effort {
+  const normalized = normalizeText(String(value ?? "")).toLowerCase();
+  if (normalized === "high" || normalized === "medium" || normalized === "low") {
+    return normalized;
+  }
+  return "medium";
+}
+
+function sanitizeBacklogTitle(value: unknown): string {
+  return normalizeText(String(value ?? ""));
+}
+
+function sanitizeBacklogAction(value: unknown): string {
+  let text = normalizeText(String(value ?? ""));
+  // Drop redundant evidence-count suffixes because evidence count is shown in table columns.
+  text = text
+    .replace(/\(\s*근거\s*리뷰\s*\d+\s*건\s*\)/gi, "")
+    .replace(/\(\s*evidence\s*\d+\s*reviews?\s*\)/gi, "")
+    .replace(/근거\s*리뷰\s*\d+\s*건/gi, "")
+    .replace(/evidence\s*\d+\s*reviews?/gi, "");
+  return normalizeText(text.replace(/\s{2,}/g, " "));
+}
+
+function backlogSimilarityText(value: string): string {
+  return normalizeText(value)
+    .toLowerCase()
+    .replace(/\(\s*근거\s*리뷰\s*\d+\s*건\s*\)/gi, "")
+    .replace(/\(\s*evidence\s*\d+\s*reviews?\s*\)/gi, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function createBacklogSimilarityKey(title: string, action: string): string {
+  return `${backlogSimilarityText(title)}||${backlogSimilarityText(action)}`;
+}
+
+function backlogLevelRank(value: Impact | Effort): number {
+  if (value === "high") {
+    return 3;
+  }
+  if (value === "medium") {
+    return 2;
+  }
+  return 1;
+}
+
+function flattenAppBacklogsToBacklogItems(backlogs: AppBacklog[]): BacklogClientItem[] {
+  const groupedBacklog = new Map<
+    string,
+    {
+      priority: Priority;
+      title: string;
+      effort: Effort;
+      action: string;
+      evidenceReviewIds: Set<string>;
+      appNames: Set<string>;
+    }
+  >();
+
+  for (const appBacklog of backlogs) {
+    const parsedAppTitle = parseAppTitle(appBacklog.appTitle);
+    const appName = normalizeText(parsedAppTitle.displayName);
+    const appScope =
+      normalizeScopeToken(parsedAppTitle.sourceToken) || normalizeScopeToken(parsedAppTitle.displayName) || "global";
+
+    for (const item of appBacklog.items) {
+      const nextTitle = sanitizeBacklogTitle(item.title) || "기타 개선";
+      const nextAction = sanitizeBacklogAction(item.action) || "반복 리뷰를 검토해 개선 항목을 구체화";
+      const groupKey = createBacklogSimilarityKey(nextTitle, nextAction);
+      const existing = groupedBacklog.get(groupKey);
+      const normalizedEvidenceIds = item.evidenceReviewIds
+        .map((reviewId) => toScopedReviewId(reviewId, appScope))
+        .filter(Boolean);
+
+      if (!existing) {
+        groupedBacklog.set(groupKey, {
+          priority: item.priority,
+          title: nextTitle,
+          effort: item.effort,
+          action: nextAction,
+          evidenceReviewIds: new Set<string>(normalizedEvidenceIds),
+          appNames: new Set<string>(appName ? [appName] : [])
+        });
+        continue;
+      }
+
+      normalizedEvidenceIds.forEach((reviewId) => existing.evidenceReviewIds.add(reviewId));
+      if (appName) {
+        existing.appNames.add(appName);
+      }
+      if (priorityOrder(item.priority) < priorityOrder(existing.priority)) {
+        existing.priority = item.priority;
+      }
+      if (backlogLevelRank(item.effort) > backlogLevelRank(existing.effort)) {
+        existing.effort = item.effort;
+      }
+      if (nextTitle.length > existing.title.length) {
+        existing.title = nextTitle;
+      }
+      if (nextAction.length > existing.action.length) {
+        existing.action = nextAction;
+      }
+    }
+  }
+
+  return [...groupedBacklog.values()]
+    .map((item, index) => ({
+      id: `bg-${index + 1}`,
+      priority: item.priority,
+      title: item.title,
+      effort: item.effort,
+      action: item.action,
+      evidenceReviewIds: [...item.evidenceReviewIds].slice(0, MAX_EVIDENCE_PER_ITEM),
+      appNames: [...item.appNames].sort((a, b) => a.localeCompare(b))
+    }))
+    .sort((a, b) => {
+      if (priorityOrder(a.priority) !== priorityOrder(b.priority)) {
+        return priorityOrder(a.priority) - priorityOrder(b.priority);
+      }
+      return b.evidenceReviewIds.length - a.evidenceReviewIds.length;
+    });
+}
+
+function normalizeBacklogItems(value: unknown): BacklogClientItem[] {
+  const rows = Array.isArray(value) ? (value as unknown[]) : [];
+  const normalized = rows
+    .map((itemRaw, index) => {
+      if (!itemRaw || typeof itemRaw !== "object") {
+        return undefined;
+      }
+      const row = itemRaw as Record<string, unknown>;
+      const id = normalizeText(String(row.id ?? "")) || `bg-${index + 1}`;
+      const title = sanitizeBacklogTitle(row.title) || "기타 개선";
+      const action = sanitizeBacklogAction(row.action) || "반복 리뷰를 검토해 개선 항목을 구체화";
+      const evidenceRaw = Array.isArray(row.evidenceReviewIds) ? (row.evidenceReviewIds as unknown[]) : [];
+      const evidenceReviewIds = Array.from(
+        new Set(evidenceRaw.map((reviewId) => toScopedReviewId(reviewId)).filter(Boolean))
+      ).slice(0, MAX_EVIDENCE_PER_ITEM);
+      const appNamesRaw = Array.isArray(row.appNames) ? (row.appNames as unknown[]) : [];
+      const appNames = Array.from(
+        new Set(appNamesRaw.map((name) => normalizeText(String(name ?? ""))).filter(Boolean))
+      ).sort((a, b) => a.localeCompare(b));
+
+      return {
+        id,
+        priority: normalizeBacklogPriorityValue(row.priority),
+        title,
+        effort: normalizeBacklogLevelValue(row.effort) as Effort,
+        action,
+        evidenceReviewIds,
+        appNames
+      };
+    })
+    .filter((item): item is BacklogClientItem => Boolean(item));
+
+  const dedupedById = new Map<string, BacklogClientItem>();
+  const dedupeKeyToId = new Map<string, string>();
+  for (const item of normalized) {
+    const key = createBacklogSimilarityKey(item.title, item.action);
+    const dedupeTargetId = dedupeKeyToId.get(key) || item.id;
+    if (!dedupeKeyToId.has(key)) {
+      dedupeKeyToId.set(key, dedupeTargetId);
+    }
+
+    const existing = dedupedById.get(dedupeTargetId);
+    if (!existing) {
+      dedupedById.set(dedupeTargetId, {
+        ...item,
+        id: dedupeTargetId
+      });
+      continue;
+    }
+
+    const mergedEvidence = Array.from(new Set([...existing.evidenceReviewIds, ...item.evidenceReviewIds])).slice(
+      0,
+      MAX_EVIDENCE_PER_ITEM
+    );
+    const mergedAppNames = Array.from(new Set([...existing.appNames, ...item.appNames])).sort((a, b) =>
+      a.localeCompare(b)
+    );
+    dedupedById.set(dedupeTargetId, {
+      ...existing,
+      priority: priorityOrder(item.priority) < priorityOrder(existing.priority) ? item.priority : existing.priority,
+      effort: backlogLevelRank(item.effort) > backlogLevelRank(existing.effort) ? item.effort : existing.effort,
+      title: item.title.length > existing.title.length ? item.title : existing.title,
+      action: item.action.length > existing.action.length ? item.action : existing.action,
+      evidenceReviewIds: mergedEvidence,
+      appNames: mergedAppNames
+    });
+  }
+
+  return [...dedupedById.values()].sort((a, b) => {
+    if (priorityOrder(a.priority) !== priorityOrder(b.priority)) {
+      return priorityOrder(a.priority) - priorityOrder(b.priority);
+    }
+    if (b.evidenceReviewIds.length !== a.evidenceReviewIds.length) {
+      return b.evidenceReviewIds.length - a.evidenceReviewIds.length;
+    }
+    return a.title.localeCompare(b.title);
+  });
+}
+
+function normalizeBacklogData(value: unknown): BacklogClientItem[] | undefined {
   if (!value || typeof value !== "object") {
     return undefined;
   }
 
   const root = value as Record<string, unknown>;
+  if (Array.isArray(root.items)) {
+    const items = normalizeBacklogItems(root.items);
+    return items.length > 0 ? items : undefined;
+  }
+
   const rows = Array.isArray(root.appBacklogs) ? (root.appBacklogs as unknown[]) : [];
-  const normalized: AppBacklog[] = [];
+  if (rows.length === 0) {
+    return undefined;
+  }
+  const legacyBacklogs: AppBacklog[] = [];
 
   for (const raw of rows) {
     if (!raw || typeof raw !== "object") {
@@ -1849,6 +2094,9 @@ function normalizeBacklogData(value: unknown): AppBacklog[] | undefined {
     if (!appTitle) {
       continue;
     }
+    const parsedAppTitle = parseAppTitle(appTitle);
+    const appScope =
+      normalizeScopeToken(parsedAppTitle.sourceToken) || normalizeScopeToken(parsedAppTitle.displayName) || "global";
     const itemsRaw = Array.isArray(row.items) ? (row.items as unknown[]) : [];
     const items: BacklogItem[] = [];
 
@@ -1857,51 +2105,33 @@ function normalizeBacklogData(value: unknown): AppBacklog[] | undefined {
         continue;
       }
       const item = itemRaw as Record<string, unknown>;
-      const priority = normalizeText(String(item.priority ?? "")).toLowerCase();
-      const impact = normalizeText(String(item.impact ?? "")).toLowerCase();
-      const effort = normalizeText(String(item.effort ?? "")).toLowerCase();
-      if (!["must", "should", "could"].includes(priority)) {
-        continue;
-      }
-      if (!["high", "medium", "low"].includes(impact) || !["high", "medium", "low"].includes(effort)) {
-        continue;
-      }
-
-      const examplesRaw = Array.isArray(item.examples) ? (item.examples as unknown[]) : [];
-      const examples = examplesRaw.map(normalizeQuoteItem).filter((x): x is QuoteItem => Boolean(x));
-      const evidenceReviewIds = Array.isArray(item.evidenceReviewIds)
-        ? [
-            ...new Set(
-              (item.evidenceReviewIds as unknown[])
-                .map((x) => extractBaseReviewId(normalizeText(String(x ?? ""))))
-                .filter(Boolean)
-            )
-          ]
-        : [];
+      const evidenceRaw = Array.isArray(item.evidenceReviewIds) ? (item.evidenceReviewIds as unknown[]) : [];
+      const evidenceReviewIds = Array.from(
+        new Set(evidenceRaw.map((x) => toScopedReviewId(x, appScope)).filter(Boolean))
+      );
 
       items.push({
-        priority: priority as Priority,
+        priority: normalizeBacklogPriorityValue(item.priority),
         title: normalizeText(String(item.title ?? "")) || "기타 개선",
-        impact: impact as Impact,
-        effort: effort as Effort,
+        effort: normalizeBacklogLevelValue(item.effort) as Effort,
         action: normalizeText(String(item.action ?? "")) || "반복 리뷰를 검토해 개선 항목을 구체화",
         evidenceCount: Number(item.evidenceCount ?? evidenceReviewIds.length ?? 0) || evidenceReviewIds.length,
-        evidenceReviewIds,
-        examples: examples.length > 0 ? examples : undefined
+        evidenceReviewIds
       });
     }
 
-    normalized.push({
+    legacyBacklogs.push({
       appTitle,
       reviewCount: normalizeText(String(row.reviewCount ?? "")) || "-",
       items
     });
   }
 
-  return normalized.length > 0 ? normalized : undefined;
+  const items = flattenAppBacklogsToBacklogItems(legacyBacklogs);
+  return items.length > 0 ? items : undefined;
 }
 
-async function readBacklogData(backlogPath: string): Promise<AppBacklog[] | undefined> {
+async function readBacklogData(backlogPath: string): Promise<BacklogClientItem[] | undefined> {
   try {
     const raw = await fs.readFile(backlogPath, "utf8");
     return normalizeBacklogData(JSON.parse(raw) as unknown);
@@ -1910,85 +2140,141 @@ async function readBacklogData(backlogPath: string): Promise<AppBacklog[] | unde
   }
 }
 
-async function writeBacklogData(backlogPath: string, ownerAppId: string, appBacklogs: AppBacklog[]): Promise<void> {
-  const serializedBacklogs: BacklogDataApp[] = appBacklogs.map((appBacklog) => ({
-    appTitle: appBacklog.appTitle,
-    reviewCount: appBacklog.reviewCount,
-    items: appBacklog.items.map((item) => {
-      const evidenceReviewIds = [
-        ...new Set(item.evidenceReviewIds.map((rawId) => extractBaseReviewId(rawId)).filter(Boolean))
-      ].slice(0, MAX_EVIDENCE_PER_ITEM);
-      return {
-        priority: item.priority,
-        title: item.title,
-        impact: item.impact,
-        effort: item.effort,
-        action: item.action,
-        evidenceCount: evidenceReviewIds.length,
-        evidenceReviewIds
-      };
-    })
-  }));
-
+async function writeBacklogData(backlogPath: string, ownerAppId: string, backlogItems: BacklogClientItem[]): Promise<void> {
   const payload: BacklogDataFile = {
-    version: 1,
+    version: 2,
     ownerAppId,
-    generatedAt: new Date().toISOString(),
-    appBacklogs: serializedBacklogs
+    updatedAt: new Date().toISOString(),
+    items: normalizeBacklogItems(backlogItems)
   };
   await fs.mkdir(path.dirname(backlogPath), { recursive: true });
   await fs.writeFile(backlogPath, JSON.stringify(payload, null, 2), "utf8");
 }
 
-function hydrateBacklogEvidence(backlogs: AppBacklog[], reviewPools: ReviewPools): AppBacklog[] {
-  return backlogs.map((appBacklog) => {
-    const appScope = normalizeText(appBacklog.appTitle).toLowerCase();
-    const appPool = resolvePoolForApp(appBacklog.appTitle, reviewPools);
-    const reviewById = new Map<string, AppReviewPoolItem>();
-    for (const review of appPool?.reviews ?? []) {
-      reviewById.set(normalizeText(review.reviewId), review);
+function buildScopedReviewCatalogIndexes(reviewPools: ReviewPools): {
+  byScopedId: Map<string, ScopedReviewCatalogEntry>;
+  uniqueScopedIdByReviewId: Map<string, string>;
+} {
+  const byScopedId = new Map<string, ScopedReviewCatalogEntry>();
+  const scopedIdsByReviewId = new Map<string, Set<string>>();
+
+  for (const appPool of reviewPools.byToken.values()) {
+    const scopeToken = normalizeScopeToken(appPool.sourceToken);
+    if (!scopeToken) {
+      continue;
     }
 
-    const items = appBacklog.items.map((item) => {
-      const legacyQuoteByKey = new Map<string, QuoteItem>();
-      for (const quote of item.examples ?? []) {
-        const scopedKey = normalizeText(quote.evidenceKey).toLowerCase();
-        const baseKey = normalizeText(quote.reviewId).toLowerCase();
-        if (scopedKey && !legacyQuoteByKey.has(scopedKey)) {
-          legacyQuoteByKey.set(scopedKey, quote);
-        }
-        if (baseKey && !legacyQuoteByKey.has(baseKey)) {
-          legacyQuoteByKey.set(baseKey, quote);
-        }
+    for (const review of appPool.reviews) {
+      const scopedReviewId = toScopedReviewId(review.reviewId, scopeToken);
+      if (!scopedReviewId) {
+        continue;
       }
 
-      const ranked = [...new Set(item.evidenceReviewIds)]
+      byScopedId.set(scopedReviewId, {
+        review,
+        appDisplayName: appPool.displayName,
+        appPool
+      });
+
+      const reviewId = normalizeText(review.reviewId);
+      if (!reviewId) {
+        continue;
+      }
+      const bucket = scopedIdsByReviewId.get(reviewId) ?? new Set<string>();
+      bucket.add(scopedReviewId);
+      scopedIdsByReviewId.set(reviewId, bucket);
+    }
+  }
+
+  const uniqueScopedIdByReviewId = new Map<string, string>();
+  for (const [reviewId, scopedIds] of scopedIdsByReviewId.entries()) {
+    if (scopedIds.size !== 1) {
+      continue;
+    }
+    const scopedId = [...scopedIds][0];
+    if (scopedId) {
+      uniqueScopedIdByReviewId.set(reviewId, scopedId);
+    }
+  }
+
+  return {
+    byScopedId,
+    uniqueScopedIdByReviewId
+  };
+}
+
+function canonicalizeScopedReviewId(
+  rawScopedReviewId: string,
+  byScopedId: Map<string, ScopedReviewCatalogEntry>,
+  uniqueScopedIdByReviewId: Map<string, string>
+): string {
+  const scopedReviewId = toScopedReviewId(rawScopedReviewId);
+  if (!scopedReviewId) {
+    return "";
+  }
+  if (byScopedId.has(scopedReviewId)) {
+    return scopedReviewId;
+  }
+
+  const baseReviewId = normalizeText(splitScopedReviewId(scopedReviewId).reviewId);
+  if (!baseReviewId) {
+    return scopedReviewId;
+  }
+  return uniqueScopedIdByReviewId.get(baseReviewId) ?? scopedReviewId;
+}
+
+function canonicalizeBacklogItemsByReviewPools(
+  backlogItems: BacklogClientItem[],
+  reviewPools: ReviewPools
+): BacklogClientItem[] {
+  const { byScopedId, uniqueScopedIdByReviewId } = buildScopedReviewCatalogIndexes(reviewPools);
+  const remapped = normalizeBacklogItems(backlogItems).map((item) => {
+    const evidenceReviewIds = Array.from(
+      new Set(
+        item.evidenceReviewIds
+          .map((rawId) => canonicalizeScopedReviewId(rawId, byScopedId, uniqueScopedIdByReviewId))
+          .filter(Boolean)
+      )
+    );
+    return {
+      ...item,
+      evidenceReviewIds
+    };
+  });
+
+  return normalizeBacklogItems(remapped);
+}
+
+function hydrateBacklogItems(backlogItems: BacklogClientItem[], reviewPools: ReviewPools): UnifiedBacklogItem[] {
+  const { byScopedId: reviewByScopedId, uniqueScopedIdByReviewId } = buildScopedReviewCatalogIndexes(reviewPools);
+
+  return normalizeBacklogItems(backlogItems)
+    .map((item) => {
+      const appNames = new Set(item.appNames);
+      const rankedCandidates = item.evidenceReviewIds
         .map((rawId) => {
-          const normalizedId = normalizeText(rawId).toLowerCase();
-          if (!normalizedId) {
+          const scopedReviewId = canonicalizeScopedReviewId(rawId, reviewByScopedId, uniqueScopedIdByReviewId);
+          if (!scopedReviewId) {
             return undefined;
           }
-          const scopedReviewId = normalizedId.includes("::") ? normalizedId : `${appScope}::${normalizedId}`;
-          const baseReviewId = extractBaseReviewId(scopedReviewId).toLowerCase();
-          const poolReview = reviewById.get(baseReviewId);
-          const quote =
-            legacyQuoteByKey.get(scopedReviewId) ??
-            legacyQuoteByKey.get(baseReviewId) ??
-            (poolReview
-              ? {
-                  reviewId: poolReview.reviewId,
-                  evidenceKey: scopedReviewId,
-                  meta: poolReview.meta,
-                  kr: poolReview.kr,
-                  org: poolReview.org,
-                  tags: inferBacklogTagsFromPoolReview(poolReview)
-                }
-              : undefined);
-
+          const catalog = reviewByScopedId.get(scopedReviewId);
+          if (catalog?.appDisplayName) {
+            appNames.add(catalog.appDisplayName);
+          }
+          const quote: QuoteItem | undefined = catalog
+            ? {
+                reviewId: catalog.review.reviewId,
+                evidenceKey: scopedReviewId,
+                meta: catalog.review.meta,
+                kr: catalog.review.kr,
+                org: catalog.review.org,
+                tags: inferBacklogTagsFromPoolReview(catalog.review)
+              }
+            : undefined;
           const rankedInfo = scoreEvidenceCandidate({
             scopedReviewId,
             quote,
-            appPool
+            appPool: catalog?.appPool
           });
 
           return {
@@ -2007,7 +2293,9 @@ function hydrateBacklogEvidence(backlogs: AppBacklog[], reviewPools: ReviewPools
             score: number;
             timestamp: number;
           } => row !== undefined
-        )
+        );
+
+      const ranked = rankedCandidates
         .sort((a, b) => {
           if (b.score !== a.score) {
             return b.score - a.score;
@@ -2017,18 +2305,23 @@ function hydrateBacklogEvidence(backlogs: AppBacklog[], reviewPools: ReviewPools
         .slice(0, MAX_EVIDENCE_PER_ITEM);
 
       return {
-        ...item,
-        evidenceReviewIds: ranked.map((row) => row.scopedReviewId),
+        id: item.id,
+        priority: item.priority,
+        title: item.title,
+        effort: item.effort,
+        action: item.action,
         evidenceCount: ranked.length,
-        examples: ranked.map((row) => row.quote).filter((quote): quote is QuoteItem => Boolean(quote))
+        evidenceReviewIds: ranked.map((entry) => entry.scopedReviewId),
+        examples: ranked.map((entry) => entry.quote).filter((quote): quote is QuoteItem => Boolean(quote)),
+        appNames: Array.from(appNames).sort((a, b) => a.localeCompare(b))
       };
+    })
+    .sort((a, b) => {
+      if (priorityOrder(a.priority) !== priorityOrder(b.priority)) {
+        return priorityOrder(a.priority) - priorityOrder(b.priority);
+      }
+      return b.evidenceCount - a.evidenceCount;
     });
-
-    return {
-      ...appBacklog,
-      items
-    };
-  });
 }
 
 function renderCategoryTitle(key: CategoryKey): string {
@@ -2105,7 +2398,10 @@ function appendQuoteToBucket(params: {
       kr: quote.kr,
       org: quote.org
     });
-  const scopedReviewId = `${appScope}::${baseReviewId}`.toLowerCase();
+  const scopedReviewId = toScopedReviewId(baseReviewId, appScope);
+  if (!scopedReviewId) {
+    return;
+  }
   if (bucket.evidenceReviewIds.has(scopedReviewId)) {
     return;
   }
@@ -2505,14 +2801,14 @@ function buildSpecificActionFromExamples(themeTitle: string, evidenceCount: numb
   const checklist = deriveChecklistFromExamples(themeTitle, examples);
   if (checklist.length === 0) {
     return hasKoreanText(themeTitle)
-      ? `'${themeTitle}' 관련 반복 리뷰 ${evidenceCount}건을 기준으로 우선 개선 항목을 확정`
-      : `Prioritize '${themeTitle}' updates based on ${evidenceCount} repeated reviews`;
+      ? `'${themeTitle}' 관련 반복 리뷰를 기준으로 우선 개선 항목을 확정`
+      : `Prioritize '${themeTitle}' updates based on repeated reviews`;
   }
 
   if (hasKoreanText(themeTitle)) {
-    return `'${themeTitle}' 개선: ${checklist.join(" / ")} (근거 리뷰 ${evidenceCount}건)`;
+    return `'${themeTitle}' 개선: ${checklist.join(" / ")}`;
   }
-  return `${themeTitle}: ${checklist.join(" / ")} (evidence ${evidenceCount} reviews)`;
+  return `${themeTitle}: ${checklist.join(" / ")}`;
 }
 
 function extractBaseReviewId(scopedReviewId: string): string {
@@ -2625,7 +2921,7 @@ function buildBacklog(apps: AppSection[], reviewPools: ReviewPools): AppBacklog[
       }
     >();
 
-    const appScope = normalizeText(app.title).toLowerCase();
+    const appScope = normalizeScopeToken(parseAppTitle(app.title).sourceToken) || "global";
     for (const categoryKey of BACKLOG_CATEGORY_ORDER) {
       for (const quote of sourceCategories[categoryKey]) {
         const text = `${quote.kr} ${quote.org} ${quote.meta}`.toLowerCase();
@@ -2700,7 +2996,6 @@ function buildBacklog(apps: AppSection[], reviewPools: ReviewPools): AppBacklog[
         return {
           priority,
           title: specificTitle,
-          impact: bucket.theme.impact,
           effort: bucket.theme.effort,
           action: specificAction,
           evidenceCount,
@@ -2728,7 +3023,7 @@ function renderPriorityBadge(priority: Priority): string {
   return `<span class=\"badge badge-${priority}\">${label}</span>`;
 }
 
-function renderLevel(level: Impact | Effort): string {
+function renderLevel(level: Effort): string {
   if (level === "high") {
     return "High";
   }
@@ -2751,7 +3046,7 @@ function renderMetaChip(className: string, content: string | undefined, title?: 
 function renderHtml(
   title: string,
   apps: AppSection[],
-  backlogs: AppBacklog[],
+  backlogItems: BacklogClientItem[],
   ownerAppId: string,
   reviewPools: ReviewPools,
   ownerAppIconMetaHref?: string
@@ -2989,108 +3284,11 @@ function renderHtml(
     )
     .join("");
   const appNoteAppsJson = toInlineJson(appNoteApps);
-
-  const groupedBacklog = new Map<
-    string,
-    {
-      priority: Priority;
-      title: string;
-      impact: Impact;
-      effort: Effort;
-      action: string;
-      evidenceReviewIds: Set<string>;
-      evidenceQuoteById: Map<string, QuoteItem>;
-      appNames: Set<string>;
-    }
-  >();
-
-  for (const appBacklog of backlogs) {
-    const parsedAppTitle = parseAppTitle(appBacklog.appTitle);
-    const appName = normalizeText(parsedAppTitle.displayName);
-
-    for (const item of appBacklog.items) {
-      const groupKey = `${normalizeText(item.title).toLowerCase()}||${normalizeText(item.action).toLowerCase()}`;
-      const existing = groupedBacklog.get(groupKey);
-
-      if (!existing) {
-        const evidenceQuoteById = new Map<string, QuoteItem>();
-        for (const quote of item.examples ?? []) {
-          const quoteKey =
-            normalizeText(quote.evidenceKey).toLowerCase() ||
-            normalizeText(quote.reviewId).toLowerCase() ||
-            `${normalizeText(quote.kr).toLowerCase()}||${normalizeText(quote.org).toLowerCase()}`;
-          if (!quoteKey || evidenceQuoteById.has(quoteKey)) {
-            continue;
-          }
-          evidenceQuoteById.set(quoteKey, quote);
-        }
-
-        groupedBacklog.set(groupKey, {
-          priority: item.priority,
-          title: item.title,
-          impact: item.impact,
-          effort: item.effort,
-          action: item.action,
-          evidenceReviewIds: new Set<string>(item.evidenceReviewIds),
-          evidenceQuoteById,
-          appNames: new Set<string>(appName ? [appName] : []),
-        });
-        continue;
-      }
-
-      for (const reviewId of item.evidenceReviewIds) {
-        existing.evidenceReviewIds.add(reviewId);
-      }
-      if (appName) {
-        existing.appNames.add(appName);
-      }
-      if (priorityOrder(item.priority) < priorityOrder(existing.priority)) {
-        existing.priority = item.priority;
-      }
-      for (const quote of item.examples ?? []) {
-        const quoteKey =
-          normalizeText(quote.evidenceKey).toLowerCase() ||
-          normalizeText(quote.reviewId).toLowerCase() ||
-          `${normalizeText(quote.kr).toLowerCase()}||${normalizeText(quote.org).toLowerCase()}`;
-        if (!quoteKey || existing.evidenceQuoteById.has(quoteKey)) {
-          continue;
-        }
-        existing.evidenceQuoteById.set(quoteKey, quote);
-      }
-    }
-  }
-
-  const unifiedBacklogItems: UnifiedBacklogItem[] = [...groupedBacklog.values()]
-    .map((item, itemIndex) => {
-      const evidenceIds = [...item.evidenceReviewIds];
-      const examples = evidenceIds
-        .map((reviewId) => item.evidenceQuoteById.get(reviewId))
-        .filter((quote): quote is QuoteItem => Boolean(quote));
-
-      return {
-        id: `bg-${itemIndex + 1}`,
-        priority: item.priority,
-        title: item.title,
-        impact: item.impact,
-        effort: item.effort,
-        action: item.action,
-        evidenceCount: item.evidenceReviewIds.size,
-        evidenceReviewIds: evidenceIds,
-        examples,
-        appNames: [...item.appNames].sort((a, b) => a.localeCompare(b))
-      };
-    })
-    .sort((a, b) => {
-      if (priorityOrder(a.priority) !== priorityOrder(b.priority)) {
-        return priorityOrder(a.priority) - priorityOrder(b.priority);
-      }
-      return b.evidenceCount - a.evidenceCount;
-    });
+  const unifiedBacklogItems = hydrateBacklogItems(backlogItems, reviewPools);
   const backlogInitialItems: BacklogClientItem[] = unifiedBacklogItems.map((item) => ({
     id: item.id,
     priority: item.priority,
     title: item.title,
-    impact: item.impact,
     effort: item.effort,
     action: item.action,
     evidenceReviewIds: [...item.evidenceReviewIds],
@@ -3100,7 +3298,7 @@ function renderHtml(
 
   const backlogRows =
     unifiedBacklogItems.length === 0
-      ? `<tr><td colspan=\"5\" class=\"empty\">추출된 리포트 없음</td></tr>`
+      ? `<tr><td colspan=\"4\" class=\"empty\">추출된 리포트 없음</td></tr>`
       : unifiedBacklogItems
           .map((item, itemIndex) => {
             const evidenceId = `evidence-${itemIndex}`;
@@ -3142,10 +3340,10 @@ function renderHtml(
             return `
                   <tr class=\"backlog-item main-row searchable\" data-priority=\"${escapeHtml(
                     item.priority
-                  )}\" data-impact=\"${escapeHtml(item.impact)}\" data-effort=\"${escapeHtml(
+                  )}\" data-effort=\"${escapeHtml(
               item.effort
             )}\" data-search=\"${escapeHtml(
-              `${appLabel} ${item.priority} ${item.impact} ${item.effort} ${item.title} ${item.action} ${(item.examples ?? [])
+              `${appLabel} ${item.priority} ${item.effort} ${item.title} ${item.action} ${(item.examples ?? [])
                 .map((q) => `${q.kr} ${q.org}`)
                 .join(" ")}`
             ).toLowerCase()}\" data-backlog-id=\"${escapeHtml(item.id)}\" data-review-ids=\"${escapeHtml(
@@ -3159,13 +3357,12 @@ function renderHtml(
                       <div class=\"item-edit-actions\">
                         <button class=\"backlog-edit-btn\" type=\"button\" data-backlog-id=\"${escapeHtml(
                           item.id
-                        )}\">리뷰 편집</button>
+                        )}\">백로그 편집</button>
                         <button class=\"backlog-remove-btn\" type=\"button\" data-backlog-id=\"${escapeHtml(
                           item.id
                         )}\">삭제</button>
                       </div>
                     </td>
-                    <td>${renderLevel(item.impact)}</td>
                     <td>${renderLevel(item.effort)}</td>
                     <td>
                       <div class=\"evidence-count-cell\">
@@ -3179,7 +3376,7 @@ function renderHtml(
                     </td>
                   </tr>
                   <tr id=\"${escapeHtml(evidenceId)}\" class=\"evidence-row\">
-                    <td colspan=\"5\">
+                    <td colspan=\"4\">
                       <div class=\"evidence-panel\">
                         <ul class=\"evidence-list\">${examples}</ul>
                       </div>
@@ -3197,7 +3394,6 @@ function renderHtml(
             <colgroup>
               <col class=\"col-priority\" />
               <col class=\"col-item\" />
-              <col class=\"col-impact\" />
               <col class=\"col-effort\" />
               <col class=\"col-evidence\" />
             </colgroup>
@@ -3205,7 +3401,6 @@ function renderHtml(
               <tr>
                 <th>Priority</th>
                 <th>백로그 항목</th>
-                <th>Importance</th>
                 <th>Effort</th>
                 <th>근거 수</th>
               </tr>
@@ -4309,7 +4504,6 @@ function renderHtml(
       .backlog-table col.col-priority {
         width: 112px;
       }
-      .backlog-table col.col-impact,
       .backlog-table col.col-effort {
         width: 118px;
       }
@@ -4477,6 +4671,43 @@ function renderHtml(
         max-height: 42vh;
         overflow-y: auto;
       }
+      .backlog-review-selection-summary {
+        color: #0f172a;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .backlog-editor-selected-list {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .backlog-selected-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 8px;
+        border: 1px solid #bfdbfe;
+        border-radius: 999px;
+        background: #eff6ff;
+        color: #1e3a8a;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .backlog-selected-chip button {
+        min-height: 18px;
+        width: 18px;
+        border: 1px solid #93c5fd;
+        border-radius: 999px;
+        background: #ffffff;
+        color: #1e3a8a;
+        line-height: 1;
+        font-size: 11px;
+        padding: 0;
+      }
+      .backlog-selected-empty {
+        color: #64748b;
+        font-size: 11px;
+      }
       .backlog-review-item {
         display: grid;
         grid-template-columns: 20px minmax(0, auto);
@@ -4487,6 +4718,10 @@ function renderHtml(
         border: 1px solid #dbe7f3;
         border-radius: 10px;
         background: #ffffff;
+      }
+      .backlog-review-item.is-selected {
+        border-color: #7dd3fc;
+        background: #f0f9ff;
       }
       .backlog-review-item input[type="checkbox"] {
         margin-top: 1px;
@@ -4670,6 +4905,7 @@ function renderHtml(
           min-width: 200px;
         }
       }
+      ${backlogReviewPickerStyles}
       @media (max-width: 900px) {
         .top-main {
           display: flex;
@@ -5036,14 +5272,6 @@ function renderHtml(
               </select>
             </label>
             <label class=\"backlog-editor-field\">
-              <span>Importance</span>
-              <select id=\"backlogEditorImpact\">
-                <option value=\"high\">High</option>
-                <option value=\"medium\">Medium</option>
-                <option value=\"low\">Low</option>
-              </select>
-            </label>
-            <label class=\"backlog-editor-field\">
               <span>Effort</span>
               <select id=\"backlogEditorEffort\">
                 <option value=\"high\">High</option>
@@ -5052,18 +5280,16 @@ function renderHtml(
               </select>
             </label>
           </div>
-          <label class=\"backlog-editor-field\">
-            <span>활성 리뷰 검색</span>
-            <input id=\"backlogEditorReviewSearch\" type=\"search\" placeholder=\"리뷰 검색\" />
-          </label>
-          <div id=\"backlogEditorReviewList\" class=\"backlog-review-list\"></div>
+          ${renderBacklogEvidenceSelectorHtml()}
           <div class=\"backlog-editor-foot\">
             <button id=\"backlogEditorDelete\" type=\"button\">백로그 삭제</button>
-            <span id=\"backlogEditorStatus\">변경사항은 Ctrl/Cmd + S로 저장할 수 있습니다.</span>
+            <span id=\"backlogEditorStatus\">적용 시 즉시 저장됩니다.</span>
           </div>
         </div>
       </aside>
     </div>
+
+    ${renderBacklogReviewPickerModalHtml()}
 
     <div id=\"filterPanelRoot\" class=\"filter-panel-root\" hidden aria-hidden=\"true\">
       <button id=\"filterPanelBackdrop\" class=\"filter-panel-backdrop\" type=\"button\" aria-label=\"필터 닫기\"></button>
@@ -5119,15 +5345,6 @@ function renderHtml(
               </div>
             </div>
             <div class=\"filter-field\">
-              <p class=\"filter-field-title\">Importance</p>
-              <div id=\"backlogImportanceFilter\" class=\"exclude-filter\" role=\"group\" aria-label=\"Importance 필터\">
-                <button type=\"button\" class=\"exclude-filter-btn is-active\" data-backlog-importance-filter=\"all\">전체</button>
-                <button type=\"button\" class=\"exclude-filter-btn\" data-backlog-importance-filter=\"high\">High</button>
-                <button type=\"button\" class=\"exclude-filter-btn\" data-backlog-importance-filter=\"medium\">Medium</button>
-                <button type=\"button\" class=\"exclude-filter-btn\" data-backlog-importance-filter=\"low\">Low</button>
-              </div>
-            </div>
-            <div class=\"filter-field\">
               <p class=\"filter-field-title\">Effort</p>
               <div id=\"backlogEffortFilter\" class=\"exclude-filter\" role=\"group\" aria-label=\"Effort 필터\">
                 <button type=\"button\" class=\"exclude-filter-btn is-active\" data-backlog-effort-filter=\"all\">전체</button>
@@ -5172,13 +5389,9 @@ function renderHtml(
       const backlogSummaryLine = document.getElementById('backlogSummaryLine');
       const backlogTableBody = document.getElementById('backlogTableBody');
       const backlogPriorityFilter = document.getElementById('backlogPriorityFilter');
-      const backlogImportanceFilter = document.getElementById('backlogImportanceFilter');
       const backlogEffortFilter = document.getElementById('backlogEffortFilter');
       const backlogPriorityFilterButtons = backlogPriorityFilter
         ? Array.from(backlogPriorityFilter.querySelectorAll('[data-backlog-priority-filter]'))
-        : [];
-      const backlogImportanceFilterButtons = backlogImportanceFilter
-        ? Array.from(backlogImportanceFilter.querySelectorAll('[data-backlog-importance-filter]'))
         : [];
       const backlogEffortFilterButtons = backlogEffortFilter
         ? Array.from(backlogEffortFilter.querySelectorAll('[data-backlog-effort-filter]'))
@@ -5197,10 +5410,22 @@ function renderHtml(
       const backlogEditorTitle = document.getElementById('backlogEditorTitle');
       const backlogEditorAction = document.getElementById('backlogEditorAction');
       const backlogEditorPriority = document.getElementById('backlogEditorPriority');
-      const backlogEditorImpact = document.getElementById('backlogEditorImpact');
       const backlogEditorEffort = document.getElementById('backlogEditorEffort');
       const backlogEditorReviewSearch = document.getElementById('backlogEditorReviewSearch');
+      const backlogEditorSelectionSummary = document.getElementById('backlogEditorSelectionSummary');
+      const backlogEditorSelectVisible = document.getElementById('backlogEditorSelectVisible');
+      const backlogEditorClearSelection = document.getElementById('backlogEditorClearSelection');
+      const backlogEditorSelectedList = document.getElementById('backlogEditorSelectedList');
       const backlogEditorReviewList = document.getElementById('backlogEditorReviewList');
+      const openBacklogReviewPicker = document.getElementById('openBacklogReviewPicker');
+      const backlogReviewPickerRoot = document.getElementById('backlogReviewPickerRoot');
+      const backlogReviewPickerBackdrop = document.getElementById('backlogReviewPickerBackdrop');
+      const backlogReviewPickerClose = document.getElementById('backlogReviewPickerClose');
+      const backlogReviewPickerDone = document.getElementById('backlogReviewPickerDone');
+      const backlogReviewPickerPrev = document.getElementById('backlogReviewPickerPrev');
+      const backlogReviewPickerNext = document.getElementById('backlogReviewPickerNext');
+      const backlogReviewPickerPageInfo = document.getElementById('backlogReviewPickerPageInfo');
+      const backlogReviewPickerSelectedCount = document.getElementById('backlogReviewPickerSelectedCount');
       const openNoteSidebarButton = document.getElementById('openNoteSidebar');
       const tabRaw = document.getElementById('tabRaw');
       const tabBacklog = document.getElementById('tabBacklog');
@@ -5243,7 +5468,6 @@ function renderHtml(
             id: String(item && item.id ? item.id : ''),
             priority: String(item && item.priority ? item.priority : 'should').toLowerCase(),
             title: String(item && item.title ? item.title : '').trim(),
-            impact: String(item && item.impact ? item.impact : 'medium').toLowerCase(),
             effort: String(item && item.effort ? item.effort : 'medium').toLowerCase(),
             action: String(item && item.action ? item.action : '').trim(),
             evidenceReviewIds: Array.isArray(item && item.evidenceReviewIds)
@@ -5260,6 +5484,11 @@ function renderHtml(
       let backlogEditorMode = 'create';
       let backlogEditorItemId = '';
       let backlogEditorSelection = new Set();
+      let backlogEditorVisibleScopedReviewIds = [];
+      let backlogEditorSaving = false;
+      let backlogReviewPickerPage = 1;
+      const BACKLOG_REVIEW_PICKER_PAGE_SIZE = 20;
+      let backlogSaveTimer = 0;
       const searchableTextCache = new WeakMap();
       let saveStateTimer = null;
       let searchApplyRaf = 0;
@@ -5269,7 +5498,6 @@ function renderHtml(
       let rawFilteredCount = rawCards.length;
       let excludeFilterMode = 'all';
       let backlogPriorityFilterMode = 'all';
-      let backlogImportanceFilterMode = 'all';
       let backlogEffortFilterMode = 'all';
       let noteDirty = false;
       const selectedTagFilters = new Set();
@@ -5286,7 +5514,6 @@ function renderHtml(
       const MIN_LENGTH_QUERY_KEY = 'min100';
       const SHOW_ORIGINAL_QUERY_KEY = 'orig';
       const PRIORITY_QUERY_KEY = 'priority';
-      const IMPORTANCE_QUERY_KEY = 'importance';
       const EFFORT_QUERY_KEY = 'effort';
       const TAB_REVIEW_VALUES = new Set(['reviews', 'review', 'raw']);
       const TAB_REPORT_VALUES = new Set(['reports', 'report', 'backlog']);
@@ -5346,13 +5573,56 @@ function renderHtml(
         return 'medium';
       }
 
+      function sanitizeBacklogTitle(value) {
+        return String(value || '').trim();
+      }
+
+      function sanitizeBacklogAction(value) {
+        const text = String(value || '').trim();
+        return text
+          .replace(/\(\s*근거\s*리뷰\s*\d+\s*건\s*\)/gi, '')
+          .replace(/\(\s*evidence\s*\d+\s*reviews?\s*\)/gi, '')
+          .replace(/근거\s*리뷰\s*\d+\s*건/gi, '')
+          .replace(/evidence\s*\d+\s*reviews?/gi, '')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+      }
+
+      function normalizeBacklogSimilarityText(value) {
+        return String(value || '')
+          .trim()
+          .toLowerCase()
+          .replace(/\(\s*근거\s*리뷰\s*\d+\s*건\s*\)/gi, '')
+          .replace(/\(\s*evidence\s*\d+\s*reviews?\s*\)/gi, '')
+          .replace(/[^a-z0-9가-힣]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
+      function createBacklogSimilarityKey(item) {
+        const title = normalizeBacklogSimilarityText(item && item.title);
+        const action = normalizeBacklogSimilarityText(item && item.action);
+        return title + '||' + action;
+      }
+
+      function backlogLevelRank(level) {
+        const normalized = normalizeBacklogLevel(level);
+        if (normalized === 'high') {
+          return 3;
+        }
+        if (normalized === 'medium') {
+          return 2;
+        }
+        return 1;
+      }
+
       function normalizeBacklogItem(input) {
         const row = input && typeof input === 'object' ? input : {};
         const evidenceReviewIds = Array.isArray(row.evidenceReviewIds)
           ? Array.from(
               new Set(
                 row.evidenceReviewIds
-                  .map((value) => parseScopedReviewId(String(value || '').trim()).reviewId)
+                  .map((value) => normalizeScopedReviewId(String(value || '').trim(), 'global'))
                   .filter(Boolean)
               )
             )
@@ -5364,10 +5634,9 @@ function renderHtml(
         const item = {
           id: String(row.id || '').trim(),
           priority: normalizeBacklogPriority(row.priority),
-          title: String(row.title || '').trim(),
-          impact: normalizeBacklogLevel(row.impact),
+          title: sanitizeBacklogTitle(row.title),
           effort: normalizeBacklogLevel(row.effort),
-          action: String(row.action || '').trim(),
+          action: sanitizeBacklogAction(row.action),
           evidenceReviewIds,
           appNames
         };
@@ -5439,7 +5708,6 @@ function renderHtml(
           minLength100: false,
           showOriginal: false,
           backlogPriorityMode: 'all',
-          backlogImportanceMode: 'all',
           backlogEffortMode: 'all'
         };
 
@@ -5469,7 +5737,6 @@ function renderHtml(
 
           const priorityMode = String(params.get(PRIORITY_QUERY_KEY) || '').trim().toLowerCase();
           initial.backlogPriorityMode = PRIORITY_FILTER_MODES.has(priorityMode) ? priorityMode : 'all';
-          initial.backlogImportanceMode = normalizeBacklogLevelFilter(params.get(IMPORTANCE_QUERY_KEY));
           initial.backlogEffortMode = normalizeBacklogLevelFilter(params.get(EFFORT_QUERY_KEY));
         } catch {}
 
@@ -5493,7 +5760,6 @@ function renderHtml(
           const priorityMode = PRIORITY_FILTER_MODES.has(backlogPriorityFilterMode)
             ? backlogPriorityFilterMode
             : 'all';
-          const importanceMode = normalizeBacklogLevelFilter(backlogImportanceFilterMode);
           const effortMode = normalizeBacklogLevelFilter(backlogEffortFilterMode);
 
           nextParams.set(TAB_QUERY_KEY, activeRawTab ? 'reviews' : 'reports');
@@ -5532,12 +5798,6 @@ function renderHtml(
             nextParams.set(PRIORITY_QUERY_KEY, priorityMode);
           } else {
             nextParams.delete(PRIORITY_QUERY_KEY);
-          }
-
-          if (importanceMode !== 'all') {
-            nextParams.set(IMPORTANCE_QUERY_KEY, importanceMode);
-          } else {
-            nextParams.delete(IMPORTANCE_QUERY_KEY);
           }
 
           if (effortMode !== 'all') {
@@ -5595,16 +5855,40 @@ function renderHtml(
         return String(match[1] || '').trim() || text;
       }
 
-      function normalizeAppScope(rawTitle) {
-        return String(rawTitle || '').trim().toLowerCase();
+      function normalizeScopeToken(scope) {
+        const normalized = String(scope || '').trim().toLowerCase();
+        if (!normalized) {
+          return '';
+        }
+        return normalized.replace(/\s+/g, '-').replace(/[^a-z0-9._-]+/g, '');
+      }
+
+      function parseSourceTokenFromAppTitle(rawTitle) {
+        const text = String(rawTitle || '').trim();
+        const match = text.match(/^(.*)\(([^()]+)\)\s*$/);
+        if (!match) {
+          return '';
+        }
+        return normalizeScopeToken(String(match[2] || ''));
+      }
+
+      function normalizeScopedReviewId(scopedReviewId, fallbackScope) {
+        const normalized = String(scopedReviewId || '').trim();
+        if (!normalized) {
+          return '';
+        }
+        const parsed = parseScopedReviewId(normalized);
+        const reviewId = String(parsed.reviewId || '').trim();
+        if (!reviewId) {
+          return '';
+        }
+        const scope = normalizeScopeToken(parsed.appScope || fallbackScope || 'global') || 'global';
+        return scope + '::' + reviewId;
       }
 
       function createScopedReviewId(appTitle, reviewId) {
-        const baseReviewId = String(reviewId || '').trim();
-        if (!baseReviewId) {
-          return '';
-        }
-        return parseScopedReviewId(baseReviewId).reviewId || baseReviewId;
+        const scope = parseSourceTokenFromAppTitle(appTitle) || 'global';
+        return normalizeScopedReviewId(reviewId, scope);
       }
 
       function parseScopedReviewId(scopedReviewId) {
@@ -5617,7 +5901,7 @@ function renderHtml(
           return { appScope: '', reviewId: normalized };
         }
         return {
-          appScope: normalized.slice(0, delimiterIndex).trim(),
+          appScope: normalizeScopeToken(normalized.slice(0, delimiterIndex)),
           reviewId: normalized.slice(delimiterIndex + 2).trim()
         };
       }
@@ -5666,23 +5950,105 @@ function renderHtml(
         return catalog;
       }
 
-      function createReviewCardsByReviewIdMap() {
+      function createScopedIdsByReviewIdMap(catalogByScopedId) {
         const bucket = new Map();
-        rawCards.forEach((card) => {
-          const reviewId = getCardReviewId(card);
+        catalogByScopedId.forEach((item, scopedReviewId) => {
+          const reviewId = String(item && item.reviewId || '').trim();
           if (!reviewId) {
             return;
           }
-          if (!bucket.has(reviewId)) {
-            bucket.set(reviewId, []);
+          const list = bucket.get(reviewId) || [];
+          list.push(scopedReviewId);
+          bucket.set(reviewId, list);
+        });
+        return bucket;
+      }
+
+      function createReviewCardsByScopedIdMap() {
+        const bucket = new Map();
+        rawCards.forEach((card) => {
+          const catalogItem = buildReviewCatalogItem(card);
+          if (!catalogItem || !catalogItem.scopedReviewId) {
+            return;
           }
-          bucket.get(reviewId).push(card);
+          if (!bucket.has(catalogItem.scopedReviewId)) {
+            bucket.set(catalogItem.scopedReviewId, []);
+          }
+          bucket.get(catalogItem.scopedReviewId).push(card);
         });
         return bucket;
       }
 
       const reviewCatalogByScopedId = createReviewCatalogMap();
-      const reviewCardsByReviewId = createReviewCardsByReviewIdMap();
+      const scopedIdsByReviewId = createScopedIdsByReviewIdMap(reviewCatalogByScopedId);
+      const reviewCardsByScopedId = createReviewCardsByScopedIdMap();
+
+      function normalizeCatalogAppName(value) {
+        return String(value || '')
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, ' ')
+          .replace(/[^a-z0-9가-힣]+/g, '');
+      }
+
+      function canonicalizeScopedReviewIdForCatalog(scopedReviewId, fallbackScope, preferredAppNames) {
+        const normalizedScoped = normalizeScopedReviewId(scopedReviewId, fallbackScope || 'global');
+        if (!normalizedScoped) {
+          return '';
+        }
+        if (reviewCatalogByScopedId.has(normalizedScoped)) {
+          return normalizedScoped;
+        }
+
+        const parsed = parseScopedReviewId(normalizedScoped);
+        const reviewId = String(parsed.reviewId || '').trim();
+        if (!reviewId) {
+          return normalizedScoped;
+        }
+        const candidates = scopedIdsByReviewId.get(reviewId);
+        if (Array.isArray(candidates) && candidates.length > 0) {
+          if (candidates.length === 1) {
+            return candidates[0];
+          }
+
+          const preferredNameSet = new Set();
+          const preferredSource = preferredAppNames instanceof Set
+            ? Array.from(preferredAppNames)
+            : Array.isArray(preferredAppNames)
+              ? preferredAppNames
+              : [];
+          preferredSource.forEach((value) => {
+            const normalized = normalizeCatalogAppName(value);
+            if (normalized) {
+              preferredNameSet.add(normalized);
+            }
+          });
+
+          if (preferredNameSet.size > 0) {
+            for (const candidateId of candidates) {
+              const catalog = reviewCatalogByScopedId.get(candidateId);
+              if (!catalog) {
+                continue;
+              }
+              const appKey = normalizeCatalogAppName(catalog.appDisplayTitle);
+              if (appKey && preferredNameSet.has(appKey)) {
+                return candidateId;
+              }
+            }
+          }
+
+          const parsedScope = normalizeScopeToken(parsed.appScope);
+          if (parsedScope) {
+            const scopeMatched = candidates.find((candidateId) => String(candidateId || '').startsWith(parsedScope + '::'));
+            if (scopeMatched) {
+              return scopeMatched;
+            }
+          }
+
+          return candidates[0];
+        }
+        return normalizedScoped;
+      }
 
       function activeScopedReviewIds() {
         const ids = new Set();
@@ -5862,11 +6228,6 @@ function renderHtml(
         syncBacklogFilterButtons();
       }
 
-      function setBacklogImportanceFilterMode(mode) {
-        backlogImportanceFilterMode = normalizeBacklogLevelFilter(mode);
-        syncBacklogFilterButtons();
-      }
-
       function setBacklogEffortFilterMode(mode) {
         backlogEffortFilterMode = normalizeBacklogLevelFilter(mode);
         syncBacklogFilterButtons();
@@ -5881,14 +6242,6 @@ function renderHtml(
           button.classList.toggle('is-active', mode === backlogPriorityFilterMode);
         });
 
-        backlogImportanceFilterButtons.forEach((button) => {
-          if (!(button instanceof HTMLElement)) {
-            return;
-          }
-          const mode = String(button.getAttribute('data-backlog-importance-filter') || '').trim().toLowerCase();
-          button.classList.toggle('is-active', mode === backlogImportanceFilterMode);
-        });
-
         backlogEffortFilterButtons.forEach((button) => {
           if (!(button instanceof HTMLElement)) {
             return;
@@ -5898,25 +6251,29 @@ function renderHtml(
         });
       }
 
-      function activateReviewId(reviewId) {
-        const normalizedReviewId = String(reviewId || '').trim();
-        if (!normalizedReviewId) {
+      function activateScopedReviewId(scopedReviewId) {
+        const normalizedScopedReviewId = canonicalizeScopedReviewIdForCatalog(scopedReviewId, 'global');
+        if (!normalizedScopedReviewId) {
           return false;
         }
 
-        const cards = reviewCardsByReviewId.get(normalizedReviewId);
+        const cards = reviewCardsByScopedId.get(normalizedScopedReviewId);
         if (!Array.isArray(cards) || cards.length === 0) {
           return false;
         }
 
         let changed = false;
         cards.forEach((card) => {
-          const state = readCardState(normalizedReviewId, card);
+          const reviewId = getCardReviewId(card);
+          if (!reviewId) {
+            return;
+          }
+          const state = readCardState(reviewId, card);
           if (!state.excluded) {
             return;
           }
           state.excluded = false;
-          writeCardState(normalizedReviewId, state, card);
+          writeCardState(reviewId, state, card);
           syncCardStateVisual(card);
           changed = true;
         });
@@ -5927,8 +6284,7 @@ function renderHtml(
         const source = Array.isArray(scopedReviewIds) ? scopedReviewIds : [];
         let changed = false;
         source.forEach((scopedReviewId) => {
-          const reviewId = parseScopedReviewId(scopedReviewId).reviewId;
-          if (activateReviewId(reviewId)) {
+          if (activateScopedReviewId(scopedReviewId)) {
             changed = true;
           }
         });
@@ -5967,7 +6323,6 @@ function renderHtml(
       function buildBacklogSearchText(item, evidenceRows) {
         const textParts = [
           item.priority,
-          item.impact,
           item.effort,
           item.title,
           item.action,
@@ -5986,9 +6341,12 @@ function renderHtml(
 
       function normalizeBacklogStateItems() {
         const seenIds = new Set();
-        backlogStateItems = backlogStateItems
+        const dedupeKeyToId = new Map();
+        const mergedById = new Map();
+
+        backlogStateItems
           .map((row) => normalizeBacklogItem(row))
-          .map((item) => {
+          .forEach((item) => {
             let nextId = String(item.id || '').trim();
             if (!nextId || seenIds.has(nextId)) {
               nextId = createBacklogId();
@@ -5997,29 +6355,75 @@ function renderHtml(
 
             const appNames = Array.isArray(item.appNames) ? [...item.appNames] : [];
             const derivedAppNames = new Set(appNames.map((name) => String(name || '').trim()).filter(Boolean));
-            item.evidenceReviewIds.forEach((scopedReviewId) => {
+            const canonicalEvidenceReviewIds = (Array.isArray(item.evidenceReviewIds) ? item.evidenceReviewIds : [])
+              .map((scopedReviewId) => canonicalizeScopedReviewIdForCatalog(scopedReviewId, 'global', derivedAppNames))
+              .filter(Boolean);
+            canonicalEvidenceReviewIds.forEach((scopedReviewId) => {
               const catalog = reviewCatalogByScopedId.get(scopedReviewId);
               if (catalog && catalog.appDisplayTitle) {
                 derivedAppNames.add(catalog.appDisplayTitle);
               }
             });
 
-            return {
+            const normalizedItem = {
               ...item,
               id: nextId,
-              evidenceReviewIds: Array.from(new Set(item.evidenceReviewIds)),
+              evidenceReviewIds: Array.from(new Set(canonicalEvidenceReviewIds)),
               appNames: Array.from(derivedAppNames).sort((a, b) => a.localeCompare(b))
             };
-          })
-          .sort((a, b) => {
-            if (backlogPriorityRank(a.priority) !== backlogPriorityRank(b.priority)) {
-              return backlogPriorityRank(a.priority) - backlogPriorityRank(b.priority);
+
+            const dedupeKey = createBacklogSimilarityKey(normalizedItem);
+            const mergedId = dedupeKeyToId.get(dedupeKey) || normalizedItem.id;
+            if (!dedupeKeyToId.has(dedupeKey)) {
+              dedupeKeyToId.set(dedupeKey, mergedId);
             }
-            if (b.evidenceReviewIds.length !== a.evidenceReviewIds.length) {
-              return b.evidenceReviewIds.length - a.evidenceReviewIds.length;
+
+            const existing = mergedById.get(mergedId);
+            if (!existing) {
+              mergedById.set(mergedId, {
+                ...normalizedItem,
+                id: mergedId
+              });
+              return;
             }
-            return String(a.title || '').localeCompare(String(b.title || ''));
+
+            const mergedEvidenceIds = Array.from(
+              new Set([...(existing.evidenceReviewIds || []), ...(normalizedItem.evidenceReviewIds || [])])
+            );
+            const mergedAppNames = Array.from(
+              new Set([...(existing.appNames || []), ...(normalizedItem.appNames || [])])
+            ).sort((a, b) => String(a).localeCompare(String(b)));
+
+            mergedById.set(mergedId, {
+              ...existing,
+              priority:
+                backlogPriorityRank(normalizedItem.priority) < backlogPriorityRank(existing.priority)
+                  ? normalizedItem.priority
+                  : existing.priority,
+              effort:
+                backlogLevelRank(normalizedItem.effort) > backlogLevelRank(existing.effort)
+                  ? normalizedItem.effort
+                  : existing.effort,
+              title: String(normalizedItem.title || '').length > String(existing.title || '').length
+                ? normalizedItem.title
+                : existing.title,
+              action: String(normalizedItem.action || '').length > String(existing.action || '').length
+                ? normalizedItem.action
+                : existing.action,
+              evidenceReviewIds: mergedEvidenceIds,
+              appNames: mergedAppNames
+            });
           });
+
+        backlogStateItems = Array.from(mergedById.values()).sort((a, b) => {
+          if (backlogPriorityRank(a.priority) !== backlogPriorityRank(b.priority)) {
+            return backlogPriorityRank(a.priority) - backlogPriorityRank(b.priority);
+          }
+          if (b.evidenceReviewIds.length !== a.evidenceReviewIds.length) {
+            return b.evidenceReviewIds.length - a.evidenceReviewIds.length;
+          }
+          return String(a.title || '').localeCompare(String(b.title || ''));
+        });
       }
 
       function syncBacklogSummary() {
@@ -6175,7 +6579,6 @@ function renderHtml(
 
             const searchText = buildBacklogSearchText(item, evidenceRows);
             const priorityValue = normalizeBacklogPriority(item.priority);
-            const impactValue = normalizeBacklogLevel(item.impact);
             const effortValue = normalizeBacklogLevel(item.effort);
             const backlogIdValue = escapeInlineHtml(item.id);
             const prioritySelectHtml =
@@ -6191,20 +6594,6 @@ function renderHtml(
               '<option value=\"could\"' +
               (priorityValue === 'could' ? ' selected' : '') +
               '>COULD</option>' +
-              '</select>';
-            const importanceSelectHtml =
-              '<select class=\"backlog-inline-select\" data-backlog-id=\"' +
-              backlogIdValue +
-              '\" data-backlog-field=\"impact\" aria-label=\"백로그 중요도\">' +
-              '<option value=\"high\"' +
-              (impactValue === 'high' ? ' selected' : '') +
-              '>High</option>' +
-              '<option value=\"medium\"' +
-              (impactValue === 'medium' ? ' selected' : '') +
-              '>Medium</option>' +
-              '<option value=\"low\"' +
-              (impactValue === 'low' ? ' selected' : '') +
-              '>Low</option>' +
               '</select>';
             const effortSelectHtml =
               '<select class=\"backlog-inline-select\" data-backlog-id=\"' +
@@ -6224,8 +6613,6 @@ function renderHtml(
             return (
               '<tr class=\"backlog-item main-row searchable\" data-priority=\"' +
               escapeInlineHtml(priorityValue) +
-              '\" data-impact=\"' +
-              escapeInlineHtml(impactValue) +
               '\" data-effort=\"' +
               escapeInlineHtml(effortValue) +
               '\" data-search=\"' +
@@ -6255,14 +6642,11 @@ function renderHtml(
               '<div class=\"item-edit-actions\">' +
               '<button class=\"backlog-edit-btn\" type=\"button\" data-backlog-id=\"' +
               escapeInlineHtml(item.id) +
-              '\">리뷰 편집</button>' +
+              '\">백로그 편집</button>' +
               '<button class=\"backlog-remove-btn\" type=\"button\" data-backlog-id=\"' +
               escapeInlineHtml(item.id) +
               '\">삭제</button>' +
               '</div>' +
-              '</td>' +
-              '<td>' +
-              importanceSelectHtml +
               '</td>' +
               '<td>' +
               effortSelectHtml +
@@ -6283,7 +6667,7 @@ function renderHtml(
               '<tr id=\"' +
               escapeInlineHtml(evidenceId) +
               '\" class=\"evidence-row\">' +
-              '<td colspan=\"5\">' +
+              '<td colspan=\"4\">' +
               '<div class=\"evidence-panel\"><ul class=\"evidence-list\">' +
               evidenceListHtml +
               '</ul></div>' +
@@ -6307,6 +6691,13 @@ function renderHtml(
       }
 
       function closeBacklogEditor() {
+        if (backlogEditorSaving) {
+          return;
+        }
+        if (backlogReviewPickerRoot instanceof HTMLElement) {
+          backlogReviewPickerRoot.hidden = true;
+          backlogReviewPickerRoot.setAttribute('aria-hidden', 'true');
+        }
         if (backlogEditorRoot instanceof HTMLElement) {
           backlogEditorRoot.classList.remove('is-open');
           if (backlogEditorCloseTimer) {
@@ -6340,40 +6731,181 @@ function renderHtml(
         return rows;
       }
 
+      function syncBacklogEditorControlState() {
+        if (backlogEditorSave instanceof HTMLButtonElement) {
+          backlogEditorSave.disabled = backlogEditorSaving;
+        }
+        if (backlogEditorClose instanceof HTMLButtonElement) {
+          backlogEditorClose.disabled = backlogEditorSaving;
+        }
+        if (backlogEditorDelete instanceof HTMLButtonElement) {
+          backlogEditorDelete.disabled = backlogEditorSaving || backlogEditorMode !== 'edit';
+        }
+        if (openBacklogReviewPicker instanceof HTMLButtonElement) {
+          openBacklogReviewPicker.disabled = backlogEditorSaving;
+        }
+        if (backlogEditorReviewSearch instanceof HTMLInputElement) {
+          backlogEditorReviewSearch.disabled = backlogEditorSaving;
+        }
+        if (backlogEditorSelectVisible instanceof HTMLButtonElement) {
+          backlogEditorSelectVisible.disabled = backlogEditorSaving;
+        }
+        if (backlogEditorClearSelection instanceof HTMLButtonElement) {
+          backlogEditorClearSelection.disabled = backlogEditorSaving;
+        }
+        if (backlogReviewPickerClose instanceof HTMLButtonElement) {
+          backlogReviewPickerClose.disabled = backlogEditorSaving;
+        }
+        if (backlogReviewPickerDone instanceof HTMLButtonElement) {
+          backlogReviewPickerDone.disabled = backlogEditorSaving;
+        }
+        if (backlogReviewPickerPrev instanceof HTMLButtonElement) {
+          backlogReviewPickerPrev.disabled = backlogEditorSaving || backlogReviewPickerPage <= 1;
+        }
+        if (backlogReviewPickerNext instanceof HTMLButtonElement) {
+          const candidates = getFilteredBacklogEditorCandidates();
+          const totalPages = Math.max(1, Math.ceil(candidates.length / BACKLOG_REVIEW_PICKER_PAGE_SIZE));
+          backlogReviewPickerNext.disabled = backlogEditorSaving || backlogReviewPickerPage >= totalPages;
+        }
+      }
+
+      function setBacklogEditorSaving(value) {
+        backlogEditorSaving = Boolean(value);
+        syncBacklogEditorControlState();
+      }
+
+      function openBacklogReviewPickerModal() {
+        if (!(backlogReviewPickerRoot instanceof HTMLElement)) {
+          return;
+        }
+        backlogReviewPickerPage = 1;
+        renderBacklogEditorReviewList();
+        backlogReviewPickerRoot.hidden = false;
+        backlogReviewPickerRoot.setAttribute('aria-hidden', 'false');
+      }
+
+      function closeBacklogReviewPickerModal() {
+        if (!(backlogReviewPickerRoot instanceof HTMLElement) || backlogEditorSaving) {
+          return;
+        }
+        backlogReviewPickerRoot.hidden = true;
+        backlogReviewPickerRoot.setAttribute('aria-hidden', 'true');
+      }
+
+      function getFilteredBacklogEditorCandidates() {
+        const query = backlogEditorReviewSearch instanceof HTMLInputElement
+          ? backlogEditorReviewSearch.value.trim().toLowerCase()
+          : '';
+        return activeReviewCandidates()
+          .filter((review) => {
+            if (!query) {
+              return true;
+            }
+            const text = [
+              review.appDisplayTitle,
+              review.reviewId,
+              review.quoteKr,
+              review.quoteOrg,
+              review.quoteMeta,
+              review.searchable
+            ]
+              .join(' ')
+              .toLowerCase();
+            return text.includes(query);
+          })
+          .sort((a, b) => {
+            const aSelected = backlogEditorSelection.has(a.scopedReviewId) ? 0 : 1;
+            const bSelected = backlogEditorSelection.has(b.scopedReviewId) ? 0 : 1;
+            if (aSelected !== bSelected) {
+              return aSelected - bSelected;
+            }
+            if (a.appDisplayTitle !== b.appDisplayTitle) {
+              return a.appDisplayTitle.localeCompare(b.appDisplayTitle);
+            }
+            return a.reviewId.localeCompare(b.reviewId);
+          });
+      }
+
+      function syncBacklogEditorSelectionUi() {
+        const selectedCount = backlogEditorSelection.size;
+        if (backlogEditorSelectionSummary instanceof HTMLElement) {
+          backlogEditorSelectionSummary.textContent = '선택 ' + selectedCount + '개';
+        }
+        if (backlogReviewPickerSelectedCount instanceof HTMLElement) {
+          backlogReviewPickerSelectedCount.textContent = '선택 ' + selectedCount + '개';
+        }
+      }
+
+      function renderBacklogEditorSelectedList() {
+        if (!(backlogEditorSelectedList instanceof HTMLElement)) {
+          return;
+        }
+        const selectedIds = Array.from(backlogEditorSelection);
+        if (selectedIds.length === 0) {
+          backlogEditorSelectedList.innerHTML = '<span class=\"backlog-selected-empty\">선택된 리뷰가 없습니다.</span>';
+          return;
+        }
+
+        const catalogRows = activeReviewCandidates();
+        const catalogById = new Map(catalogRows.map((review) => [review.scopedReviewId, review]));
+        backlogEditorSelectedList.innerHTML = selectedIds
+          .map((scopedReviewId) => {
+            const review = catalogById.get(scopedReviewId);
+            const appName = review ? review.appDisplayTitle : 'Unknown App';
+            const reviewId = review ? review.reviewId : parseScopedReviewId(scopedReviewId).reviewId;
+            return (
+              '<span class=\"backlog-selected-chip\">' +
+              escapeInlineHtml(appName + ' · ' + reviewId) +
+              '<button type=\"button\" data-backlog-selected-remove=\"' +
+              escapeInlineHtml(scopedReviewId) +
+              '\" aria-label=\"선택 해제\">×</button>' +
+              '</span>'
+            );
+          })
+          .join('');
+      }
+
       function renderBacklogEditorReviewList() {
         if (!(backlogEditorReviewList instanceof HTMLElement)) {
           return;
         }
-        const query = backlogEditorReviewSearch instanceof HTMLInputElement
-          ? backlogEditorReviewSearch.value.trim().toLowerCase()
-          : '';
-        const candidates = activeReviewCandidates().filter((review) => {
-          if (!query) {
-            return true;
-          }
-          const text = [
-            review.appDisplayTitle,
-            review.reviewId,
-            review.quoteKr,
-            review.quoteOrg,
-            review.quoteMeta,
-            review.searchable
-          ]
-            .join(' ')
-            .toLowerCase();
-          return text.includes(query);
-        });
+        const candidates = getFilteredBacklogEditorCandidates();
+        const totalPages = Math.max(1, Math.ceil(candidates.length / BACKLOG_REVIEW_PICKER_PAGE_SIZE));
+        if (backlogReviewPickerPage > totalPages) {
+          backlogReviewPickerPage = totalPages;
+        }
+        if (backlogReviewPickerPage < 1) {
+          backlogReviewPickerPage = 1;
+        }
+        const startIndex = (backlogReviewPickerPage - 1) * BACKLOG_REVIEW_PICKER_PAGE_SIZE;
+        const pageRows = candidates.slice(startIndex, startIndex + BACKLOG_REVIEW_PICKER_PAGE_SIZE);
+        backlogEditorVisibleScopedReviewIds = pageRows.map((review) => review.scopedReviewId);
+        renderBacklogEditorSelectedList();
+        syncBacklogEditorSelectionUi();
+        if (backlogReviewPickerPageInfo instanceof HTMLElement) {
+          backlogReviewPickerPageInfo.textContent =
+            String(backlogReviewPickerPage) + ' / ' + String(totalPages) + ' · ' + String(candidates.length) + '개';
+        }
+        if (backlogReviewPickerPrev instanceof HTMLButtonElement) {
+          backlogReviewPickerPrev.disabled = backlogEditorSaving || backlogReviewPickerPage <= 1;
+        }
+        if (backlogReviewPickerNext instanceof HTMLButtonElement) {
+          backlogReviewPickerNext.disabled = backlogEditorSaving || backlogReviewPickerPage >= totalPages;
+        }
 
         if (!candidates.length) {
           backlogEditorReviewList.innerHTML = '<div class=\"backlog-review-empty\">활성 리뷰가 없거나 검색 결과가 없습니다.</div>';
           return;
         }
 
-        backlogEditorReviewList.innerHTML = candidates
+        backlogEditorReviewList.innerHTML = pageRows
           .map((review) => {
             const checked = backlogEditorSelection.has(review.scopedReviewId) ? ' checked' : '';
+            const selectedClass = checked ? ' is-selected' : '';
             return (
-              '<label class=\"backlog-review-item\" data-scoped-review-id=\"' +
+              '<label class=\"backlog-review-item' +
+              selectedClass +
+              '\" data-scoped-review-id=\"' +
               escapeInlineHtml(review.scopedReviewId) +
               '\">' +
               '<input type=\"checkbox\" value=\"' +
@@ -6401,6 +6933,9 @@ function renderHtml(
         backlogEditorMode = normalizedMode;
         backlogEditorItemId = normalizedMode === 'edit' ? String(backlogId || '').trim() : '';
         backlogEditorSelection = new Set();
+        backlogEditorVisibleScopedReviewIds = [];
+        backlogReviewPickerPage = 1;
+        setBacklogEditorSaving(false);
 
         const targetItem = backlogStateItems.find((item) => item.id === backlogEditorItemId);
         const activeIds = activeScopedReviewIds();
@@ -6411,7 +6946,6 @@ function renderHtml(
               id: createBacklogId(),
               priority: 'should',
               title: '',
-              impact: 'medium',
               effort: 'medium',
               action: '',
               evidenceReviewIds: [],
@@ -6433,27 +6967,23 @@ function renderHtml(
         if (backlogEditorPriority instanceof HTMLSelectElement) {
           backlogEditorPriority.value = normalizeBacklogPriority(draft.priority);
         }
-        if (backlogEditorImpact instanceof HTMLSelectElement) {
-          backlogEditorImpact.value = normalizeBacklogLevel(draft.impact);
-        }
         if (backlogEditorEffort instanceof HTMLSelectElement) {
           backlogEditorEffort.value = normalizeBacklogLevel(draft.effort);
         }
         if (backlogEditorReviewSearch instanceof HTMLInputElement) {
           backlogEditorReviewSearch.value = '';
         }
-        if (backlogEditorDelete instanceof HTMLButtonElement) {
-          backlogEditorDelete.disabled = normalizedMode !== 'edit';
-        }
+        syncBacklogEditorControlState();
         if (backlogEditorSub instanceof HTMLElement) {
           backlogEditorSub.textContent =
             normalizedMode === 'edit'
-              ? '활성 리뷰만 표시됩니다. 체크를 해제하면 해당 근거가 제거됩니다.'
+              ? '선택된 근거 리뷰를 확인하고, "활성 리뷰 선택" 버튼에서 항목을 추가/제거하세요.'
               : '활성 리뷰를 선택해 새 백로그 항목을 만드세요.';
         }
 
+        closeBacklogReviewPickerModal();
         renderBacklogEditorReviewList();
-        setBacklogEditorStatus('상단 적용 버튼으로 표에 반영됩니다. 영구 저장은 리포트 탭에서 Ctrl/Cmd + S를 사용하세요.');
+        setBacklogEditorStatus('적용을 누르면 즉시 저장됩니다.');
 
         if (backlogEditorRoot instanceof HTMLElement) {
           if (backlogEditorCloseTimer) {
@@ -6484,13 +7014,16 @@ function renderHtml(
         backlogStateItems = backlogStateItems.filter((item) => item.id !== normalizedId);
         renderBacklogTable();
         applySearch();
+        scheduleBacklogStateSave();
       }
 
-      function applyBacklogEditorChanges() {
+      async function applyBacklogEditorChanges() {
+        if (backlogEditorSaving) {
+          return;
+        }
         const title = backlogEditorTitle instanceof HTMLInputElement ? backlogEditorTitle.value.trim() : '';
         const action = backlogEditorAction instanceof HTMLTextAreaElement ? backlogEditorAction.value.trim() : '';
         const priority = backlogEditorPriority instanceof HTMLSelectElement ? backlogEditorPriority.value : 'should';
-        const impact = backlogEditorImpact instanceof HTMLSelectElement ? backlogEditorImpact.value : 'medium';
         const effort = backlogEditorEffort instanceof HTMLSelectElement ? backlogEditorEffort.value : 'medium';
 
         if (!title) {
@@ -6521,7 +7054,6 @@ function renderHtml(
           id: backlogEditorMode === 'edit' ? backlogEditorItemId : createBacklogId(),
           priority,
           title,
-          impact,
           effort,
           action,
           evidenceReviewIds,
@@ -6534,11 +7066,22 @@ function renderHtml(
           );
         } else {
           backlogStateItems = backlogStateItems.concat([draftItem]);
+          backlogEditorMode = 'edit';
+          backlogEditorItemId = draftItem.id;
         }
 
         renderBacklogTable();
-        closeBacklogEditor();
         applySearch();
+        setBacklogEditorStatus('저장 중...');
+        setBacklogEditorSaving(true);
+        const saved = await saveBacklogState();
+        setBacklogEditorSaving(false);
+        if (!saved) {
+          setBacklogEditorStatus('저장에 실패했습니다. 네트워크 상태를 확인하고 다시 적용하세요.');
+          return;
+        }
+        setBacklogEditorStatus('저장 완료');
+        closeBacklogEditor();
       }
 
       function activateBacklogEvidenceReviews(items) {
@@ -6597,6 +7140,7 @@ function renderHtml(
 
         renderBacklogTable();
         applySearch();
+        scheduleBacklogStateSave();
       }
 
       async function saveBacklogState() {
@@ -6636,6 +7180,23 @@ function renderHtml(
         } finally {
           syncBacklogDirtyState();
         }
+      }
+
+      function scheduleBacklogStateSave() {
+        if (!backlogApiUrl || backlogEditorSaving) {
+          return;
+        }
+        if (backlogSaveTimer) {
+          window.clearTimeout(backlogSaveTimer);
+        }
+        backlogSaveTimer = window.setTimeout(() => {
+          backlogSaveTimer = 0;
+          if (backlogEditorSaving) {
+            scheduleBacklogStateSave();
+            return;
+          }
+          void saveBacklogState();
+        }, 240);
       }
 
       async function loadBacklogState() {
@@ -6692,9 +7253,6 @@ function renderHtml(
           if (backlogPriorityFilterMode !== 'all') {
             chips.push('Priority: ' + String(backlogPriorityFilterMode).toUpperCase());
           }
-          if (backlogImportanceFilterMode !== 'all') {
-            chips.push('Importance: ' + String(backlogImportanceFilterMode).toUpperCase());
-          }
           if (backlogEffortFilterMode !== 'all') {
             chips.push('Effort: ' + String(backlogEffortFilterMode).toUpperCase());
           }
@@ -6733,9 +7291,6 @@ function renderHtml(
           count += 1;
         }
         if (backlogPriorityFilterMode !== 'all') {
-          count += 1;
-        }
-        if (backlogImportanceFilterMode !== 'all') {
           count += 1;
         }
         if (backlogEffortFilterMode !== 'all') {
@@ -6921,7 +7476,6 @@ function renderHtml(
           searchInput.value = '';
         }
         setBacklogPriorityFilterMode('all');
-        setBacklogImportanceFilterMode('all');
         setBacklogEffortFilterMode('all');
         applySearch();
       }
@@ -7443,12 +7997,10 @@ function renderHtml(
 
         backlogItems.forEach((item) => {
           const rowPriority = (item.getAttribute('data-priority') || '').trim().toLowerCase();
-          const rowImportance = (item.getAttribute('data-impact') || '').trim().toLowerCase();
           const rowEffort = (item.getAttribute('data-effort') || '').trim().toLowerCase();
           const hideByPriority = backlogPriorityFilterMode !== 'all' && rowPriority !== backlogPriorityFilterMode;
-          const hideByImportance = backlogImportanceFilterMode !== 'all' && rowImportance !== backlogImportanceFilterMode;
           const hideByEffort = backlogEffortFilterMode !== 'all' && rowEffort !== backlogEffortFilterMode;
-          const visible = (!query || getSearchableText(item).includes(query)) && !hideByPriority && !hideByImportance && !hideByEffort;
+          const visible = (!query || getSearchableText(item).includes(query)) && !hideByPriority && !hideByEffort;
           item.classList.toggle('hidden-by-search', !visible);
 
           const evidenceId = item.getAttribute('data-evidence-id');
@@ -7550,7 +8102,6 @@ function renderHtml(
 
         setExcludeFilterMode(queryState.excludeMode);
         setBacklogPriorityFilterMode(queryState.backlogPriorityMode);
-        setBacklogImportanceFilterMode(queryState.backlogImportanceMode);
         setBacklogEffortFilterMode(queryState.backlogEffortMode);
         syncTagFilterButtons();
         syncActiveFilterChips();
@@ -7715,12 +8266,6 @@ function renderHtml(
               priority: normalizeBacklogPriority(target.value)
             });
           }
-          if (field === 'impact') {
-            return normalizeBacklogItem({
-              ...item,
-              impact: normalizeBacklogLevel(target.value)
-            });
-          }
           if (field === 'effort') {
             return normalizeBacklogItem({
               ...item,
@@ -7732,6 +8277,7 @@ function renderHtml(
 
         renderBacklogTable();
         applySearch();
+        scheduleBacklogStateSave();
       });
 
       if (noteSidebarBackdrop instanceof HTMLElement) {
@@ -7755,7 +8301,9 @@ function renderHtml(
         backlogEditorClose.addEventListener('click', closeBacklogEditor);
       }
       if (backlogEditorSave instanceof HTMLElement) {
-        backlogEditorSave.addEventListener('click', applyBacklogEditorChanges);
+        backlogEditorSave.addEventListener('click', () => {
+          void applyBacklogEditorChanges();
+        });
       }
       if (backlogEditorDelete instanceof HTMLElement) {
         backlogEditorDelete.addEventListener('click', () => {
@@ -7768,6 +8316,45 @@ function renderHtml(
       }
       if (backlogEditorReviewSearch instanceof HTMLInputElement) {
         backlogEditorReviewSearch.addEventListener('input', () => {
+          backlogReviewPickerPage = 1;
+          renderBacklogEditorReviewList();
+        });
+      }
+      if (openBacklogReviewPicker instanceof HTMLButtonElement) {
+        openBacklogReviewPicker.addEventListener('click', openBacklogReviewPickerModal);
+      }
+      if (backlogReviewPickerBackdrop instanceof HTMLElement) {
+        backlogReviewPickerBackdrop.addEventListener('click', closeBacklogReviewPickerModal);
+      }
+      if (backlogReviewPickerClose instanceof HTMLButtonElement) {
+        backlogReviewPickerClose.addEventListener('click', closeBacklogReviewPickerModal);
+      }
+      if (backlogReviewPickerDone instanceof HTMLButtonElement) {
+        backlogReviewPickerDone.addEventListener('click', closeBacklogReviewPickerModal);
+      }
+      if (backlogReviewPickerPrev instanceof HTMLButtonElement) {
+        backlogReviewPickerPrev.addEventListener('click', () => {
+          backlogReviewPickerPage = Math.max(1, backlogReviewPickerPage - 1);
+          renderBacklogEditorReviewList();
+        });
+      }
+      if (backlogReviewPickerNext instanceof HTMLButtonElement) {
+        backlogReviewPickerNext.addEventListener('click', () => {
+          backlogReviewPickerPage += 1;
+          renderBacklogEditorReviewList();
+        });
+      }
+      if (backlogEditorSelectVisible instanceof HTMLButtonElement) {
+        backlogEditorSelectVisible.addEventListener('click', () => {
+          backlogEditorVisibleScopedReviewIds.forEach((scopedReviewId) => {
+            backlogEditorSelection.add(scopedReviewId);
+          });
+          renderBacklogEditorReviewList();
+        });
+      }
+      if (backlogEditorClearSelection instanceof HTMLButtonElement) {
+        backlogEditorClearSelection.addEventListener('click', () => {
+          backlogEditorSelection.clear();
           renderBacklogEditorReviewList();
         });
       }
@@ -7786,6 +8373,25 @@ function renderHtml(
           } else {
             backlogEditorSelection.delete(scopedReviewId);
           }
+          renderBacklogEditorReviewList();
+        });
+      }
+      if (backlogEditorSelectedList instanceof HTMLElement) {
+        backlogEditorSelectedList.addEventListener('click', (event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLElement)) {
+            return;
+          }
+          const removeButton = target.closest('[data-backlog-selected-remove]');
+          if (!(removeButton instanceof HTMLElement)) {
+            return;
+          }
+          const scopedReviewId = String(removeButton.getAttribute('data-backlog-selected-remove') || '').trim();
+          if (!scopedReviewId) {
+            return;
+          }
+          backlogEditorSelection.delete(scopedReviewId);
+          renderBacklogEditorReviewList();
         });
       }
       if (openSearchInputButton instanceof HTMLElement) {
@@ -7835,7 +8441,7 @@ function renderHtml(
         if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
           if (backlogEditorRoot instanceof HTMLElement && !backlogEditorRoot.hidden) {
             event.preventDefault();
-            applyBacklogEditorChanges();
+            void applyBacklogEditorChanges();
             return;
           }
           if (viewBacklog.classList.contains('active')) {
@@ -7855,6 +8461,13 @@ function renderHtml(
           }
         }
         if (event.key === 'Escape') {
+          if (backlogEditorSaving) {
+            return;
+          }
+          if (backlogReviewPickerRoot instanceof HTMLElement && !backlogReviewPickerRoot.hidden) {
+            closeBacklogReviewPickerModal();
+            return;
+          }
           closeAppNoteSidebar();
           closeFilterPanel();
           closeBacklogEditor();
@@ -7927,16 +8540,6 @@ function renderHtml(
           applySearch();
         });
       });
-      backlogImportanceFilterButtons.forEach((button) => {
-        if (!(button instanceof HTMLElement)) {
-          return;
-        }
-        button.addEventListener('click', () => {
-          const mode = String(button.getAttribute('data-backlog-importance-filter') || '').trim();
-          setBacklogImportanceFilterMode(mode);
-          applySearch();
-        });
-      });
       backlogEffortFilterButtons.forEach((button) => {
         if (!(button instanceof HTMLElement)) {
           return;
@@ -8000,38 +8603,45 @@ async function renderBundleForApp(params: {
     inputPath
   });
   let backlog = await readBacklogData(backlogPath);
-  let backlogRawContainsScopedEvidenceIds = false;
-  if (backlog) {
-    try {
-      const rawBacklogText = await fs.readFile(backlogPath, "utf8");
-      backlogRawContainsScopedEvidenceIds = rawBacklogText.includes("::");
-    } catch {
-      backlogRawContainsScopedEvidenceIds = false;
-    }
+  let hadLegacyBacklogFormat = false;
+  let hadLegacyEvidenceCountSuffix = false;
+  let hadLegacyImportanceField = false;
+  try {
+    const rawBacklogText = await fs.readFile(backlogPath, "utf8");
+    hadLegacyBacklogFormat = rawBacklogText.includes("\"appBacklogs\"");
+    hadLegacyEvidenceCountSuffix =
+      /\(\s*근거\s*리뷰\s*\d+\s*건\s*\)/i.test(rawBacklogText) ||
+      /\(\s*evidence\s*\d+\s*reviews?\s*\)/i.test(rawBacklogText) ||
+      /근거\s*리뷰\s*\d+\s*건/i.test(rawBacklogText) ||
+      /evidence\s*\d+\s*reviews?/i.test(rawBacklogText);
+    hadLegacyImportanceField = /"\s*(impact|importance)\s*"\s*:/.test(rawBacklogText);
+  } catch {
+    hadLegacyBacklogFormat = false;
+    hadLegacyEvidenceCountSuffix = false;
+    hadLegacyImportanceField = false;
   }
+
   if (!backlog) {
-    backlog = buildBacklog(parsed.apps, reviewPools);
+    const builtBacklog = buildBacklog(parsed.apps, reviewPools);
+    backlog = flattenAppBacklogsToBacklogItems(builtBacklog);
     await writeBacklogData(backlogPath, ownerAppId, backlog);
     console.log(`[${ownerAppId}] Generated backlog JSON: ${backlogPath}`);
   }
-  const hydratedBacklog = hydrateBacklogEvidence(backlog, reviewPools);
-  const needsBacklogNormalization = backlog.some((appBacklog) =>
-    appBacklog.items.some(
-      (item) =>
-        (item.examples?.length ?? 0) > 0 ||
-        item.evidenceReviewIds.length > MAX_EVIDENCE_PER_ITEM ||
-        item.evidenceReviewIds.some((reviewId) => normalizeText(reviewId).includes("::"))
-    )
-  ) || backlogRawContainsScopedEvidenceIds;
+  const normalizedBacklog = canonicalizeBacklogItemsByReviewPools(normalizeBacklogItems(backlog), reviewPools);
+  const needsBacklogNormalization =
+    hadLegacyBacklogFormat ||
+    hadLegacyEvidenceCountSuffix ||
+    hadLegacyImportanceField ||
+    JSON.stringify(normalizedBacklog) !== JSON.stringify(backlog);
   if (needsBacklogNormalization) {
-    await writeBacklogData(backlogPath, ownerAppId, hydratedBacklog);
+    await writeBacklogData(backlogPath, ownerAppId, normalizedBacklog);
     console.log(`[${ownerAppId}] Normalized backlog JSON: ${backlogPath}`);
   }
   const ownerAppIconMetaHref = await resolveOwnerAppIconMetaHref(ownerAppId);
   const rendered = renderHtml(
     parsed.title,
     parsed.apps,
-    hydratedBacklog,
+    normalizedBacklog,
     ownerAppId,
     reviewPools,
     ownerAppIconMetaHref

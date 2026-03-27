@@ -54,15 +54,15 @@ npm run report:translate -- --my-app golden-horizon
   - `min100` (`100자 이상` 활성 시 `1`)
   - `orig` (`원어 보기` 활성 시 `1`)
   - `priority` (`리포트` 탭 `all|must|should|could`)
-  - `importance` (`리포트` 탭 `all|high|medium|low`)
   - `effort` (`리포트` 탭 `all|high|medium|low`)
 - 헤더 아래 상태줄은 두 탭 모두 표시됩니다.
   - 좌측: 현재 적용 필터 칩(없으면 `필터 없음`)
   - 우측: 전체 대비 선택/필터 결과 수(`리뷰 x/y` 또는 `백로그 x/y`)
 - `리포트`는 앱별 섹션이 아닌 전체 통합 백로그 테이블로 표시됩니다.
 - `리포트`에서는 앱이 달라도 동일한 백로그 항목이면 하나의 행으로 통합해 표시합니다.
+- `리포트`에서는 제목/액션 정규화 기준으로 유사한 백로그 항목도 저장 정규화 단계에서 병합합니다.
 - 각 백로그 행의 앱 목록은 1줄 텍스트로 표시되며, 길면 말줄임(`...`) 처리됩니다.
-- `리포트`에서는 `리뷰`와 동일한 필터 패널 UX로 `Priority / Importance / Effort`를 필터링할 수 있습니다.
+- `리포트`에서는 `리뷰`와 동일한 필터 패널 UX로 `Priority / Effort`를 필터링할 수 있습니다.
 - `리포트` 테이블에는 별도 `근거` 컬럼이 없으며, `근거 수` 옆 화살표 버튼으로 근거 행을 펼치고/접습니다.
 - `근거 수`는 원문 인용 라인 수가 아니라, `reviewId` 기준으로 중복 제거한 고유 리뷰 수로 계산됩니다.
 - 근거 행을 펼치면 한국어 문장만 기본 표시되며(`KR:` 접두사 없음), `자세히보기`에서 리뷰 ID/메타/원문을 확인할 수 있습니다.
@@ -70,6 +70,7 @@ npm run report:translate -- --my-app golden-horizon
 - 백로그 테마는 고정 하드코딩 목록이 아니라, 앱별 리뷰 텍스트를 기반으로 동적으로 추출됩니다(토큰 빈도 기반 휴리스틱).
 - 합성 백로그 입력 단계에서 저신호 리뷰(요청/이슈 없는 짧은 칭찬 등)는 제외하고, 액션 가능한 근거 리뷰를 우선 사용합니다.
 - 백로그 `action` 문구는 단순 건수 문장이 아니라, 근거 리뷰 패턴에서 추론한 구체 체크리스트(최대 3개) 형태로 생성됩니다.
+- 백로그 `action` 문구 끝의 `(근거 리뷰 N건)` / `(evidence N reviews)` 같은 건수 표기는 더 이상 붙이지 않으며, 건수는 `근거 수` 컬럼에서 확인합니다.
 - `리뷰`에서는 해시태그 필터를 `#❤️ / #요청기능 / #만족 / #불만족` 다중 선택할 수 있고, `태그 전체`로 초기화할 수 있습니다.
 - `리뷰`에서는 활성 상태 필터를 `전체 / 활성 / 비활성`으로 전환할 수 있습니다(기본값 `전체`).
 - `리뷰`에서는 `100자 이상` 토글로 긴 리뷰만 빠르게 볼 수 있습니다.
@@ -90,9 +91,11 @@ npm run report:translate -- --my-app golden-horizon
 - 노트는 자동 저장되지 않으며, `저장` 버튼(또는 `Ctrl/Cmd + S`)으로 수동 저장합니다.
 - `리포트` 탭에서 백로그를 페이지에서 직접 편집할 수 있습니다.
   - 백로그 항목 추가/삭제
-  - 각 행의 `Priority / Importance / Effort`를 인라인 셀렉터로 즉시 변경
-  - 백로그 항목별 근거 리뷰 추가/제거(편집기에는 `활성` 리뷰만 표시)
-  - `리포트` 탭에서 `Ctrl/Cmd + S`로 저장 반영
+  - 각 행의 `Priority / Effort`를 인라인 셀렉터로 즉시 변경
+  - 근거 리뷰 선택은 중앙 모달(페이지네이션)에서 수행하며, 모달에는 `활성` 리뷰만 표시됩니다
+  - 백로그 편집 본문에는 현재 선택된 근거 리뷰만 칩 형태로 표시됩니다
+  - 백로그 편집기에서는 `적용` 버튼으로 즉시 영구 저장됩니다
+  - 백로그 편집기 외 리포트 표 편집(행 삭제, 인라인 우선순위/난이도 변경, 리뷰 탭 `백로그+`)도 자동으로 영구 저장됩니다
 - `리뷰` 탭의 각 리뷰 카드에서 `백로그+` UX로 기존 백로그 항목에 해당 리뷰를 바로 추가할 수 있습니다.
 - `리뷰` 탭에서 `백로그+`로 추가된 리뷰는 자동으로 `활성` 상태로 전환됩니다.
 - 리뷰 뷰는 앱별 전체 리뷰 데이터(`data/{myAppId}/reviews-ko/*.json`, 없으면 `reviews/*.json`)를 함께 불러옵니다.
@@ -124,7 +127,7 @@ npm run report:render-html -- --all
 ### 출력
 
 - `data/{myAppId}/reports/competitor-raw-actionable.ko.json` (공용 뷰어 번들 데이터)
-- `data/{myAppId}/reports/backlog.ko.json` (앱별 백로그 데이터, 근거는 `reviewId` 참조만 저장)
+- `data/{myAppId}/reports/backlog.ko.json` (통합 백로그 `items` 데이터, 근거는 `sourceToken::reviewId` scoped ID로 저장)
 - `--with-html` 사용 시에만: `data/{myAppId}/reports/competitor-raw-actionable.ko.html`
 
 ## `report:init-backlog`
@@ -214,6 +217,7 @@ localhost 프리뷰 서버를 실행합니다.
 - 백로그 편집 저장 API를 제공합니다.
   - `GET /api/backlog/:appId`
   - `PUT /api/backlog/:appId`
+  - 요청/응답의 `items[].evidenceReviewIds`는 scoped ID(`sourceToken::reviewId`)를 사용합니다.
   - 저장 파일: `data/{myAppId}/reports/backlog.ko.json`
 
 - `npm run report:preview -- [options]`

@@ -54,15 +54,15 @@ Render actionable markdown report to a shared-viewer bundle JSON.
   - `min100` (`1` when `100+ chars` is enabled)
   - `orig` (`1` when `Original` toggle is enabled)
   - `priority` (`all|must|should|could` in `Reports`)
-  - `importance` (`all|high|medium|low` in `Reports`)
   - `effort` (`all|high|medium|low` in `Reports`)
 - The status row under the header is shown in both tabs:
   - left: active filter chips (`No filter` when empty)
   - right: selected/filtered count over total (`Reviews x/y` or `Backlog x/y`)
 - `Reports` shows one unified backlog table across all apps (not per-app grouped sections).
 - In `Reports`, identical backlog items are merged into a single row even when they come from different apps.
+- In `Reports`, near-duplicate backlog rows (same normalized title/action) are also merged during backlog normalization.
 - The app list in each backlog row is rendered as a single-line text with ellipsis (`...`) when it overflows.
-- In `Reports`, use the same filter panel UX as `Reviews` to filter rows by `Priority / Importance / Effort`.
+- In `Reports`, use the same filter panel UX as `Reviews` to filter rows by `Priority / Effort`.
 - In the `Reports` table, there is no separate `Evidence` column; use the chevron button next to `Evidence count` to expand/collapse evidence rows.
 - `Evidence count` is calculated as the number of unique reviews (`reviewId`-based dedupe), not raw quote line count.
 - In expanded evidence rows, the Korean sentence is shown by default (without `KR:` prefix), and `See details` reveals the review ID, metadata, and original text.
@@ -70,6 +70,7 @@ Render actionable markdown report to a shared-viewer bundle JSON.
 - Backlog themes are now derived dynamically from each app's review text (token-frequency heuristic), instead of using a fixed hardcoded theme list.
 - Synthetic backlog input now filters out low-signal reviews (e.g., short generic praise without request/issue) and keeps actionable evidence first.
 - Backlog `action` text is generated as a concrete checklist (up to 3 items) inferred from matched evidence patterns, not only a generic count sentence.
+- Backlog `action` text no longer appends evidence-count suffixes like `(근거 리뷰 N건)` or `(evidence N reviews)`; use the `Evidence count` column instead.
 - In `Reviews`, hashtag filter supports multi-select (`#❤️`, `#Requests`, `#Satisfaction`, `#Dissatisfaction`), and `All tags` clears tag filters.
 - In `Reviews`, state filter is tri-state: `All` / `Active` / `Inactive` (default: `All`).
 - In `Reviews`, you can toggle `100+ chars` to focus on longer reviews.
@@ -90,9 +91,11 @@ Render actionable markdown report to a shared-viewer bundle JSON.
 - Notes are not auto-saved; use `Save` (or `Ctrl/Cmd + S`) to persist note changes.
 - In `Reports`, backlog rows are editable directly from the page:
   - add/remove backlog items
-  - update each row's `Priority / Importance / Effort` directly from inline selectors
-  - add/remove evidence reviews per backlog item (editor shows active reviews only)
-  - save backlog changes with `Ctrl/Cmd + S` on `Reports`
+  - update each row's `Priority / Effort` directly from inline selectors
+  - evidence review selection is done in a centered modal with pagination (active reviews only)
+  - backlog editor body shows only currently selected evidence reviews (chip list)
+  - in backlog editor, `Apply` saves immediately (persistent save)
+  - report-table edits outside the backlog editor (row delete, inline priority/effort changes, `Backlog+` from Reviews) are also auto-persisted
 - In `Reviews`, each review card has quick-add UX (`Backlog+`) to attach that review to an existing backlog item.
 - When a review is added to backlog from `Reviews`, that review is automatically switched to `Active`.
 - Reviews view is hydrated from full review datasets (`data/{myAppId}/reviews-ko/*.json`, fallback `reviews/*.json`) per app:
@@ -124,7 +127,7 @@ npm run report:render-html -- --all
 ### Output
 
 - `data/{myAppId}/reports/competitor-raw-actionable.ko.json` (shared-viewer bundle payload)
-- `data/{myAppId}/reports/backlog.ko.json` (per-app backlog data; stores normalized backlog rows with `reviewId`-only evidence references)
+- `data/{myAppId}/reports/backlog.ko.json` (unified backlog `items` data; evidence is stored as scoped IDs in `sourceToken::reviewId` format)
 - Optional legacy output with `--with-html`: `data/{myAppId}/reports/competitor-raw-actionable.ko.html`
 
 ## `report:init-backlog`
@@ -214,6 +217,7 @@ Run localhost preview server.
 - Serves backlog editing API:
   - `GET /api/backlog/:appId`
   - `PUT /api/backlog/:appId`
+  - request/response `items[].evidenceReviewIds` must use scoped IDs (`sourceToken::reviewId`)
   - persistence file: `data/{myAppId}/reports/backlog.ko.json`
 
 - `npm run report:preview -- [options]`
