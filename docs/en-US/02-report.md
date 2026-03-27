@@ -61,6 +61,7 @@ Render actionable markdown report to a shared-viewer bundle JSON.
 - `Reports` shows one unified backlog table across all apps (not per-app grouped sections).
 - In `Reports`, identical backlog items are merged into a single row even when they come from different apps.
 - In `Reports`, near-duplicate backlog rows (same normalized title/action) are also merged during backlog normalization.
+- In `Reports`, default backlog sorting is: `Priority` (`MUST > SHOULD > COULD`) → `Effort` (`High > Medium > Low`) → `Evidence count` (high to low).
 - The app list in each backlog row is rendered as a single-line text with ellipsis (`...`) when it overflows.
 - In `Reports`, use the same filter panel UX as `Reviews` to filter rows by `Priority / Effort`.
 - In the `Reports` table, there is no separate `Evidence` column; use the chevron button next to `Evidence count` to expand/collapse evidence rows.
@@ -73,6 +74,9 @@ Render actionable markdown report to a shared-viewer bundle JSON.
 - Backlog `action` text no longer appends evidence-count suffixes like `(근거 리뷰 N건)` or `(evidence N reviews)`; use the `Evidence count` column instead.
 - In `Reviews`, hashtag filter supports multi-select (`#❤️`, `#Requests`, `#Satisfaction`, `#Dissatisfaction`), and `All tags` clears tag filters.
 - In `Reviews`, state filter is tri-state: `All` / `Active` / `Inactive` (default: `All`).
+- In `Reviews`, app sections are ordered by latest review registration date first, then higher app rating.
+- In `Reviews`, review cards are ordered by latest registration date first, with higher rating as the secondary sort.
+- In `Reviews`, cards are paginated (50 cards per page) with `Prev/Next` controls in the top status row; `Prev` scrolls to page bottom, and `Next` scrolls to page top.
 - In `Reviews`, you can toggle `100+ chars` to focus on longer reviews.
 - `Reset filters` clears search/state/tag/length filters in one click.
 - In the filter panel, `Reset all to inactive` sets every review to `Inactive` in bulk and clears all hashtags.
@@ -84,7 +88,7 @@ Render actionable markdown report to a shared-viewer bundle JSON.
 - Review cards include `#❤️ / #Requests / #Satisfaction / #Dissatisfaction` hashtag toggles and `Inactive/Active`.
 - Curated quotes are shown in one `Selected Reviews (Hashtag-based)` section instead of separate category sections.
 - In review cards, `Original` text open/close uses a smooth expand/collapse animation.
-- Hashtags can be edited only when the card is `Active`.
+- Hashtags remain editable even when the card is `Inactive` (no click blocking by state).
 - Top-right controls include a `Notes` button; in the right sidebar you can switch the app selector to manage app-level notes.
 - In the notes panel, use the app selector to switch the currently active app for note editing.
 - The notes sidebar shows only store links (App Store / Google Play) for the selected app.
@@ -95,8 +99,10 @@ Render actionable markdown report to a shared-viewer bundle JSON.
   - evidence review selection is done in a centered modal with pagination (active reviews only)
   - backlog editor body shows only currently selected evidence reviews (chip list)
   - in backlog editor, `Apply` saves immediately (persistent save)
-  - report-table edits outside the backlog editor (row delete, inline priority/effort changes, `Backlog+` from Reviews) are also auto-persisted
-- In `Reviews`, each review card has quick-add UX (`Backlog+`) to attach that review to an existing backlog item.
+  - report-table edits outside the backlog editor (row delete, inline priority/effort changes, quick-add from `Reviews`) are also auto-persisted
+- In `Reviews`, each review card has a single quick-add selector; selecting a backlog item immediately attaches that review.
+- In that quick-add selector, already linked backlog items are marked with `✓` (without priority labels), and the card shows a right-aligned linked-status text in the format `(N linked: title, title)`.
+- The quick-add selector is rendered on a dedicated backlog row under the card action row (separate from tag/status controls).
 - When a review is added to backlog from `Reviews`, that review is automatically switched to `Active`.
 - Reviews view is hydrated from full review datasets (`data/{myAppId}/reviews-ko/*.json`, fallback `reviews/*.json`) per app:
   - preselected report quotes start as `Active`

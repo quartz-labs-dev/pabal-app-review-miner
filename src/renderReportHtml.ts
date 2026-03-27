@@ -1381,6 +1381,20 @@ function parseRatingNumber(input: string | undefined): number | undefined {
   return value;
 }
 
+function parseDateTimestamp(input: string | undefined): number {
+  const normalized = normalizeText(input);
+  if (!normalized) {
+    return 0;
+  }
+
+  const timestamp = new Date(normalized).getTime();
+  if (!Number.isFinite(timestamp)) {
+    return 0;
+  }
+
+  return timestamp;
+}
+
 function formatReadableDate(input: string | undefined): string {
   const normalized = normalizeText(input);
   if (!normalized) {
@@ -1494,7 +1508,13 @@ async function loadReviewPools(ownerAppId: string): Promise<ReviewPools> {
         });
       }
 
-      reviews.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      reviews.sort((a, b) => {
+        const dateDiff = parseDateTimestamp(b.date) - parseDateTimestamp(a.date);
+        if (dateDiff !== 0) {
+          return dateDiff;
+        }
+        return b.rating - a.rating;
+      });
 
       const pool: AppReviewPool = {
         sourceToken,
@@ -1985,6 +2005,9 @@ function flattenAppBacklogsToBacklogItems(backlogs: AppBacklog[]): BacklogClient
       if (priorityOrder(a.priority) !== priorityOrder(b.priority)) {
         return priorityOrder(a.priority) - priorityOrder(b.priority);
       }
+      if (backlogLevelRank(b.effort) !== backlogLevelRank(a.effort)) {
+        return backlogLevelRank(b.effort) - backlogLevelRank(a.effort);
+      }
       return b.evidenceReviewIds.length - a.evidenceReviewIds.length;
     });
 }
@@ -2060,6 +2083,9 @@ function normalizeBacklogItems(value: unknown): BacklogClientItem[] {
   return [...dedupedById.values()].sort((a, b) => {
     if (priorityOrder(a.priority) !== priorityOrder(b.priority)) {
       return priorityOrder(a.priority) - priorityOrder(b.priority);
+    }
+    if (backlogLevelRank(b.effort) !== backlogLevelRank(a.effort)) {
+      return backlogLevelRank(b.effort) - backlogLevelRank(a.effort);
     }
     if (b.evidenceReviewIds.length !== a.evidenceReviewIds.length) {
       return b.evidenceReviewIds.length - a.evidenceReviewIds.length;
@@ -2319,6 +2345,9 @@ function hydrateBacklogItems(backlogItems: BacklogClientItem[], reviewPools: Rev
     .sort((a, b) => {
       if (priorityOrder(a.priority) !== priorityOrder(b.priority)) {
         return priorityOrder(a.priority) - priorityOrder(b.priority);
+      }
+      if (backlogLevelRank(b.effort) !== backlogLevelRank(a.effort)) {
+        return backlogLevelRank(b.effort) - backlogLevelRank(a.effort);
       }
       return b.evidenceCount - a.evidenceCount;
     });
@@ -3007,6 +3036,9 @@ function buildBacklog(apps: AppSection[], reviewPools: ReviewPools): AppBacklog[
         if (priorityOrder(a.priority) !== priorityOrder(b.priority)) {
           return priorityOrder(a.priority) - priorityOrder(b.priority);
         }
+        if (backlogLevelRank(b.effort) !== backlogLevelRank(a.effort)) {
+          return backlogLevelRank(b.effort) - backlogLevelRank(a.effort);
+        }
         return b.evidenceCount - a.evidenceCount;
       });
 
@@ -3144,24 +3176,28 @@ function renderHtml(
           <div class=\"quote-org org-text\">${org}</div>
         </div>
         <div class=\"quote-actions\">
-          <button class=\"toggle-one\" type=\"button\" aria-label=\"원어 보기\" title=\"원어 보기\">
-            <span class=\"toggle-label\">원어</span>
-            <span class=\"toggle-icon\" aria-hidden=\"true\">▾</span>
-          </button>
-          <div class=\"backlog-quick-add\">
-            <select class=\"backlog-quick-select\" aria-label=\"백로그 선택\">
-              <option value=\"\">백로그 선택</option>
-            </select>
-            <button class=\"backlog-quick-add-btn\" type=\"button\">백로그+</button>
-          </div>
-          <div class=\"quote-actions-right\">
-            <div class=\"tag-actions\" role=\"group\" aria-label=\"해시태그\">
-              <button class=\"tag-toggle tag-heart\" type=\"button\" data-tag=\"heart\" aria-label=\"❤️ 태그\" title=\"❤️ 태그\">#❤️</button>
-              <button class=\"tag-toggle tag-satisfaction\" type=\"button\" data-tag=\"satisfaction\" aria-label=\"만족 태그\" title=\"만족 태그\">#만족</button>
-              <button class=\"tag-toggle tag-dissatisfaction\" type=\"button\" data-tag=\"dissatisfaction\" aria-label=\"불만족 태그\" title=\"불만족 태그\">#불만족</button>
-              <button class=\"tag-toggle tag-requests\" type=\"button\" data-tag=\"requests\" aria-label=\"요청 기능 태그\" title=\"요청 기능 태그\">#요청기능</button>
+          <div class=\"quote-actions-main\">
+            <button class=\"toggle-one\" type=\"button\" aria-label=\"원어 보기\" title=\"원어 보기\">
+              <span class=\"toggle-label\">원어</span>
+              <span class=\"toggle-icon\" aria-hidden=\"true\">▾</span>
+            </button>
+            <div class=\"quote-actions-right\">
+              <div class=\"tag-actions\" role=\"group\" aria-label=\"해시태그\">
+                <button class=\"tag-toggle tag-heart\" type=\"button\" data-tag=\"heart\" aria-label=\"❤️ 태그\" title=\"❤️ 태그\">#❤️</button>
+                <button class=\"tag-toggle tag-satisfaction\" type=\"button\" data-tag=\"satisfaction\" aria-label=\"만족 태그\" title=\"만족 태그\">#만족</button>
+                <button class=\"tag-toggle tag-dissatisfaction\" type=\"button\" data-tag=\"dissatisfaction\" aria-label=\"불만족 태그\" title=\"불만족 태그\">#불만족</button>
+                <button class=\"tag-toggle tag-requests\" type=\"button\" data-tag=\"requests\" aria-label=\"요청 기능 태그\" title=\"요청 기능 태그\">#요청기능</button>
+              </div>
+              <button class=\"exclude-toggle\" type=\"button\">활성</button>
             </div>
-            <button class=\"exclude-toggle\" type=\"button\">활성</button>
+          </div>
+          <div class=\"quote-actions-backlog\">
+            <div class=\"backlog-quick-add\">
+              <select class=\"backlog-quick-select\" aria-label=\"백로그 선택\">
+                <option value=\"\">백로그에 추가</option>
+              </select>
+              <span class=\"backlog-quick-status\" aria-live=\"polite\">미연결</span>
+            </div>
           </div>
         </div>
       </article>
@@ -3179,9 +3215,72 @@ function renderHtml(
     `;
   }
 
+  function sortQuoteItemsByDateThenRating(items: QuoteItem[]): QuoteItem[] {
+    return [...items].sort((a, b) => {
+      const parsedA = parseQuoteMeta(a.meta);
+      const parsedB = parseQuoteMeta(b.meta);
+      const dateDiff = parseDateTimestamp(parsedB.date) - parseDateTimestamp(parsedA.date);
+      if (dateDiff !== 0) {
+        return dateDiff;
+      }
+      return (parseRatingNumber(parsedB.rating) ?? 0) - (parseRatingNumber(parsedA.rating) ?? 0);
+    });
+  }
+
+  function resolveAppSortMetrics(app: AppSection): { latestReviewTimestamp: number; averageRating: number } {
+    const appPool = resolvePoolForApp(app.title, reviewPools);
+    if (appPool && appPool.reviews.length > 0) {
+      const latestReviewTimestamp = appPool.reviews.reduce(
+        (maxTimestamp, review) => Math.max(maxTimestamp, parseDateTimestamp(review.date)),
+        0
+      );
+      const averageRating =
+        appPool.reviews.reduce((sum, review) => sum + Number(review.rating ?? 0), 0) / appPool.reviews.length;
+      return {
+        latestReviewTimestamp,
+        averageRating
+      };
+    }
+
+    const quotes = (Object.keys(app.categories) as CategoryKey[]).flatMap((categoryKey) => app.categories[categoryKey]);
+    let latestReviewTimestamp = 0;
+    let ratingSum = 0;
+    let ratingCount = 0;
+    for (const quote of quotes) {
+      const parsedMeta = parseQuoteMeta(quote.meta);
+      latestReviewTimestamp = Math.max(latestReviewTimestamp, parseDateTimestamp(parsedMeta.date));
+      const rating = parseRatingNumber(parsedMeta.rating);
+      if (typeof rating === "number") {
+        ratingSum += rating;
+        ratingCount += 1;
+      }
+    }
+
+    return {
+      latestReviewTimestamp,
+      averageRating: ratingCount > 0 ? ratingSum / ratingCount : 0
+    };
+  }
+
+  const sortedApps = apps
+    .map((app, originalIndex) => ({
+      app,
+      originalIndex,
+      metrics: resolveAppSortMetrics(app)
+    }))
+    .sort((a, b) => {
+      if (b.metrics.latestReviewTimestamp !== a.metrics.latestReviewTimestamp) {
+        return b.metrics.latestReviewTimestamp - a.metrics.latestReviewTimestamp;
+      }
+      if (b.metrics.averageRating !== a.metrics.averageRating) {
+        return b.metrics.averageRating - a.metrics.averageRating;
+      }
+      return a.originalIndex - b.originalIndex;
+    });
+
   const appNoteApps: AppNoteApp[] = [];
-  const rawAppSections = apps
-    .map((app, appIndex) => {
+  const rawAppSections = sortedApps
+    .map(({ app }, appIndex) => {
       const appPool = resolvePoolForApp(app.title, reviewPools);
       const appKey = resolveAppStateKey(app.title, appPool);
       const parsedTitle = parseAppTitle(app.title);
@@ -3195,7 +3294,7 @@ function renderHtml(
       const seededReviewIds = new Set<string>();
       const selectedCards = (Object.keys(app.categories) as CategoryKey[])
         .flatMap((categoryKey) => {
-          const items = app.categories[categoryKey];
+          const items = sortQuoteItemsByDateThenRating(app.categories[categoryKey]);
           const categoryTitle = renderCategoryTitle(categoryKey);
           return items.map((item) => {
             const matchedReviewId = findPoolReviewIdForQuote(item, appPool);
@@ -4063,14 +4162,25 @@ function renderHtml(
       }
       .quote-actions {
         display: flex;
-        gap: 6px;
-        flex-wrap: wrap;
+        flex-direction: column;
+        gap: 8px;
         margin-top: auto;
         padding: 10px 12px;
         border-top: 1px dashed var(--line);
         background: #f8fbff;
+      }
+      .quote-actions-main {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
         justify-content: space-between;
         align-items: center;
+      }
+      .quote-actions-backlog {
+        display: flex;
+        justify-content: flex-start;
+        align-items: flex-start;
+        width: 100%;
       }
       .quote-actions-right {
         display: inline-flex;
@@ -4080,9 +4190,11 @@ function renderHtml(
         justify-content: flex-end;
       }
       .backlog-quick-add {
-        display: inline-flex;
+        display: grid;
+        grid-template-columns: minmax(180px, 320px) minmax(0, 1fr);
         align-items: center;
-        gap: 6px;
+        gap: 4px;
+        width: 100%;
       }
       .backlog-quick-select {
         min-height: 30px;
@@ -4092,20 +4204,28 @@ function renderHtml(
         color: #0f172a;
         font-size: 12px;
         padding: 0 8px;
-        max-width: 180px;
+        width: 100%;
+        max-width: 320px;
       }
-      .backlog-quick-add-btn {
-        font-size: 12px;
-        padding: 6px 8px;
-        border-radius: 8px;
-        border-color: #7dd3fc;
-        background: #e0f2fe;
-        color: #075985;
-        font-weight: 700;
-      }
-      .backlog-quick-add-btn:disabled,
       .backlog-quick-select:disabled {
         opacity: 0.55;
+      }
+      .backlog-quick-status {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        font-size: 11px;
+        color: #64748b;
+        line-height: 1.3;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-align: right;
+      }
+      .backlog-quick-status.is-linked {
+        color: #0369a1;
+        font-weight: 700;
       }
       .toggle-one,
       .exclude-toggle,
@@ -5191,7 +5311,10 @@ function renderHtml(
         <div id=\"activeFilterChips\" class=\"active-filter-chips\"></div>
         <p id=\"filterSummary\" class=\"filter-summary page-filter-summary\">리뷰 0/0 표시</p>
         <div id=\"rawPagination\" class=\"raw-pagination\">
+          <button id=\"rawPagePrev\" type=\"button\" aria-label=\"이전 페이지\">이전</button>
           <span id=\"rawTotalCount\" class=\"raw-total-count\">리뷰 0/0</span>
+          <span id=\"rawPageInfo\" class=\"raw-page-info\">1/1</span>
+          <button id=\"rawPageNext\" type=\"button\" aria-label=\"다음 페이지\">다음</button>
         </div>
       </div>
     </div>
@@ -5384,7 +5507,10 @@ function renderHtml(
       const filterPanelCount = document.getElementById('filterPanelCount');
       const activeFilterChips = document.getElementById('activeFilterChips');
       const rawPagination = document.getElementById('rawPagination');
+      const rawPagePrev = document.getElementById('rawPagePrev');
       const rawTotalCount = document.getElementById('rawTotalCount');
+      const rawPageInfo = document.getElementById('rawPageInfo');
+      const rawPageNext = document.getElementById('rawPageNext');
       const addBacklogItemButton = document.getElementById('addBacklogItem');
       const backlogSummaryLine = document.getElementById('backlogSummaryLine');
       const backlogTableBody = document.getElementById('backlogTableBody');
@@ -5435,7 +5561,6 @@ function renderHtml(
       const contextBacklog = document.getElementById('contextBacklog');
       const rawCards = Array.from(viewRaw.querySelectorAll('.quote-card[data-review-id]'));
       const quickAddSelects = Array.from(viewRaw.querySelectorAll('.backlog-quick-select'));
-      const quickAddButtons = Array.from(viewRaw.querySelectorAll('.backlog-quick-add-btn'));
       const rawAppSections = Array.from(viewRaw.querySelectorAll('.app[data-app-key]'));
       const rawAppSectionCards = rawAppSections.map((section) => ({
         section,
@@ -5496,6 +5621,8 @@ function renderHtml(
       let noteSidebarCloseTimer = 0;
       let stateLoaded = false;
       let rawFilteredCount = rawCards.length;
+      let rawCurrentPage = 1;
+      let rawTotalPages = 1;
       let excludeFilterMode = 'all';
       let backlogPriorityFilterMode = 'all';
       let backlogEffortFilterMode = 'all';
@@ -5507,6 +5634,7 @@ function renderHtml(
       const BACKLOG_LEVEL_FILTER_MODES = new Set(['all', 'high', 'medium', 'low']);
       const REVIEW_TAGS = ['heart', 'satisfaction', 'dissatisfaction', 'requests'];
       const TAG_FILTER_MODES = new Set(['all', 'heart', 'satisfaction', 'dissatisfaction', 'requests']);
+      const RAW_PAGE_SIZE = 50;
       const TAB_QUERY_KEY = 'tab';
       const SEARCH_QUERY_KEY = 'q';
       const TAGS_QUERY_KEY = 'tags';
@@ -6127,17 +6255,13 @@ function renderHtml(
           }
 
           const active = state.tags.includes(tag);
-          const blockedByInactive = state.excluded;
           button.classList.toggle('is-active', active);
           button.setAttribute('aria-pressed', active ? 'true' : 'false');
-          button.toggleAttribute('disabled', blockedByInactive);
           button.setAttribute(
             'title',
-            blockedByInactive
-              ? '활성 상태에서만 해시태그를 변경할 수 있습니다.'
-              : active
-                ? '#' + TAG_LABELS[tag] + ' 해제'
-                : '#' + TAG_LABELS[tag] + ' 추가'
+            active
+              ? '#' + TAG_LABELS[tag] + ' 해제'
+              : '#' + TAG_LABELS[tag] + ' 추가'
           );
         });
 
@@ -6150,7 +6274,7 @@ function renderHtml(
         }
 
         syncOriginalToggleButton(card);
-        syncBacklogQuickAddButtonForCard(card);
+        syncBacklogQuickSelectForCard(card);
       }
 
       function syncOriginalToggleButton(card) {
@@ -6419,6 +6543,9 @@ function renderHtml(
           if (backlogPriorityRank(a.priority) !== backlogPriorityRank(b.priority)) {
             return backlogPriorityRank(a.priority) - backlogPriorityRank(b.priority);
           }
+          if (backlogLevelRank(b.effort) !== backlogLevelRank(a.effort)) {
+            return backlogLevelRank(b.effort) - backlogLevelRank(a.effort);
+          }
           if (b.evidenceReviewIds.length !== a.evidenceReviewIds.length) {
             return b.evidenceReviewIds.length - a.evidenceReviewIds.length;
           }
@@ -6452,64 +6579,123 @@ function renderHtml(
         backlogDirty = currentSignature !== backlogPersistedSignature;
       }
 
-      function syncBacklogQuickAddButtonForCard(card) {
+      function resolveCardBacklogQuickContext(card) {
+        if (!(card instanceof HTMLElement)) {
+          return undefined;
+        }
+        const reviewId = getCardReviewId(card);
+        if (!reviewId) {
+          return undefined;
+        }
+
+        const appRawTitle = String(card.getAttribute('data-app-title') || '').trim();
+        const appDisplayTitle = String(card.getAttribute('data-app-display-title') || '').trim() || parseDisplayTitle(appRawTitle);
+        const scopedReviewId = createScopedReviewId(appRawTitle || appDisplayTitle, reviewId);
+        if (!scopedReviewId) {
+          return undefined;
+        }
+
+        const canonicalScopedReviewId = canonicalizeScopedReviewIdForCatalog(scopedReviewId, 'global') || scopedReviewId;
+        return {
+          reviewId,
+          appRawTitle,
+          appDisplayTitle,
+          scopedReviewId: canonicalScopedReviewId
+        };
+      }
+
+      function backlogQuickLabel(item) {
+        return '[' + String(item.priority || '').toUpperCase() + '] ' + String(item.title || '');
+      }
+
+      function backlogQuickTitle(item) {
+        return String(item && item.title ? item.title : '').trim();
+      }
+
+      function setBacklogQuickStatus(card, message, linked) {
+        if (!(card instanceof HTMLElement)) {
+          return;
+        }
+        const status = card.querySelector('.backlog-quick-status');
+        if (!(status instanceof HTMLElement)) {
+          return;
+        }
+        const text = String(message || '').trim() || '미연결';
+        status.textContent = text;
+        status.title = text;
+        status.classList.toggle('is-linked', Boolean(linked));
+      }
+
+      function syncBacklogQuickSelectForCard(card) {
         if (!(card instanceof HTMLElement)) {
           return;
         }
 
-        const button = card.querySelector('.backlog-quick-add-btn');
-        if (!(button instanceof HTMLButtonElement)) {
-          return;
-        }
-
-        const reviewId = getCardReviewId(card);
-        if (!reviewId) {
-          button.disabled = true;
-          return;
-        }
-
-        const state = readCardState(reviewId, card);
         const select = card.querySelector('.backlog-quick-select');
-        const hasSelectableBacklog = select instanceof HTMLSelectElement && Boolean(select.value);
-        button.disabled = !hasSelectableBacklog;
-        button.title = hasSelectableBacklog
-          ? state.excluded
-            ? '백로그에 추가하며 자동으로 활성 상태로 전환됩니다.'
-            : '선택한 백로그에 이 리뷰를 추가'
-          : '추가할 백로그를 선택하세요.';
-      }
+        if (!(select instanceof HTMLSelectElement)) {
+          return;
+        }
 
-      function syncBacklogQuickSelectOptions() {
+        const context = resolveCardBacklogQuickContext(card);
+        if (!context) {
+          select.innerHTML = '<option value=\"\">백로그에 추가</option>';
+          select.disabled = true;
+          setBacklogQuickStatus(card, '리뷰 식별 정보 없음', false);
+          return;
+        }
+
+        const linkedItems = backlogStateItems.filter(
+          (item) =>
+            Array.isArray(item.evidenceReviewIds) && item.evidenceReviewIds.includes(context.scopedReviewId)
+        );
+        const placeholderLabel = linkedItems.length > 0 ? '다른 백로그에도 추가' : '백로그에 추가';
         const optionsHtml =
-          '<option value=\"\">백로그 선택</option>' +
+          '<option value=\"\">' +
+          escapeInlineHtml(placeholderLabel) +
+          '</option>' +
           backlogStateItems
             .map((item) => {
-              const label = '[' + String(item.priority || '').toUpperCase() + '] ' + String(item.title || '');
+              const linked = Array.isArray(item.evidenceReviewIds) && item.evidenceReviewIds.includes(context.scopedReviewId);
+              const label = linked
+                ? '✓ ' + backlogQuickTitle(item)
+                : backlogQuickLabel(item);
               return '<option value=\"' + escapeInlineHtml(item.id) + '\">' + escapeInlineHtml(label) + '</option>';
             })
             .join('');
 
+        const currentValue = select.value;
+        select.innerHTML = optionsHtml;
+        if (currentValue && backlogStateItems.some((item) => item.id === currentValue)) {
+          select.value = currentValue;
+        }
+
+        const hasBacklog = backlogStateItems.length > 0;
+        select.disabled = !hasBacklog;
+        select.title = hasBacklog ? '백로그를 선택하면 즉시 추가됩니다.' : '추가할 백로그가 없습니다.';
+
+        if (linkedItems.length === 0) {
+          setBacklogQuickStatus(card, '미연결', false);
+        } else {
+          const linkedTitles = linkedItems
+            .map((item) => backlogQuickTitle(item))
+            .filter(Boolean);
+          const summary =
+            '(' +
+            linkedTitles.length +
+            '개 연결: ' +
+            (linkedTitles.length > 0 ? linkedTitles.join(', ') : '-') +
+            ')';
+          setBacklogQuickStatus(card, summary, true);
+        }
+      }
+
+      function syncBacklogQuickSelectOptions() {
         quickAddSelects.forEach((select) => {
           if (!(select instanceof HTMLSelectElement)) {
             return;
           }
-          const currentValue = select.value;
-          select.innerHTML = optionsHtml;
-          if (currentValue && backlogStateItems.some((item) => item.id === currentValue)) {
-            select.value = currentValue;
-          }
-        });
-
-        quickAddButtons.forEach((button) => {
-          if (!(button instanceof HTMLButtonElement)) {
-            return;
-          }
-          const card = button.closest('.quote-card');
-          if (!card) {
-            button.disabled = true;
-            return;
-          }
-          syncBacklogQuickAddButtonForCard(card);
+          const card = select.closest('.quote-card');
+          syncBacklogQuickSelectForCard(card);
         });
       }
 
@@ -7102,41 +7288,50 @@ function renderHtml(
         if (!normalizedId || !card) {
           return;
         }
-        const reviewId = getCardReviewId(card);
-        if (!reviewId) {
+        const context = resolveCardBacklogQuickContext(card);
+        if (!context) {
           return;
         }
-        const state = readCardState(reviewId, card);
+        const state = readCardState(context.reviewId, card);
+        let activated = false;
         if (state.excluded) {
           state.excluded = false;
-          writeCardState(reviewId, state, card);
+          activated = true;
+          writeCardState(context.reviewId, state, card);
           syncCardStateVisual(card);
           schedulePreviewStateSave();
         }
 
-        const appRawTitle = String(card.getAttribute('data-app-title') || '').trim();
-        const appDisplayTitle = String(card.getAttribute('data-app-display-title') || '').trim() || parseDisplayTitle(appRawTitle);
-        const scopedReviewId = createScopedReviewId(appRawTitle || appDisplayTitle, reviewId);
-        if (!scopedReviewId) {
-          return;
-        }
-
+        let added = false;
         backlogStateItems = backlogStateItems.map((item) => {
           if (item.id !== normalizedId) {
             return item;
           }
-          const nextEvidenceIds = new Set(Array.isArray(item.evidenceReviewIds) ? item.evidenceReviewIds : []);
-          nextEvidenceIds.add(scopedReviewId);
-          const nextAppNames = new Set(Array.isArray(item.appNames) ? item.appNames : []);
-          if (appDisplayTitle) {
-            nextAppNames.add(appDisplayTitle);
+          const currentEvidenceIds = Array.isArray(item.evidenceReviewIds) ? item.evidenceReviewIds : [];
+          if (currentEvidenceIds.includes(context.scopedReviewId)) {
+            return item;
           }
+          const nextEvidenceIds = new Set(Array.isArray(item.evidenceReviewIds) ? item.evidenceReviewIds : []);
+          nextEvidenceIds.add(context.scopedReviewId);
+          const nextAppNames = new Set(Array.isArray(item.appNames) ? item.appNames : []);
+          if (context.appDisplayTitle) {
+            nextAppNames.add(context.appDisplayTitle);
+          }
+          added = true;
           return normalizeBacklogItem({
             ...item,
             evidenceReviewIds: Array.from(nextEvidenceIds),
             appNames: Array.from(nextAppNames)
           });
         });
+
+        if (!added) {
+          if (activated) {
+            applySearch();
+          }
+          syncBacklogQuickSelectForCard(card);
+          return;
+        }
 
         renderBacklogTable();
         applySearch();
@@ -7343,14 +7538,30 @@ function renderHtml(
         }
 
         rawPagination.classList.remove('hidden-control');
+        const isRawTab = viewRaw.classList.contains('active');
 
         if (rawTotalCount instanceof HTMLElement) {
-          if (viewRaw.classList.contains('active')) {
+          if (isRawTab) {
             rawTotalCount.textContent = '리뷰 ' + rawFilteredCount + '/' + rawCards.length;
           } else {
             const filtered = backlogItems.filter((item) => !item.classList.contains('hidden-by-search')).length;
             rawTotalCount.textContent = '백로그 ' + filtered + '/' + backlogItems.length;
           }
+        }
+
+        if (rawPageInfo instanceof HTMLElement) {
+          rawPageInfo.textContent = isRawTab ? rawCurrentPage + '/' + rawTotalPages : '-/-';
+          rawPageInfo.classList.toggle('hidden-control', !isRawTab);
+        }
+
+        if (rawPagePrev instanceof HTMLButtonElement) {
+          rawPagePrev.classList.toggle('hidden-control', !isRawTab);
+          rawPagePrev.disabled = !isRawTab || rawCurrentPage <= 1;
+        }
+
+        if (rawPageNext instanceof HTMLButtonElement) {
+          rawPageNext.classList.toggle('hidden-control', !isRawTab);
+          rawPageNext.disabled = !isRawTab || rawCurrentPage >= rawTotalPages;
         }
       }
 
@@ -7368,7 +7579,8 @@ function renderHtml(
           const hasVisible = entry.cards.some(
             (card) =>
               !card.classList.contains('hidden-by-search') &&
-              !card.classList.contains('hidden-by-state')
+              !card.classList.contains('hidden-by-state') &&
+              !card.classList.contains('hidden-by-page')
           );
           entry.section.classList.toggle('hidden-by-page', !hasVisible);
         });
@@ -7379,12 +7591,55 @@ function renderHtml(
           (card) => !card.classList.contains('hidden-by-search') && !card.classList.contains('hidden-by-state')
         );
         rawFilteredCount = filteredCards.length;
+        rawTotalPages = Math.max(1, Math.ceil(rawFilteredCount / RAW_PAGE_SIZE));
+        rawCurrentPage = Math.max(1, Math.min(rawCurrentPage, rawTotalPages));
+        const startIndex = (rawCurrentPage - 1) * RAW_PAGE_SIZE;
+        const pagedCards = new Set(filteredCards.slice(startIndex, startIndex + RAW_PAGE_SIZE));
         rawCards.forEach((card) => {
-          card.classList.remove('hidden-by-page');
+          card.classList.toggle('hidden-by-page', !pagedCards.has(card));
         });
 
         syncRawSectionVisibility();
         syncRawPaginationUi();
+      }
+
+      function scrollWindowToEdge(edge) {
+        const visibleCards = rawCards.filter(
+          (card) =>
+            !card.classList.contains('hidden-by-search') &&
+            !card.classList.contains('hidden-by-state') &&
+            !card.classList.contains('hidden-by-page')
+        );
+        if (visibleCards.length === 0) {
+          return;
+        }
+
+        const targetCard = edge === 'bottom' ? visibleCards[visibleCards.length - 1] : visibleCards[0];
+        const rect = targetCard.getBoundingClientRect();
+        const currentY = window.scrollY || window.pageYOffset || 0;
+        const topBarOffset = topBar instanceof HTMLElement ? topBar.offsetHeight + 10 : 10;
+
+        if (edge === 'bottom') {
+          const targetY = Math.max(0, currentY + rect.bottom - window.innerHeight + 14);
+          window.scrollTo({ top: targetY, behavior: 'smooth' });
+          return;
+        }
+
+        const targetY = Math.max(0, currentY + rect.top - topBarOffset);
+        window.scrollTo({ top: targetY, behavior: 'smooth' });
+      }
+
+      function setRawPage(nextPage, scrollEdge) {
+        const clamped = Math.max(1, Math.min(Number(nextPage) || 1, rawTotalPages));
+        if (clamped === rawCurrentPage) {
+          return;
+        }
+        rawCurrentPage = clamped;
+        applyRawPagination();
+        syncFilterSummary();
+        if (scrollEdge === 'top' || scrollEdge === 'bottom') {
+          window.requestAnimationFrame(() => scrollWindowToEdge(scrollEdge));
+        }
       }
 
       function setSearchExpanded(nextExpanded) {
@@ -7466,6 +7721,7 @@ function renderHtml(
         }
         document.body.classList.remove('show-all-original');
         selectedTagFilters.clear();
+        rawCurrentPage = 1;
         syncTagFilterButtons();
         setExcludeFilterMode('all');
         applySearch();
@@ -8156,21 +8412,6 @@ function renderHtml(
           return;
         }
 
-        const quickAddButton = target.closest('.backlog-quick-add-btn');
-        if (quickAddButton instanceof HTMLElement) {
-          event.preventDefault();
-          const card = quickAddButton.closest('.quote-card');
-          if (!card) {
-            return;
-          }
-          const select = card.querySelector('.backlog-quick-select');
-          if (!(select instanceof HTMLSelectElement) || !select.value) {
-            return;
-          }
-          addReviewToBacklog(select.value, card);
-          return;
-        }
-
         const evidenceToggle = target.closest('.evidence-toggle');
         if (evidenceToggle instanceof HTMLElement) {
           event.preventDefault();
@@ -8211,10 +8452,6 @@ function renderHtml(
           if (!card || !reviewId || !tag) return;
 
           const state = readCardState(reviewId, card);
-          if (state.excluded) {
-            return;
-          }
-
           const tags = state.tags.includes(tag)
             ? state.tags.filter((item) => item !== tag)
             : state.tags.concat([tag]);
@@ -8489,11 +8726,22 @@ function renderHtml(
         }
         select.addEventListener('change', () => {
           const card = select.closest('.quote-card');
-          syncBacklogQuickAddButtonForCard(card);
+          if (!card) {
+            return;
+          }
+          const backlogId = String(select.value || '').trim();
+          if (!backlogId) {
+            syncBacklogQuickSelectForCard(card);
+            return;
+          }
+          addReviewToBacklog(backlogId, card);
+          select.value = '';
+          syncBacklogQuickSelectForCard(card);
         });
       });
 
       minLength100.addEventListener('change', () => {
+        rawCurrentPage = 1;
         applySearch();
       });
       tagFilterButtons.forEach((button) => {
@@ -8504,6 +8752,7 @@ function renderHtml(
         button.addEventListener('click', () => {
           const mode = (button.getAttribute('data-tag-filter') || '').trim();
           setTagFilterMode(mode);
+          rawCurrentPage = 1;
           applySearch();
         });
       });
@@ -8527,6 +8776,7 @@ function renderHtml(
         button.addEventListener('click', () => {
           const mode = (button.getAttribute('data-exclude-filter') || '').trim();
           setExcludeFilterMode(mode);
+          rawCurrentPage = 1;
           applySearch();
         });
       });
@@ -8552,8 +8802,19 @@ function renderHtml(
       });
       searchInput.addEventListener('input', () => {
         setSearchExpanded(true);
+        rawCurrentPage = 1;
         scheduleApplySearch();
       });
+      if (rawPagePrev instanceof HTMLButtonElement) {
+        rawPagePrev.addEventListener('click', () => {
+          setRawPage(rawCurrentPage - 1, 'bottom');
+        });
+      }
+      if (rawPageNext instanceof HTMLButtonElement) {
+        rawPageNext.addEventListener('click', () => {
+          setRawPage(rawCurrentPage + 1, 'top');
+        });
+      }
       document.addEventListener('click', (event) => {
         if (getSearchQuery().length > 0) {
           return;
