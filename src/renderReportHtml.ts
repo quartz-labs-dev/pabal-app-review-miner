@@ -960,7 +960,7 @@ function deriveDynamicThemes(app: AppSection): ThemeDefinition[] {
         keywords: item.concept.keywords,
         impact,
         effort: item.concept.effort,
-        action: `${item.concept.action} (근거 리뷰 ${reviewCount}건)`
+        action: `${item.concept.action} (리뷰 ${reviewCount}건)`
       } satisfies ThemeDefinition;
     });
 
@@ -1915,9 +1915,9 @@ function sanitizeBacklogAction(value: unknown): string {
   let text = normalizeText(String(value ?? ""));
   // Drop redundant evidence-count suffixes because evidence count is shown in table columns.
   text = text
-    .replace(/\(\s*근거\s*리뷰\s*\d+\s*건\s*\)/gi, "")
+    .replace(/\(\s*(?:근거\s*)?리뷰\s*\d+\s*건\s*\)/gi, "")
     .replace(/\(\s*evidence\s*\d+\s*reviews?\s*\)/gi, "")
-    .replace(/근거\s*리뷰\s*\d+\s*건/gi, "")
+    .replace(/(?:근거\s*)?리뷰\s*\d+\s*건/gi, "")
     .replace(/evidence\s*\d+\s*reviews?/gi, "");
   return normalizeText(text.replace(/\s{2,}/g, " "));
 }
@@ -1925,7 +1925,7 @@ function sanitizeBacklogAction(value: unknown): string {
 function backlogSimilarityText(value: string): string {
   return normalizeText(value)
     .toLowerCase()
-    .replace(/\(\s*근거\s*리뷰\s*\d+\s*건\s*\)/gi, "")
+    .replace(/\(\s*(?:근거\s*)?리뷰\s*\d+\s*건\s*\)/gi, "")
     .replace(/\(\s*evidence\s*\d+\s*reviews?\s*\)/gi, "")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .replace(/\s+/g, " ")
@@ -1995,6 +1995,9 @@ function flattenAppBacklogsToBacklogItems(backlogs: AppBacklog[]): BacklogClient
       if (priorityOrder(item.priority) < priorityOrder(existing.priority)) {
         existing.priority = item.priority;
       }
+      if (backlogStatusOrder(item.status) < backlogStatusOrder(existing.status)) {
+        existing.status = item.status;
+      }
       if (backlogLevelRank(item.effort) > backlogLevelRank(existing.effort)) {
         existing.effort = item.effort;
       }
@@ -2021,6 +2024,9 @@ function flattenAppBacklogsToBacklogItems(backlogs: AppBacklog[]): BacklogClient
     .sort((a, b) => {
       if (priorityOrder(a.priority) !== priorityOrder(b.priority)) {
         return priorityOrder(a.priority) - priorityOrder(b.priority);
+      }
+      if (backlogStatusOrder(a.status) !== backlogStatusOrder(b.status)) {
+        return backlogStatusOrder(a.status) - backlogStatusOrder(b.status);
       }
       if (backlogLevelRank(b.effort) !== backlogLevelRank(a.effort)) {
         return backlogLevelRank(b.effort) - backlogLevelRank(a.effort);
@@ -2090,6 +2096,7 @@ function normalizeBacklogItems(value: unknown): BacklogClientItem[] {
     dedupedById.set(dedupeTargetId, {
       ...existing,
       priority: priorityOrder(item.priority) < priorityOrder(existing.priority) ? item.priority : existing.priority,
+      status: backlogStatusOrder(item.status) < backlogStatusOrder(existing.status) ? item.status : existing.status,
       effort: backlogLevelRank(item.effort) > backlogLevelRank(existing.effort) ? item.effort : existing.effort,
       title: item.title.length > existing.title.length ? item.title : existing.title,
       action: item.action.length > existing.action.length ? item.action : existing.action,
@@ -2101,6 +2108,9 @@ function normalizeBacklogItems(value: unknown): BacklogClientItem[] {
   return [...dedupedById.values()].sort((a, b) => {
     if (priorityOrder(a.priority) !== priorityOrder(b.priority)) {
       return priorityOrder(a.priority) - priorityOrder(b.priority);
+    }
+    if (backlogStatusOrder(a.status) !== backlogStatusOrder(b.status)) {
+      return backlogStatusOrder(a.status) - backlogStatusOrder(b.status);
     }
     if (backlogLevelRank(b.effort) !== backlogLevelRank(a.effort)) {
       return backlogLevelRank(b.effort) - backlogLevelRank(a.effort);
@@ -2366,6 +2376,9 @@ function hydrateBacklogItems(backlogItems: BacklogClientItem[], reviewPools: Rev
       if (priorityOrder(a.priority) !== priorityOrder(b.priority)) {
         return priorityOrder(a.priority) - priorityOrder(b.priority);
       }
+      if (backlogStatusOrder(a.status) !== backlogStatusOrder(b.status)) {
+        return backlogStatusOrder(a.status) - backlogStatusOrder(b.status);
+      }
       if (backlogLevelRank(b.effort) !== backlogLevelRank(a.effort)) {
         return backlogLevelRank(b.effort) - backlogLevelRank(a.effort);
       }
@@ -2388,6 +2401,16 @@ function priorityOrder(priority: Priority): number {
     return 0;
   }
   if (priority === "should") {
+    return 1;
+  }
+  return 2;
+}
+
+function backlogStatusOrder(status: BacklogStatus): number {
+  if (status === "not_started") {
+    return 0;
+  }
+  if (status === "in_progress") {
     return 1;
   }
   return 2;
@@ -3057,6 +3080,9 @@ function buildBacklog(apps: AppSection[], reviewPools: ReviewPools): AppBacklog[
         if (priorityOrder(a.priority) !== priorityOrder(b.priority)) {
           return priorityOrder(a.priority) - priorityOrder(b.priority);
         }
+        if (backlogStatusOrder(a.status) !== backlogStatusOrder(b.status)) {
+          return backlogStatusOrder(a.status) - backlogStatusOrder(b.status);
+        }
         if (backlogLevelRank(b.effort) !== backlogLevelRank(a.effort)) {
           return backlogLevelRank(b.effort) - backlogLevelRank(a.effort);
         }
@@ -3415,7 +3441,7 @@ function renderHtml(
 
   const backlogRows =
     unifiedBacklogItems.length === 0
-      ? `<tr><td colspan=\"5\" class=\"empty\">추출된 백로그 없음</td></tr>`
+      ? `<tr><td colspan=\"6\" class=\"empty\">추출된 백로그 없음</td></tr>`
       : unifiedBacklogItems
           .map((item, itemIndex) => {
             const evidenceId = `evidence-${itemIndex}`;
@@ -3474,10 +3500,7 @@ function renderHtml(
               item.evidenceReviewIds.join("|")
             )}\" data-evidence-id=\"${escapeHtml(evidenceId)}\">
                     <td>${renderPriorityBadge(item.priority)}</td>
-                    <td>
-                      <span class=\"status-pill status-${escapeHtml(item.status)}\">${escapeHtml(statusLabel)}</span>
-                    </td>
-                    <td class=\"item-content-cell\">
+                    <td class=\"item-content-cell\" title=\"클릭해 편집\">
                       <div class=\"item-main\">
                         <div class=\"item-title\">${escapeHtml(item.title)}</div>
                         <div class=\"item-action\">${escapeHtml(item.action)}</div>
@@ -3486,6 +3509,22 @@ function renderHtml(
                           <span class=\"item-app-chips\">${appNameChips}</span>
                         </div>
                       </div>
+                    </td>
+                    <td>
+                      <span class=\"status-pill status-${escapeHtml(item.status)}\">${escapeHtml(statusLabel)}</span>
+                    </td>
+                    <td>${renderLevel(item.effort)}</td>
+                    <td>
+                      <div class=\"evidence-count-cell\">
+                        <span class=\"evidence-count-value\">${item.evidenceCount}</span>
+                        <button class=\"evidence-toggle\" type=\"button\" data-evidence-id=\"${escapeHtml(
+                          evidenceId
+                        )}\" aria-expanded=\"false\" aria-label=\"리뷰 보기\" title=\"리뷰 보기\">
+                          <span class=\"evidence-toggle-icon\" aria-hidden=\"true\">▾</span>
+                        </button>
+                      </div>
+                    </td>
+                    <td class=\"item-action-cell\">
                       <div class=\"item-icon-actions\" role=\"group\" aria-label=\"백로그 행 작업\">
                         <button class=\"backlog-icon-btn backlog-remove-btn\" type=\"button\" data-backlog-id=\"${escapeHtml(
                           item.id
@@ -3495,20 +3534,9 @@ function renderHtml(
                         )}\" aria-label=\"편집\" title=\"편집\">✎</button>
                       </div>
                     </td>
-                    <td>${renderLevel(item.effort)}</td>
-                    <td>
-                      <div class=\"evidence-count-cell\">
-                        <span class=\"evidence-count-value\">${item.evidenceCount}</span>
-                        <button class=\"evidence-toggle\" type=\"button\" data-evidence-id=\"${escapeHtml(
-                          evidenceId
-                        )}\" aria-expanded=\"false\" aria-label=\"근거 보기\" title=\"근거 보기\">
-                          <span class=\"evidence-toggle-icon\" aria-hidden=\"true\">▾</span>
-                        </button>
-                      </div>
-                    </td>
                   </tr>
                   <tr id=\"${escapeHtml(evidenceId)}\" class=\"evidence-row\">
-                    <td colspan=\"5\">
+                    <td colspan=\"6\">
                       <div class=\"evidence-panel\">
                         <ul class=\"evidence-list\">${examples}</ul>
                       </div>
@@ -3525,18 +3553,20 @@ function renderHtml(
           <table class=\"backlog-table\">
             <colgroup>
               <col class=\"col-priority\" />
-              <col class=\"col-status\" />
               <col class=\"col-item\" />
+              <col class=\"col-status\" />
               <col class=\"col-effort\" />
               <col class=\"col-evidence\" />
+              <col class=\"col-actions\" />
             </colgroup>
             <thead>
               <tr>
                 <th>Priority</th>
-                <th>Status</th>
                 <th>백로그 항목</th>
+                <th>Status</th>
                 <th>Effort</th>
-                <th>근거 수</th>
+                <th>리뷰 수</th>
+                <th>작업</th>
               </tr>
             </thead>
             <tbody id=\"backlogTableBody\">
@@ -3650,15 +3680,17 @@ function renderHtml(
         display: inline-flex;
         align-items: center;
         gap: 12px;
-        flex: 1 1 auto;
+        flex: 0 1 auto;
         flex-wrap: wrap;
         min-width: 0;
+        max-width: 100%;
       }
       .search-fixed {
-        width: auto;
-        max-width: min(520px, 100%);
-        flex: 0 0 auto;
-        margin-left: auto;
+        width: 100%;
+        max-width: 100%;
+        flex: 1 1 360px;
+        min-width: 0;
+        margin-left: 0;
         display: inline-flex;
         align-items: center;
         justify-content: flex-end;
@@ -3689,6 +3721,9 @@ function renderHtml(
         justify-content: flex-end;
         gap: 10px;
         flex-wrap: wrap;
+        flex: 0 0 auto;
+        margin-left: auto;
+        min-width: 0;
       }
       .top-filters-left {
         display: inline-flex;
@@ -3892,8 +3927,8 @@ function renderHtml(
         transform: translateX(4px);
       }
       .top.is-search-open .search-fixed input[type="search"] {
-        width: min(460px, 52vw);
-        min-width: 220px;
+        width: 100%;
+        min-width: 0;
         padding: 10px 12px;
         border-width: 1px;
         opacity: 1;
@@ -4533,7 +4568,7 @@ function renderHtml(
         position: absolute;
         right: 0;
         top: 0;
-        width: min(420px, 100vw);
+        width: min(60vw, 100vw);
         height: 100%;
         border-left: 1px solid var(--line);
         background: #ffffff;
@@ -4574,62 +4609,184 @@ function renderHtml(
         font-weight: 700;
         padding: 6px 10px;
       }
-      .note-app-select-wrap {
-        padding: 10px 14px;
-        border-bottom: 1px solid var(--line);
-        background: #f8fbff;
+      .note-sidebar-head-actions #noteSidebarClose {
+        min-width: auto;
+        min-height: auto;
+        padding: 0 2px !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        appearance: none;
+        -webkit-appearance: none;
+        color: #334155;
+        font-size: 22px;
+        line-height: 1;
       }
-      .note-app-select {
+      .note-sidebar-head-actions #noteSidebarClose:hover,
+      .note-sidebar-head-actions #noteSidebarClose:active,
+      .note-sidebar-head-actions #noteSidebarClose:focus-visible {
+        border: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+      }
+      .filter-panel-head-actions #filterPanelClose {
+        min-width: auto;
+        min-height: auto;
+        padding: 0 2px !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        appearance: none;
+        -webkit-appearance: none;
+        color: #334155;
+        font-size: 22px;
+        line-height: 1;
+      }
+      .filter-panel-head-actions #filterPanelClose:hover,
+      .filter-panel-head-actions #filterPanelClose:active,
+      .filter-panel-head-actions #filterPanelClose:focus-visible {
+        border: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+      }
+      .note-sidebar-body {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 156px minmax(0, 1fr);
+      }
+      .note-list-panel {
+        border-right: 1px solid var(--line);
+        background: #f8fbff;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .note-list-head {
+        padding: 10px;
+        border-bottom: 1px solid var(--line);
+      }
+      .note-list-head button {
         width: 100%;
-        min-height: 38px;
+        min-height: 34px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .note-list {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 8px;
+        display: grid;
+        gap: 6px;
+        align-content: start;
+      }
+      .note-list-empty {
+        color: #64748b;
+        font-size: 12px;
+        padding: 8px;
+      }
+      .note-list-item {
+        width: 100%;
+        text-align: left;
         border: 1px solid #c7d6e8;
         border-radius: 10px;
         background: #ffffff;
         color: #0f172a;
-        font-size: 13px;
-        font-weight: 700;
-        padding: 0 11px;
+        padding: 8px;
+        display: grid;
+        gap: 4px;
       }
-      .note-app-meta {
-        padding: 10px 14px;
-        border-bottom: 1px dashed var(--line);
-        background: #ffffff;
-      }
-      .note-app-links {
-        margin-top: 0;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        flex-wrap: wrap;
-      }
-      .note-link {
-        text-decoration: none;
-        border: 1px solid #c7d6e8;
-        border-radius: 999px;
-        padding: 3px 9px;
-        font-size: 11px;
-        font-weight: 700;
-        color: #334155;
-        background: #ffffff;
-      }
-      .note-link:hover {
+      .note-list-item.is-active {
         border-color: #0ea5e9;
-        color: #075985;
         background: #f0f9ff;
       }
-      .note-link-empty {
-        color: #64748b;
+      .note-list-title {
         font-size: 12px;
+        font-weight: 700;
+        line-height: 1.3;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
-      .note-sidebar textarea {
-        flex: 1;
+      .note-list-meta {
+        color: #64748b;
+        font-size: 11px;
+      }
+      .note-editor-panel {
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+      }
+      .note-editor-panel .note-editor-empty {
+        display: block;
+      }
+      .note-editor-panel .note-editor-fields,
+      .note-editor-panel .note-editor-actions {
+        display: none;
+      }
+      .note-editor-panel.has-active-note .note-editor-empty {
+        display: none;
+      }
+      .note-editor-panel.has-active-note .note-editor-fields {
+        display: block;
+      }
+      .note-editor-panel.has-active-note .note-editor-actions {
+        display: flex;
+      }
+      .note-editor-empty {
+        padding: 16px 14px;
+        color: #64748b;
+        font-size: 14px;
+        font-weight: 700;
+      }
+      .note-editor-fields {
+        min-height: 0;
+        display: block;
+      }
+      .note-editor-field {
+        display: grid;
+        gap: 6px;
+        padding: 10px 12px;
+      }
+      .note-editor-field label {
+        color: #334155;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .note-editor-field input,
+      .note-editor-field textarea {
         width: 100%;
-        border: 0;
-        padding: 14px;
-        resize: none;
-        outline: none;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        background: #ffffff;
+        color: #0f172a;
         font: inherit;
-        line-height: 1.5;
+        padding: 8px 10px;
+      }
+      .note-editor-field textarea {
+        min-height: 200px;
+        resize: vertical;
+      }
+      .note-editor-actions {
+        padding: 2px 12px 10px;
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 8px;
+        margin-top: 0;
+      }
+      #noteEditorSaveButton {
+        min-height: 34px;
+      }
+      #noteDeleteButton {
+        min-height: 34px;
+        border-color: #fca5a5;
+        background: #fff1f2;
+        color: #991b1b;
       }
       .note-sidebar-foot {
         border-top: 1px solid var(--line);
@@ -4668,7 +4825,10 @@ function renderHtml(
       .backlog-table col.col-evidence {
         width: 120px;
       }
-      .backlog-table td:nth-child(3) {
+      .backlog-table col.col-actions {
+        width: 86px;
+      }
+      .backlog-table td:nth-child(2) {
         min-width: 0;
       }
       th, td {
@@ -4683,12 +4843,10 @@ function renderHtml(
         background: #f8fbff;
       }
       .item-content-cell {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 10px;
+        display: block;
         min-width: 0;
         position: relative;
+        cursor: pointer;
       }
       .item-main {
         min-width: 0;
@@ -4738,7 +4896,12 @@ function renderHtml(
         align-items: center;
         gap: 6px;
         flex: 0 0 auto;
-        margin-left: auto;
+        justify-content: flex-end;
+      }
+      .item-action-cell {
+        text-align: right;
+        vertical-align: top;
+        padding-top: 12px;
       }
       .backlog-icon-btn {
         width: 30px;
@@ -4765,41 +4928,40 @@ function renderHtml(
         font-weight: 700;
         transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease, color 180ms ease;
       }
+      .backlog-inline-select:hover {
+        background: #f1f5f9;
+        border-color: #cbd5e1;
+      }
+      .backlog-inline-select:focus,
+      .backlog-inline-select:focus-visible {
+        outline: none;
+        background: #f8fafc;
+        border-color: #cbd5e1;
+        box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.2);
+      }
       .backlog-inline-priority {
         text-transform: uppercase;
       }
-      .backlog-inline-priority.priority-must {
-        background: #fee2e2;
-        border-color: #fca5a5;
-        color: #991b1b;
+      .backlog-inline-priority.priority-must,
+      .backlog-inline-status.status-not_started,
+      .backlog-inline-effort.effort-high {
+        background: #ffffff;
+        border-color: #cbd5e1;
+        color: #dc2626;
       }
-      .backlog-inline-priority.priority-should {
-        background: #fef3c7;
-        border-color: #fcd34d;
-        color: #92400e;
+      .backlog-inline-priority.priority-should,
+      .backlog-inline-status.status-in_progress,
+      .backlog-inline-effort.effort-medium {
+        background: #ffffff;
+        border-color: #cbd5e1;
+        color: #d97706;
       }
-      .backlog-inline-priority.priority-could {
-        background: #dcfce7;
-        border-color: #86efac;
-        color: #166534;
-      }
-      .backlog-inline-status {
-        font-weight: 700;
-      }
-      .backlog-inline-status.status-not_started {
-        background: #fee2e2;
-        border-color: #fca5a5;
-        color: #991b1b;
-      }
-      .backlog-inline-status.status-in_progress {
-        background: #fef3c7;
-        border-color: #fcd34d;
-        color: #92400e;
-      }
-      .backlog-inline-status.status-done {
-        background: #dcfce7;
-        border-color: #86efac;
-        color: #166534;
+      .backlog-inline-priority.priority-could,
+      .backlog-inline-status.status-done,
+      .backlog-inline-effort.effort-low {
+        background: #ffffff;
+        border-color: #cbd5e1;
+        color: #16a34a;
       }
       .status-pill {
         display: inline-flex;
@@ -4807,51 +4969,27 @@ function renderHtml(
         justify-content: center;
         min-height: 30px;
         border-radius: 999px;
-        border: 1px solid transparent;
+        border: 1px solid #cbd5e1;
+        background: #ffffff;
         padding: 0 10px;
         font-size: 12px;
         font-weight: 700;
         white-space: nowrap;
       }
       .status-not_started {
-        background: #fee2e2;
-        border-color: #fca5a5;
-        color: #991b1b;
+        background: #ffffff;
+        border-color: #cbd5e1;
+        color: #dc2626;
       }
       .status-in_progress {
-        background: #fef3c7;
-        border-color: #fcd34d;
-        color: #92400e;
+        background: #ffffff;
+        border-color: #cbd5e1;
+        color: #d97706;
       }
       .status-done {
-        background: #dcfce7;
-        border-color: #86efac;
-        color: #166534;
-      }
-      .backlog-inline-effort.effort-high {
-        background: #fee2e2;
-        border-color: #fca5a5;
-        color: #991b1b;
-      }
-      .backlog-inline-effort.effort-medium {
-        background: #fef3c7;
-        border-color: #fcd34d;
-        color: #92400e;
-      }
-      .backlog-inline-effort.effort-low {
-        background: #dcfce7;
-        border-color: #86efac;
-        color: #166534;
-      }
-      .backlog-remove-btn {
-        border-color: #fca5a5;
-        color: #991b1b;
-        background: #fff1f2;
-      }
-      .backlog-edit-btn {
-        border-color: #bfdbfe;
-        color: #1e3a8a;
-        background: #eff6ff;
+        background: #ffffff;
+        border-color: #cbd5e1;
+        color: #16a34a;
       }
       .backlog-editor-root {
         position: fixed;
@@ -4905,7 +5043,34 @@ function renderHtml(
       }
       .backlog-editor-head-actions {
         display: inline-flex;
+        align-items: center;
         gap: 6px;
+      }
+      .backlog-editor-head-actions #backlogEditorDelete {
+        border-color: #fca5a5;
+        background: #fff1f2;
+        color: #991b1b;
+      }
+      .backlog-editor-head-actions #backlogEditorClose {
+        min-width: auto;
+        min-height: auto;
+        padding: 0 2px !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        appearance: none;
+        -webkit-appearance: none;
+        color: #334155;
+        font-size: 22px;
+        line-height: 1;
+      }
+      .backlog-editor-head-actions #backlogEditorClose:hover,
+      .backlog-editor-head-actions #backlogEditorClose:active,
+      .backlog-editor-head-actions #backlogEditorClose:focus-visible {
+        border: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
       }
       .backlog-editor-body {
         flex: 1;
@@ -4960,32 +5125,34 @@ function renderHtml(
         font-weight: 700;
       }
       .backlog-editor-selected-list {
-        display: flex;
-        gap: 6px;
-        flex-wrap: wrap;
+        display: grid;
+        gap: 8px;
       }
-      .backlog-selected-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 4px 8px;
+      .backlog-selected-item {
         border: 1px solid #bfdbfe;
-        border-radius: 999px;
+        border-radius: 12px;
         background: #eff6ff;
-        color: #1e3a8a;
-        font-size: 11px;
-        font-weight: 700;
+        padding: 8px 36px 8px 10px;
+        position: relative;
       }
-      .backlog-selected-chip button {
-        min-height: 18px;
-        width: 18px;
+      .backlog-selected-item button {
+        position: absolute;
+        top: 6px;
+        right: 8px;
+        min-height: 22px;
+        width: 22px;
         border: 1px solid #93c5fd;
         border-radius: 999px;
         background: #ffffff;
         color: #1e3a8a;
         line-height: 1;
-        font-size: 11px;
+        font-size: 12px;
         padding: 0;
+      }
+      .backlog-selected-item .review-body {
+        color: #334155;
+        font-size: 12px;
+        line-height: 1.35;
       }
       .backlog-selected-empty {
         color: #64748b;
@@ -5033,20 +5200,57 @@ function renderHtml(
         color: #64748b;
         background: #ffffff;
       }
-      .backlog-editor-foot {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 8px;
-      }
-      #backlogEditorDelete {
-        border-color: #fca5a5;
-        background: #fff1f2;
-        color: #991b1b;
-      }
       #backlogEditorStatus {
+        margin-top: 2px;
+        min-height: 16px;
         color: #64748b;
         font-size: 11px;
+      }
+      .confirm-dialog-root {
+        position: fixed;
+        inset: 0;
+        z-index: 60;
+        display: grid;
+        place-items: center;
+      }
+      .confirm-dialog-root[hidden] {
+        display: none;
+      }
+      .confirm-dialog-backdrop {
+        position: absolute;
+        inset: 0;
+        border: 0;
+        background: rgba(15, 23, 42, 0.38);
+      }
+      .confirm-dialog {
+        position: relative;
+        width: min(420px, calc(100% - 24px));
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        box-shadow: 0 18px 38px rgba(15, 23, 42, 0.24);
+        padding: 16px;
+      }
+      .confirm-dialog h3 {
+        margin: 0;
+        font-size: 17px;
+      }
+      .confirm-dialog p {
+        margin: 10px 0 0;
+        color: #334155;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+      .confirm-dialog-actions {
+        margin-top: 14px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+      #confirmDialogConfirm {
+        border-color: #fca5a5;
+        color: #991b1b;
+        background: #fff1f2;
       }
       .badge {
         display: inline-block;
@@ -5184,8 +5388,8 @@ function renderHtml(
       }
       @media (max-width: 1100px) {
         .top.is-search-open .search-fixed input[type="search"] {
-          width: min(420px, 48vw);
-          min-width: 200px;
+          width: 100%;
+          min-width: 0;
         }
       }
       ${backlogReviewPickerStyles}
@@ -5213,19 +5417,23 @@ function renderHtml(
         }
         .search-fixed {
           margin-left: 0;
-          width: auto;
+          width: 100%;
           max-width: 100%;
-          flex: none;
+          flex: 1 1 280px;
+          min-width: 0;
+          order: 2;
           min-height: 36px;
         }
         .top.is-search-open .search-fixed input[type="search"] {
-          width: min(360px, 56vw);
-          min-width: 160px;
+          width: 100%;
+          min-width: 0;
           padding: 10px 12px;
         }
         .top-controls {
           margin-left: 0;
           width: auto;
+          flex: 0 0 auto;
+          order: 3;
           justify-content: flex-end;
           gap: 8px;
         }
@@ -5266,8 +5474,8 @@ function renderHtml(
           max-width: 100%;
         }
         .top.is-search-open .search-fixed input[type="search"] {
-          width: min(300px, 60vw);
-          min-width: 140px;
+          width: 100%;
+          min-width: 0;
           padding: 9px 11px;
         }
         .top-status-row {
@@ -5369,20 +5577,32 @@ function renderHtml(
           min-height: 34px;
           padding: 6px 9px;
         }
-        .note-app-select-wrap {
+        .note-sidebar-body {
+          grid-template-columns: 1fr;
+          grid-template-rows: 160px minmax(0, 1fr);
+        }
+        .note-list-panel {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+        .note-list-head {
           padding: 8px 12px;
         }
-        .note-app-select {
-          min-height: 36px;
-          font-size: 12px;
-          padding: 0 10px;
+        .note-list {
+          padding: 8px 12px;
+          display: flex;
+          gap: 8px;
+          overflow-x: auto;
+          overflow-y: hidden;
         }
-        .note-app-meta {
+        .note-list-item {
+          flex: 0 0 180px;
+        }
+        .note-editor-field {
           padding: 8px 12px;
         }
-        .note-sidebar textarea {
+        .note-editor-field textarea {
           min-height: 160px;
-          padding: 12px;
         }
         .note-sidebar-foot {
           padding: 8px 12px;
@@ -5412,8 +5632,8 @@ function renderHtml(
           font-size: 15px;
         }
         .top.is-search-open .search-fixed input[type="search"] {
-          width: min(250px, 62vw);
-          min-width: 120px;
+          width: 100%;
+          min-width: 0;
           padding: 8px 10px;
         }
         .top-controls button {
@@ -5438,10 +5658,8 @@ function renderHtml(
         .raw-page-info {
           min-width: 44px;
         }
-        .note-app-select {
-          min-height: 34px;
-          font-size: 12px;
-          padding: 0 9px;
+        .note-list-item {
+          flex-basis: 160px;
         }
       }
       @media (min-width: 900px) {
@@ -5507,23 +5725,40 @@ function renderHtml(
       <aside class=\"note-sidebar\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"noteSidebarTitle\">
         <div class=\"note-sidebar-head\">
           <div>
-            <h2 id=\"noteSidebarTitle\">백로그 노트</h2>
-            <div id=\"noteSidebarSub\" class=\"note-sidebar-sub\">백로그 항목별 메모를 관리하세요.</div>
+            <h2 id=\"noteSidebarTitle\">노트</h2>
+            <div id=\"noteSidebarSub\" class=\"note-sidebar-sub\">노트를 자유롭게 생성하고 제목/내용을 편집하세요.</div>
           </div>
           <div class=\"note-sidebar-head-actions\">
-            <button id=\"noteSidebarSave\" type=\"button\">저장</button>
-            <button id=\"noteSidebarClose\" type=\"button\">닫기</button>
+            <button id=\"noteSidebarClose\" type=\"button\" aria-label=\"노트 닫기\">✕</button>
           </div>
         </div>
-        <div class=\"note-app-select-wrap\">
-          <select id=\"noteBacklogSelect\" class=\"note-app-select\" aria-label=\"노트 백로그 선택\">
-            <option value=\"\">백로그 항목 없음</option>
-          </select>
+        <div class=\"note-sidebar-body\">
+          <div class=\"note-list-panel\">
+            <div class=\"note-list-head\">
+              <button id=\"noteCreateButton\" type=\"button\">➕ 새 노트</button>
+            </div>
+            <div id=\"noteList\" class=\"note-list\">
+              <div class=\"note-list-empty\">노트가 없습니다.</div>
+            </div>
+          </div>
+          <div id=\"noteEditorPanel\" class=\"note-editor-panel\">
+            <div id=\"noteEditorEmpty\" class=\"note-editor-empty\">노트를 선택해 주세요.</div>
+            <div id=\"noteEditorFields\" class=\"note-editor-fields\">
+              <div class=\"note-editor-field\">
+                <label for=\"noteTitleInput\">제목</label>
+                <input id=\"noteTitleInput\" type=\"text\" placeholder=\"예) 다음 스프린트 액션 아이템\" />
+              </div>
+              <div class=\"note-editor-field\">
+                <label for=\"noteSidebarText\">내용</label>
+                <textarea id=\"noteSidebarText\" placeholder=\"예) 반복 불만 키워드, 다음 비교 포인트, 액션 아이템\"></textarea>
+              </div>
+            </div>
+            <div id=\"noteEditorActions\" class=\"note-editor-actions\">
+              <button id=\"noteEditorSaveButton\" type=\"button\">저장</button>
+              <button id=\"noteDeleteButton\" type=\"button\">삭제</button>
+            </div>
+          </div>
         </div>
-        <div class=\"note-app-meta\">
-          <div id=\"noteSidebarBacklogMeta\" class=\"note-app-links\">백로그 항목을 선택하세요.</div>
-        </div>
-        <textarea id=\"noteSidebarText\" placeholder=\"예) 반복 불만 키워드, 다음 비교 포인트, 액션 아이템\"></textarea>
         <div id=\"noteSidebarStatus\" class=\"note-sidebar-foot\">입력 시 자동 저장됩니다.</div>
       </aside>
     </div>
@@ -5537,8 +5772,9 @@ function renderHtml(
             <div id=\"backlogEditorSub\" class=\"backlog-editor-sub\">활성 리뷰만 추가/제거할 수 있습니다.</div>
           </div>
           <div class=\"backlog-editor-head-actions\">
+            <button id=\"backlogEditorDelete\" type=\"button\">삭제</button>
             <button id=\"backlogEditorSave\" type=\"button\">적용</button>
-            <button id=\"backlogEditorClose\" type=\"button\">닫기</button>
+            <button id=\"backlogEditorClose\" type=\"button\" aria-label=\"백로그 편집 닫기\">✕</button>
           </div>
         </div>
         <div class=\"backlog-editor-body\">
@@ -5577,15 +5813,24 @@ function renderHtml(
             </label>
           </div>
           ${renderBacklogEvidenceSelectorHtml()}
-          <div class=\"backlog-editor-foot\">
-            <button id=\"backlogEditorDelete\" type=\"button\">백로그 삭제</button>
-            <span id=\"backlogEditorStatus\">적용 시 즉시 저장됩니다.</span>
-          </div>
+          <div id=\"backlogEditorStatus\" aria-live=\"polite\"></div>
         </div>
       </aside>
     </div>
 
     ${renderBacklogReviewPickerModalHtml()}
+
+    <div id=\"confirmDialogRoot\" class=\"confirm-dialog-root\" hidden aria-hidden=\"true\">
+      <button id=\"confirmDialogBackdrop\" class=\"confirm-dialog-backdrop\" type=\"button\" aria-label=\"확인 창 닫기\"></button>
+      <aside class=\"confirm-dialog\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"confirmDialogTitle\">
+        <h3 id=\"confirmDialogTitle\">백로그 삭제</h3>
+        <p id=\"confirmDialogMessage\">이 항목을 삭제할까요?</p>
+        <div class=\"confirm-dialog-actions\">
+          <button id=\"confirmDialogCancel\" type=\"button\">취소</button>
+          <button id=\"confirmDialogConfirm\" type=\"button\">삭제</button>
+        </div>
+      </aside>
+    </div>
 
     <div id=\"filterPanelRoot\" class=\"filter-panel-root\" hidden aria-hidden=\"true\">
       <button id=\"filterPanelBackdrop\" class=\"filter-panel-backdrop\" type=\"button\" aria-label=\"필터 닫기\"></button>
@@ -5595,7 +5840,7 @@ function renderHtml(
             <h2 id=\"filterPanelTitle\">리뷰 필터</h2>
             <div class=\"filter-panel-head-actions\">
               <button id=\"clearFilters\" class=\"filter-panel-icon-btn\" type=\"button\" aria-label=\"필터 초기화\" title=\"초기화\">↻</button>
-              <button id=\"filterPanelClose\" type=\"button\">닫기</button>
+              <button id=\"filterPanelClose\" type=\"button\" aria-label=\"필터 패널 닫기\">✕</button>
             </div>
           </div>
           <p id=\"filterPanelCount\" class=\"filter-summary filter-panel-summary\">리뷰 0/0</p>
@@ -5650,7 +5895,7 @@ function renderHtml(
               </div>
             </div>
             <div class=\"filter-panel-foot\">
-              <button id=\"toggleEvidenceAll\" class=\"clear-filters-btn\" type=\"button\">근거 펼치기</button>
+              <button id=\"toggleEvidenceAll\" class=\"clear-filters-btn\" type=\"button\">리뷰 펼치기</button>
             </div>
           </div>
         </div>
@@ -5727,6 +5972,11 @@ function renderHtml(
       const backlogReviewPickerNext = document.getElementById('backlogReviewPickerNext');
       const backlogReviewPickerPageInfo = document.getElementById('backlogReviewPickerPageInfo');
       const backlogReviewPickerSelectedCount = document.getElementById('backlogReviewPickerSelectedCount');
+      const confirmDialogRoot = document.getElementById('confirmDialogRoot');
+      const confirmDialogBackdrop = document.getElementById('confirmDialogBackdrop');
+      const confirmDialogMessage = document.getElementById('confirmDialogMessage');
+      const confirmDialogCancel = document.getElementById('confirmDialogCancel');
+      const confirmDialogConfirm = document.getElementById('confirmDialogConfirm');
       const openNoteSidebarButton = document.getElementById('openNoteSidebar');
       const tabRaw = document.getElementById('tabRaw');
       const tabBacklog = document.getElementById('tabBacklog');
@@ -5746,19 +5996,22 @@ function renderHtml(
       const noteSidebarRoot = document.getElementById('noteSidebarRoot');
       const noteSidebarBackdrop = document.getElementById('noteSidebarBackdrop');
       const noteSidebarClose = document.getElementById('noteSidebarClose');
-      const noteSidebarSave = document.getElementById('noteSidebarSave');
+      const noteEditorSaveButton = document.getElementById('noteEditorSaveButton');
       const noteSidebarTitle = document.getElementById('noteSidebarTitle');
       const noteSidebarSub = document.getElementById('noteSidebarSub');
-      const noteSidebarBacklogMeta = document.getElementById('noteSidebarBacklogMeta');
-      const noteBacklogSelect = document.getElementById('noteBacklogSelect');
+      const noteCreateButton = document.getElementById('noteCreateButton');
+      const noteDeleteButton = document.getElementById('noteDeleteButton');
+      const noteList = document.getElementById('noteList');
+      const noteEditorPanel = document.getElementById('noteEditorPanel');
+      const noteTitleInput = document.getElementById('noteTitleInput');
       const noteSidebarText = document.getElementById('noteSidebarText');
       const noteSidebarStatus = document.getElementById('noteSidebarStatus');
       const filterPanelRoot = document.getElementById('filterPanelRoot');
       const filterPanelBackdrop = document.getElementById('filterPanelBackdrop');
       const filterPanelClose = document.getElementById('filterPanelClose');
       const reviewState = Object.create(null);
-      const backlogNotes = Object.create(null);
-      const persistedBacklogNotes = Object.create(null);
+      const notes = Object.create(null);
+      const persistedNotes = Object.create(null);
       const backlogSeedItems = ${backlogInitialItemsJson};
       let backlogStateItems = Array.isArray(backlogSeedItems)
         ? backlogSeedItems.map((item) => ({
@@ -5779,12 +6032,14 @@ function renderHtml(
       let backlogPersistedSignature = '';
       let backlogDirty = false;
       let backlogEditorCloseTimer = 0;
+      let backlogReviewPickerCloseTimer = 0;
       let backlogEditorMode = 'create';
       let backlogEditorItemId = '';
       let backlogEditorSelection = new Set();
       let backlogEditorVisibleScopedReviewIds = [];
       let backlogEditorSaving = false;
       let backlogReviewPickerPage = 1;
+      let confirmDialogResolver = null;
       const BACKLOG_REVIEW_PICKER_PAGE_SIZE = 20;
       let backlogSaveTimer = 0;
       const searchableTextCache = new WeakMap();
@@ -5802,7 +6057,7 @@ function renderHtml(
       let noteDirty = false;
       let noteSaving = false;
       const selectedTagFilters = new Set();
-      let activeNoteBacklogId = '';
+      let activeNoteId = '';
       const EXCLUDE_FILTER_MODES = new Set(['all', 'active', 'excluded']);
       const PRIORITY_FILTER_MODES = new Set(['all', 'must', 'should', 'could']);
       const BACKLOG_LEVEL_FILTER_MODES = new Set(['all', 'high', 'medium', 'low']);
@@ -5825,6 +6080,10 @@ function renderHtml(
         dissatisfaction: '불만족',
         requests: '요청기능'
       };
+      const NOTE_ID_PATTERN = /^[a-z0-9._:-]+$/i;
+      const NOTE_TITLE_PLACEHOLDER_DEFAULT = '예) 다음 스프린트 액션 아이템';
+      const NOTE_CONTENT_PLACEHOLDER_DEFAULT = '예) 반복 불만 키워드, 다음 비교 포인트, 액션 아이템';
+      const NOTE_UNSELECTED_PLACEHOLDER = '';
 
       function escapeInlineHtml(input) {
         return String(input || '')
@@ -5918,9 +6177,9 @@ function renderHtml(
       function sanitizeBacklogAction(value) {
         const text = String(value || '').trim();
         return text
-          .replace(/\(\s*근거\s*리뷰\s*\d+\s*건\s*\)/gi, '')
+          .replace(/\(\s*(?:근거\s*)?리뷰\s*\d+\s*건\s*\)/gi, '')
           .replace(/\(\s*evidence\s*\d+\s*reviews?\s*\)/gi, '')
-          .replace(/근거\s*리뷰\s*\d+\s*건/gi, '')
+          .replace(/(?:근거\s*)?리뷰\s*\d+\s*건/gi, '')
           .replace(/evidence\s*\d+\s*reviews?/gi, '')
           .replace(/\s{2,}/g, ' ')
           .trim();
@@ -5930,7 +6189,7 @@ function renderHtml(
         return String(value || '')
           .trim()
           .toLowerCase()
-          .replace(/\(\s*근거\s*리뷰\s*\d+\s*건\s*\)/gi, '')
+          .replace(/\(\s*(?:근거\s*)?리뷰\s*\d+\s*건\s*\)/gi, '')
           .replace(/\(\s*evidence\s*\d+\s*reviews?\s*\)/gi, '')
           .replace(/[^a-z0-9가-힣]+/g, ' ')
           .replace(/\s+/g, ' ')
@@ -5952,6 +6211,17 @@ function renderHtml(
           return 2;
         }
         return 1;
+      }
+
+      function backlogStatusRank(status) {
+        const normalized = normalizeBacklogStatus(status);
+        if (normalized === 'not_started') {
+          return 0;
+        }
+        if (normalized === 'in_progress') {
+          return 1;
+        }
+        return 2;
       }
 
       function normalizeBacklogItem(input) {
@@ -5987,7 +6257,7 @@ function renderHtml(
           item.title = '새 백로그 항목';
         }
         if (!item.action) {
-          item.action = '활성 리뷰 근거를 기반으로 개선 액션 정의';
+          item.action = '활성 리뷰를 기반으로 개선 액션 정의';
         }
 
         return item;
@@ -6737,6 +7007,10 @@ function renderHtml(
                 backlogPriorityRank(normalizedItem.priority) < backlogPriorityRank(existing.priority)
                   ? normalizedItem.priority
                   : existing.priority,
+              status:
+                backlogStatusRank(normalizedItem.status) < backlogStatusRank(existing.status)
+                  ? normalizedItem.status
+                  : existing.status,
               effort:
                 backlogLevelRank(normalizedItem.effort) > backlogLevelRank(existing.effort)
                   ? normalizedItem.effort
@@ -6755,6 +7029,9 @@ function renderHtml(
         backlogStateItems = Array.from(mergedById.values()).sort((a, b) => {
           if (backlogPriorityRank(a.priority) !== backlogPriorityRank(b.priority)) {
             return backlogPriorityRank(a.priority) - backlogPriorityRank(b.priority);
+          }
+          if (backlogStatusRank(a.status) !== backlogStatusRank(b.status)) {
+            return backlogStatusRank(a.status) - backlogStatusRank(b.status);
           }
           if (backlogLevelRank(b.effort) !== backlogLevelRank(a.effort)) {
             return backlogLevelRank(b.effort) - backlogLevelRank(a.effort);
@@ -6921,10 +7198,9 @@ function renderHtml(
         syncBacklogSummary();
         syncBacklogDirtyState();
         syncBacklogQuickSelectOptions();
-        syncNoteBacklogSelectOptions();
 
         if (backlogStateItems.length === 0) {
-          backlogTableBody.innerHTML = '<tr><td colspan=\"5\" class=\"empty\">추출된 백로그 없음</td></tr>';
+          backlogTableBody.innerHTML = '<tr><td colspan=\"6\" class=\"empty\">추출된 백로그 없음</td></tr>';
           backlogItems = [];
           syncEvidenceToggleText();
           return;
@@ -6940,7 +7216,7 @@ function renderHtml(
             const appLabel = (item.appNames || []).join(', ') || '-';
             const evidenceListHtml =
               evidenceRows.length === 0
-                ? '<li class=\"empty\">근거 리뷰 없음</li>'
+                ? '<li class=\"empty\">리뷰 없음</li>'
                 : evidenceRows
                     .map((review, reviewIndex) => {
                       const detailId = 'evidence-detail-' + itemIdSafe + '-' + index + '-' + reviewIndex;
@@ -7061,10 +7337,7 @@ function renderHtml(
               '<td>' +
               prioritySelectHtml +
               '</td>' +
-              '<td>' +
-              statusSelectHtml +
-              '</td>' +
-              '<td class=\"item-content-cell\">' +
+              '<td class=\"item-content-cell\" title=\"클릭해 편집\">' +
               '<div class=\"item-main\">' +
               '<div class=\"item-title\">' +
               escapeInlineHtml(item.title) +
@@ -7081,14 +7354,9 @@ function renderHtml(
               '</span>' +
               '</div>' +
               '</div>' +
-              '<div class=\"item-icon-actions\" role=\"group\" aria-label=\"백로그 행 작업\">' +
-              '<button class=\"backlog-icon-btn backlog-remove-btn\" type=\"button\" data-backlog-id=\"' +
-              escapeInlineHtml(item.id) +
-              '\" aria-label=\"삭제\" title=\"삭제\">🗑</button>' +
-              '<button class=\"backlog-icon-btn backlog-edit-btn\" type=\"button\" data-backlog-id=\"' +
-              escapeInlineHtml(item.id) +
-              '\" aria-label=\"편집\" title=\"편집\">✎</button>' +
-              '</div>' +
+              '</td>' +
+              '<td>' +
+              statusSelectHtml +
               '</td>' +
               '<td>' +
               effortSelectHtml +
@@ -7100,16 +7368,26 @@ function renderHtml(
               '</span>' +
               '<button class=\"evidence-toggle\" type=\"button\" data-evidence-id=\"' +
               escapeInlineHtml(evidenceId) +
-              '\" aria-expanded=\"false\" aria-label=\"근거 보기\" title=\"근거 보기\">' +
+              '\" aria-expanded=\"false\" aria-label=\"리뷰 보기\" title=\"리뷰 보기\">' +
               '<span class=\"evidence-toggle-icon\" aria-hidden=\"true\">▾</span>' +
               '</button>' +
+              '</div>' +
+              '</td>' +
+              '<td class=\"item-action-cell\">' +
+              '<div class=\"item-icon-actions\" role=\"group\" aria-label=\"백로그 행 작업\">' +
+              '<button class=\"backlog-icon-btn backlog-remove-btn\" type=\"button\" data-backlog-id=\"' +
+              escapeInlineHtml(item.id) +
+              '\" aria-label=\"삭제\" title=\"삭제\">🗑</button>' +
+              '<button class=\"backlog-icon-btn backlog-edit-btn\" type=\"button\" data-backlog-id=\"' +
+              escapeInlineHtml(item.id) +
+              '\" aria-label=\"편집\" title=\"편집\">✎</button>' +
               '</div>' +
               '</td>' +
               '</tr>' +
               '<tr id=\"' +
               escapeInlineHtml(evidenceId) +
               '\" class=\"evidence-row\">' +
-              '<td colspan=\"5\">' +
+              '<td colspan=\"6\">' +
               '<div class=\"evidence-panel\"><ul class=\"evidence-list\">' +
               evidenceListHtml +
               '</ul></div>' +
@@ -7137,6 +7415,11 @@ function renderHtml(
           return;
         }
         if (backlogReviewPickerRoot instanceof HTMLElement) {
+          backlogReviewPickerRoot.classList.remove('is-open');
+          if (backlogReviewPickerCloseTimer) {
+            window.clearTimeout(backlogReviewPickerCloseTimer);
+            backlogReviewPickerCloseTimer = 0;
+          }
           backlogReviewPickerRoot.hidden = true;
           backlogReviewPickerRoot.setAttribute('aria-hidden', 'true');
         }
@@ -7223,18 +7506,32 @@ function renderHtml(
         if (!(backlogReviewPickerRoot instanceof HTMLElement)) {
           return;
         }
+        if (backlogReviewPickerCloseTimer) {
+          window.clearTimeout(backlogReviewPickerCloseTimer);
+          backlogReviewPickerCloseTimer = 0;
+        }
         backlogReviewPickerPage = 1;
         renderBacklogEditorReviewList();
         backlogReviewPickerRoot.hidden = false;
         backlogReviewPickerRoot.setAttribute('aria-hidden', 'false');
+        window.requestAnimationFrame(() => {
+          backlogReviewPickerRoot.classList.add('is-open');
+        });
       }
 
       function closeBacklogReviewPickerModal() {
         if (!(backlogReviewPickerRoot instanceof HTMLElement) || backlogEditorSaving) {
           return;
         }
-        backlogReviewPickerRoot.hidden = true;
-        backlogReviewPickerRoot.setAttribute('aria-hidden', 'true');
+        backlogReviewPickerRoot.classList.remove('is-open');
+        if (backlogReviewPickerCloseTimer) {
+          window.clearTimeout(backlogReviewPickerCloseTimer);
+        }
+        backlogReviewPickerCloseTimer = window.setTimeout(() => {
+          backlogReviewPickerRoot.hidden = true;
+          backlogReviewPickerRoot.setAttribute('aria-hidden', 'true');
+          backlogReviewPickerCloseTimer = 0;
+        }, 180);
       }
 
       function getFilteredBacklogEditorCandidates() {
@@ -7296,15 +7593,16 @@ function renderHtml(
         backlogEditorSelectedList.innerHTML = selectedIds
           .map((scopedReviewId) => {
             const review = catalogById.get(scopedReviewId);
-            const appName = review ? review.appDisplayTitle : 'Unknown App';
-            const reviewId = review ? review.reviewId : parseScopedReviewId(scopedReviewId).reviewId;
+            const reviewBody = review ? (review.quoteKr || review.quoteOrg || '-') : '-';
             return (
-              '<span class=\"backlog-selected-chip\">' +
-              escapeInlineHtml(appName + ' · ' + reviewId) +
+              '<div class=\"backlog-selected-item\">' +
               '<button type=\"button\" data-backlog-selected-remove=\"' +
               escapeInlineHtml(scopedReviewId) +
               '\" aria-label=\"선택 해제\">×</button>' +
-              '</span>'
+              '<span class=\"review-body\">' +
+              escapeInlineHtml(reviewBody) +
+              '</span>' +
+              '</div>'
             );
           })
           .join('');
@@ -7426,13 +7724,13 @@ function renderHtml(
         if (backlogEditorSub instanceof HTMLElement) {
           backlogEditorSub.textContent =
             normalizedMode === 'edit'
-              ? '선택된 근거 리뷰를 확인하고, "활성 리뷰 선택" 버튼에서 항목을 추가/제거하세요.'
+              ? '선택된 리뷰를 확인하고, "활성 리뷰 선택" 버튼에서 항목을 추가/제거하세요.'
               : '활성 리뷰를 선택해 새 백로그 항목을 만드세요.';
         }
 
         closeBacklogReviewPickerModal();
         renderBacklogEditorReviewList();
-        setBacklogEditorStatus('적용을 누르면 즉시 저장됩니다.');
+        setBacklogEditorStatus('');
 
         if (backlogEditorRoot instanceof HTMLElement) {
           if (backlogEditorCloseTimer) {
@@ -7447,23 +7745,55 @@ function renderHtml(
         }
       }
 
-      function deleteBacklogItemById(backlogId) {
+      function closeConfirmDialog(result) {
+        if (confirmDialogRoot instanceof HTMLElement) {
+          confirmDialogRoot.hidden = true;
+          confirmDialogRoot.setAttribute('aria-hidden', 'true');
+        }
+        const resolver = confirmDialogResolver;
+        confirmDialogResolver = null;
+        if (typeof resolver === 'function') {
+          resolver(Boolean(result));
+        }
+      }
+
+      function openDeleteConfirmDialog(title) {
+        return new Promise((resolve) => {
+          if (typeof confirmDialogResolver === 'function') {
+            confirmDialogResolver(false);
+          }
+          confirmDialogResolver = resolve;
+          if (confirmDialogMessage instanceof HTMLElement) {
+            confirmDialogMessage.textContent = '"' + String(title || '').trim() + '" 항목을 삭제할까요?';
+          }
+          if (confirmDialogRoot instanceof HTMLElement) {
+            confirmDialogRoot.hidden = false;
+            confirmDialogRoot.setAttribute('aria-hidden', 'false');
+          }
+          if (confirmDialogCancel instanceof HTMLButtonElement) {
+            window.setTimeout(() => confirmDialogCancel.focus(), 0);
+          }
+        });
+      }
+
+      async function deleteBacklogItemById(backlogId) {
         const normalizedId = String(backlogId || '').trim();
         if (!normalizedId) {
-          return;
+          return false;
         }
         const target = backlogStateItems.find((item) => item.id === normalizedId);
         if (!target) {
-          return;
+          return false;
         }
-        const confirmed = window.confirm('"' + target.title + '" 항목을 삭제할까요?');
+        const confirmed = await openDeleteConfirmDialog(target.title);
         if (!confirmed) {
-          return;
+          return false;
         }
         backlogStateItems = backlogStateItems.filter((item) => item.id !== normalizedId);
         renderBacklogTable();
         applySearch();
         scheduleBacklogStateSave();
+        return true;
       }
 
       async function applyBacklogEditorChanges() {
@@ -8063,6 +8393,25 @@ function renderHtml(
         return String(input || '').replace(/\\r\\n?/g, '\\n').replace(/\\u0000/g, '').slice(0, 20000);
       }
 
+      function normalizeNoteTitle(input) {
+        return String(input || '')
+          .replace(/\\r\\n?/g, ' ')
+          .replace(/\\u0000/g, '')
+          .trim()
+          .slice(0, 200);
+      }
+
+      function fallbackNoteTitle(content) {
+        const firstLine = String(content || '')
+          .split('\\n')
+          .map((line) => String(line || '').trim())
+          .find((line) => line.length > 0);
+        if (firstLine) {
+          return firstLine.slice(0, 200);
+        }
+        return '제목 없음';
+      }
+
       function formatDateLabel(input) {
         const date = new Date(String(input || ''));
         if (Number.isNaN(date.getTime())) {
@@ -8071,44 +8420,44 @@ function renderHtml(
         return date.toLocaleString('ko-KR');
       }
 
-      function currentBacklogNoteTargetIds() {
-        return new Set(
-          backlogStateItems
-            .map((item) => String(item && item.id ? item.id : '').trim())
-            .filter(Boolean)
-        );
-      }
-
-      function copyBacklogNotesMap(target, source) {
+      function copyNotesMap(target, source) {
         Object.keys(target).forEach((key) => {
           delete target[key];
         });
 
-        const snapshot = normalizeBacklogNotesSnapshot(source);
-        Object.entries(snapshot).forEach(([backlogId, row]) => {
-          target[backlogId] = {
+        const snapshot = normalizeNotesSnapshot(source);
+        Object.entries(snapshot).forEach(([noteId, row]) => {
+          target[noteId] = {
+            title: row.title,
             content: row.content,
             updatedAt: row.updatedAt
           };
         });
       }
 
-      function normalizeBacklogNotesSnapshot(source) {
+      function normalizeNotesSnapshot(source) {
         const snapshot = Object.create(null);
-        const validBacklogIds = currentBacklogNoteTargetIds();
 
-        Object.entries(source).forEach(([backlogId, row]) => {
-          const normalizedBacklogId = String(backlogId || '').trim();
-          if (!normalizedBacklogId || !validBacklogIds.has(normalizedBacklogId) || !row || typeof row !== 'object') {
+        Object.entries(source).forEach(([noteId, row]) => {
+          const normalizedNoteId = String(noteId || '').trim();
+          if (
+            !normalizedNoteId ||
+            normalizedNoteId.length > 180 ||
+            !NOTE_ID_PATTERN.test(normalizedNoteId) ||
+            !row ||
+            typeof row !== 'object'
+          ) {
             return;
           }
 
+          const title = normalizeNoteTitle(typeof row.title === 'string' ? row.title : '');
           const content = normalizeNoteContent(typeof row.content === 'string' ? row.content : '');
-          if (!content.trim()) {
+          if (!title && !content.trim()) {
             return;
           }
 
-          snapshot[normalizedBacklogId] = {
+          snapshot[normalizedNoteId] = {
+            title: title || fallbackNoteTitle(content),
             content,
             updatedAt: typeof row.updatedAt === 'string' ? row.updatedAt : new Date().toISOString()
           };
@@ -8117,19 +8466,67 @@ function renderHtml(
         return snapshot;
       }
 
-      function createBacklogNotesSignature(source) {
-        const snapshot = normalizeBacklogNotesSnapshot(source);
+      function createNotesSignature(source) {
+        const snapshot = normalizeNotesSnapshot(source);
         const keys = Object.keys(snapshot).sort();
         return keys
           .map((key) => {
             const row = snapshot[key];
-            return key + '|' + row.content + '|' + row.updatedAt;
+            return key + '|' + row.title + '|' + row.content;
           })
           .join('||');
       }
 
+      function noteRowContentSignature(source, noteId) {
+        const normalizedId = String(noteId || '').trim();
+        if (!normalizedId) {
+          return '';
+        }
+        const snapshot = normalizeNotesSnapshot(source);
+        const row = snapshot[normalizedId];
+        if (!row) {
+          return '';
+        }
+        return String(row.title || '') + '|' + String(row.content || '');
+      }
+
+      function isActiveNoteDirty() {
+        if (!activeNoteId) {
+          return false;
+        }
+        return noteRowContentSignature(notes, activeNoteId) !== noteRowContentSignature(persistedNotes, activeNoteId);
+      }
+
+      function buildNoteSaveSnapshot(noteId, mode) {
+        const normalizedId = String(noteId || '').trim();
+        const normalizedMode = mode === 'delete' ? 'delete' : 'upsert';
+        const snapshot = normalizeNotesSnapshot(persistedNotes);
+        if (!normalizedId) {
+          return snapshot;
+        }
+
+        if (normalizedMode === 'delete') {
+          delete snapshot[normalizedId];
+          return snapshot;
+        }
+
+        const draftSnapshot = normalizeNotesSnapshot(notes);
+        const row = draftSnapshot[normalizedId];
+        if (!row) {
+          delete snapshot[normalizedId];
+          return snapshot;
+        }
+
+        snapshot[normalizedId] = {
+          title: row.title,
+          content: row.content,
+          updatedAt: new Date().toISOString()
+        };
+        return snapshot;
+      }
+
       function syncNoteDirtyState() {
-        noteDirty = createBacklogNotesSignature(backlogNotes) !== createBacklogNotesSignature(persistedBacklogNotes);
+        noteDirty = createNotesSignature(notes) !== createNotesSignature(persistedNotes);
       }
 
       function syncNoteSidebarTrigger() {
@@ -8137,42 +8534,103 @@ function renderHtml(
           return;
         }
 
-        const noteCount = Object.keys(normalizeBacklogNotesSnapshot(backlogNotes)).length;
+        const noteCount = Object.keys(normalizeNotesSnapshot(notes)).length;
         openNoteSidebarButton.textContent = noteCount > 0 ? '노트 (' + noteCount + ')' : '노트';
         openNoteSidebarButton.classList.toggle('is-active', noteCount > 0 || noteDirty);
       }
 
-      function findBacklogItemById(backlogId) {
-        const normalizedId = String(backlogId || '').trim();
-        if (!normalizedId) {
-          return undefined;
-        }
-        return backlogStateItems.find((item) => item.id === normalizedId);
+      function createNoteId() {
+        const stamp = Date.now().toString(36);
+        const random = Math.random().toString(36).slice(2, 8);
+        return 'note-' + stamp + '-' + random;
       }
 
-      function formatBacklogNoteOptionLabel(item) {
-        return '[' + String(item.priority || '').toUpperCase() + '] ' + String(item.title || '');
+      function orderedNoteIds(snapshot) {
+        const safeSnapshot = snapshot && typeof snapshot === 'object' ? snapshot : normalizeNotesSnapshot(notes);
+        return Object.keys(safeSnapshot).sort((left, right) => {
+          const leftRow = safeSnapshot[left];
+          const rightRow = safeSnapshot[right];
+          const leftTime = new Date(String(leftRow && leftRow.updatedAt ? leftRow.updatedAt : 0)).getTime();
+          const rightTime = new Date(String(rightRow && rightRow.updatedAt ? rightRow.updatedAt : 0)).getTime();
+          if (leftTime !== rightTime) {
+            return rightTime - leftTime;
+          }
+          const leftTitle = String(leftRow && leftRow.title ? leftRow.title : '');
+          const rightTitle = String(rightRow && rightRow.title ? rightRow.title : '');
+          return leftTitle.localeCompare(rightTitle);
+        });
       }
 
-      function renderNoteBacklogMeta(backlogId) {
-        if (!(noteSidebarBacklogMeta instanceof HTMLElement)) {
-          return;
+      function renderNoteList() {
+        const snapshot = normalizeNotesSnapshot(notes);
+        const ids = orderedNoteIds(snapshot);
+        const hasActive = activeNoteId && Object.prototype.hasOwnProperty.call(snapshot, activeNoteId);
+        if (!hasActive) {
+          activeNoteId = ids[0] || '';
         }
-        const target = findBacklogItemById(backlogId);
-        if (!target) {
-          noteSidebarBacklogMeta.textContent = '백로그 항목을 선택하세요.';
-          return;
+
+        if (noteList instanceof HTMLElement) {
+          if (ids.length === 0) {
+            noteList.innerHTML = '<div class=\"note-list-empty\">노트가 없습니다.</div>';
+          } else {
+            noteList.innerHTML = ids
+              .map((noteId) => {
+                const row = snapshot[noteId];
+                const activeClass = noteId === activeNoteId ? ' is-active' : '';
+                return (
+                  '<button class=\"note-list-item' +
+                  activeClass +
+                  '\" type=\"button\" data-note-id=\"' +
+                  escapeInlineHtml(noteId) +
+                  '\">' +
+                  '<span class=\"note-list-title\">' +
+                  escapeInlineHtml(row.title || '제목 없음') +
+                  '</span>' +
+                  '<span class=\"note-list-meta\">' +
+                  escapeInlineHtml(formatDateLabel(row.updatedAt)) +
+                  '</span>' +
+                  '</button>'
+                );
+              })
+              .join('');
+          }
         }
-        const evidenceCount = Array.isArray(target.evidenceReviewIds) ? target.evidenceReviewIds.length : 0;
-        noteSidebarBacklogMeta.textContent =
-          'Priority: ' +
-          String(target.priority || '').toUpperCase() +
-          ' · Status: ' +
-          backlogStatusLabel(target.status) +
-          ' · Effort: ' +
-          backlogLevelLabel(target.effort) +
-          ' · Evidence: ' +
-          evidenceCount;
+
+        const selected = activeNoteId ? snapshot[activeNoteId] : undefined;
+        if (noteEditorPanel instanceof HTMLElement) {
+          noteEditorPanel.classList.toggle('has-active-note', Boolean(selected));
+        }
+        if (noteSidebarTitle instanceof HTMLElement) {
+          noteSidebarTitle.textContent = '노트';
+        }
+        if (noteSidebarSub instanceof HTMLElement) {
+          noteSidebarSub.textContent =
+            ids.length > 0
+              ? '총 ' + String(ids.length) + '개 노트 · 최근 수정 ' + formatDateLabel(selected && selected.updatedAt)
+              : '새 노트를 만들어 제목/내용을 직접 작성하세요.';
+        }
+        if (noteTitleInput instanceof HTMLInputElement) {
+          noteTitleInput.disabled = !selected;
+          noteTitleInput.placeholder = selected ? NOTE_TITLE_PLACEHOLDER_DEFAULT : NOTE_UNSELECTED_PLACEHOLDER;
+          const nextTitle = selected ? String(selected.title || '') : '';
+          if (noteTitleInput.value !== nextTitle) {
+            noteTitleInput.value = nextTitle;
+          }
+        }
+        if (noteSidebarText instanceof HTMLTextAreaElement) {
+          noteSidebarText.disabled = !selected;
+          noteSidebarText.placeholder = selected ? NOTE_CONTENT_PLACEHOLDER_DEFAULT : NOTE_UNSELECTED_PLACEHOLDER;
+          const nextValue = selected ? String(selected.content || '') : '';
+          if (noteSidebarText.value !== nextValue) {
+            noteSidebarText.value = nextValue;
+          }
+        }
+        if (noteDeleteButton instanceof HTMLButtonElement) {
+          noteDeleteButton.disabled = !selected;
+        }
+        if (noteEditorSaveButton instanceof HTMLButtonElement) {
+          noteEditorSaveButton.disabled = !selected;
+        }
       }
 
       function refreshNoteSidebarStatus() {
@@ -8180,8 +8638,8 @@ function renderHtml(
           return;
         }
 
-        if (!activeNoteBacklogId) {
-          noteSidebarStatus.textContent = '백로그 항목을 선택하면 메모를 작성할 수 있습니다.';
+        if (!activeNoteId) {
+          noteSidebarStatus.textContent = '노트를 선택하거나 새로 만들면 편집할 수 있습니다.';
           return;
         }
 
@@ -8190,12 +8648,12 @@ function renderHtml(
           return;
         }
 
-        if (noteDirty) {
+        if (isActiveNoteDirty()) {
           noteSidebarStatus.textContent = '저장되지 않은 변경이 있습니다.';
           return;
         }
 
-        const note = persistedBacklogNotes[activeNoteBacklogId];
+        const note = persistedNotes[activeNoteId];
         if (!note) {
           noteSidebarStatus.textContent = '저장된 노트가 없습니다.';
           return;
@@ -8204,93 +8662,44 @@ function renderHtml(
         noteSidebarStatus.textContent = '저장됨 · ' + formatDateLabel(note.updatedAt);
       }
 
-      function selectNoteBacklog(backlogId) {
-        const requestedBacklogId = String(backlogId || '').trim();
-        const fallbackBacklogId = backlogStateItems[0] ? String(backlogStateItems[0].id || '').trim() : '';
-        const targetItem = findBacklogItemById(requestedBacklogId);
-        const nextBacklogId = targetItem ? requestedBacklogId : fallbackBacklogId;
-        const selectedItem = findBacklogItemById(nextBacklogId);
-
-        activeNoteBacklogId = nextBacklogId;
-
-        if (noteSidebarTitle instanceof HTMLElement) {
-          noteSidebarTitle.textContent = '백로그 노트';
-        }
-        if (noteSidebarSub instanceof HTMLElement) {
-          noteSidebarSub.textContent = selectedItem
-            ? '선택된 항목: ' + String(selectedItem.title || '')
-            : '백로그 항목을 먼저 생성하세요.';
-        }
-        renderNoteBacklogMeta(nextBacklogId);
-
-        if (noteBacklogSelect instanceof HTMLSelectElement) {
-          noteBacklogSelect.value = nextBacklogId;
-        }
-        if (noteSidebarText instanceof HTMLTextAreaElement) {
-          noteSidebarText.disabled = !nextBacklogId;
-          const nextValue = nextBacklogId && backlogNotes[nextBacklogId]
-            ? backlogNotes[nextBacklogId].content
-            : '';
-          if (noteSidebarText.value !== nextValue) {
-            noteSidebarText.value = nextValue;
-          }
-        }
-
+      function selectNote(noteId) {
+        const requestedId = String(noteId || '').trim();
+        const snapshot = normalizeNotesSnapshot(notes);
+        const ids = orderedNoteIds(snapshot);
+        activeNoteId = ids.includes(requestedId) ? requestedId : ids[0] || '';
+        renderNoteList();
         refreshNoteSidebarStatus();
       }
 
-      function syncNoteBacklogSelectOptions() {
-        if (!(noteBacklogSelect instanceof HTMLSelectElement)) {
+      function createNote() {
+        const noteId = createNoteId();
+        notes[noteId] = {
+          title: '새 노트',
+          content: '',
+          updatedAt: new Date().toISOString()
+        };
+        syncNoteDirtyState();
+        syncNoteSidebarTrigger();
+        selectNote(noteId);
+        if (noteTitleInput instanceof HTMLInputElement) {
+          window.setTimeout(() => noteTitleInput.focus(), 0);
+        }
+        void saveNotesManually({ noteId, mode: 'upsert' });
+      }
+
+      function deleteActiveNote() {
+        if (!activeNoteId) {
           return;
         }
 
-        if (backlogStateItems.length === 0) {
-          noteBacklogSelect.innerHTML = '<option value=\"\">백로그 항목 없음</option>';
-          noteBacklogSelect.disabled = true;
-          activeNoteBacklogId = '';
-          if (noteSidebarText instanceof HTMLTextAreaElement) {
-            noteSidebarText.value = '';
-            noteSidebarText.disabled = true;
-          }
-          if (noteSidebarSub instanceof HTMLElement) {
-            noteSidebarSub.textContent = '백로그 항목을 먼저 생성하세요.';
-          }
-          renderNoteBacklogMeta('');
-          refreshNoteSidebarStatus();
-          return;
-        }
-
-        const optionsHtml = backlogStateItems
-          .map((item) => {
-            const itemId = String(item && item.id ? item.id : '').trim();
-            if (!itemId) {
-              return '';
-            }
-            const selected = itemId === activeNoteBacklogId ? ' selected' : '';
-            return '<option value=\"' + escapeInlineHtml(itemId) + '\"' + selected + '>' +
-              escapeInlineHtml(formatBacklogNoteOptionLabel(item)) +
-              '</option>';
-          })
-          .filter(Boolean)
-          .join('');
-
-        noteBacklogSelect.innerHTML = optionsHtml || '<option value=\"\">백로그 항목 없음</option>';
-        noteBacklogSelect.disabled = !optionsHtml;
-
-        if (!optionsHtml) {
-          activeNoteBacklogId = '';
-          if (noteSidebarText instanceof HTMLTextAreaElement) {
-            noteSidebarText.value = '';
-            noteSidebarText.disabled = true;
-          }
-          renderNoteBacklogMeta('');
-          refreshNoteSidebarStatus();
-          return;
-        }
-
-        const hasActive = backlogStateItems.some((item) => item.id === activeNoteBacklogId);
-        const fallbackBacklogId = String(backlogStateItems[0] && backlogStateItems[0].id || '').trim();
-        selectNoteBacklog(hasActive ? activeNoteBacklogId : fallbackBacklogId);
+        const deletingNoteId = activeNoteId;
+        delete notes[deletingNoteId];
+        activeNoteId = '';
+        syncNoteDirtyState();
+        syncNoteSidebarTrigger();
+        renderNoteList();
+        refreshNoteSidebarStatus();
+        void saveNotesManually({ noteId: deletingNoteId, mode: 'delete' });
       }
 
       function openBacklogNoteSidebar() {
@@ -8305,11 +8714,10 @@ function renderHtml(
           });
         }
 
-        syncNoteBacklogSelectOptions();
-        selectNoteBacklog(activeNoteBacklogId);
-
-        if (noteSidebarText instanceof HTMLTextAreaElement && !noteSidebarText.disabled) {
-          window.setTimeout(() => noteSidebarText.focus(), 0);
+        renderNoteList();
+        refreshNoteSidebarStatus();
+        if (noteTitleInput instanceof HTMLInputElement && !noteTitleInput.disabled) {
+          window.setTimeout(() => noteTitleInput.focus(), 0);
         }
       }
 
@@ -8326,33 +8734,36 @@ function renderHtml(
         }
       }
 
-      function writeBacklogNote(backlogId, input) {
-        const normalizedBacklogId = String(backlogId || '').trim();
-        if (!normalizedBacklogId) {
+      function writeActiveNoteDraft(partial) {
+        if (!activeNoteId) {
           return;
         }
 
-        const content = normalizeNoteContent(input);
-        if (!content.trim()) {
-          delete backlogNotes[normalizedBacklogId];
-        } else {
-          backlogNotes[normalizedBacklogId] = {
-            content,
-            updatedAt: new Date().toISOString()
-          };
-        }
+        const existing = notes[activeNoteId] && typeof notes[activeNoteId] === 'object' ? notes[activeNoteId] : {};
+        const title = Object.prototype.hasOwnProperty.call(partial, 'title')
+          ? normalizeNoteTitle(partial.title)
+          : normalizeNoteTitle(existing.title || '');
+        const content = Object.prototype.hasOwnProperty.call(partial, 'content')
+          ? normalizeNoteContent(partial.content)
+          : normalizeNoteContent(existing.content || '');
+        notes[activeNoteId] = {
+          title,
+          content,
+          updatedAt: new Date().toISOString()
+        };
 
         syncNoteDirtyState();
         syncNoteSidebarTrigger();
+        renderNoteList();
         refreshNoteSidebarStatus();
       }
 
-      async function savePreviewState(nextBacklogNotes) {
+      async function savePreviewState(nextNotes) {
         if (!previewStateApiUrl) {
           return false;
         }
 
-        const snapshot = nextBacklogNotes || normalizeBacklogNotesSnapshot(backlogNotes);
+        const snapshot = nextNotes || normalizeNotesSnapshot(notes);
 
         noteSaving = true;
         refreshNoteSidebarStatus();
@@ -8364,7 +8775,7 @@ function renderHtml(
             },
             body: JSON.stringify({
               reviews: reviewState,
-              backlogNotes: snapshot
+              notes: snapshot
             })
           });
           if (!response.ok) {
@@ -8374,17 +8785,17 @@ function renderHtml(
           let persistedSnapshot = snapshot;
           try {
             const payload = await response.json();
-            if (payload && typeof payload === 'object' && payload.backlogNotes && typeof payload.backlogNotes === 'object') {
-              persistedSnapshot = payload.backlogNotes;
+            if (payload && typeof payload === 'object' && payload.notes && typeof payload.notes === 'object') {
+              persistedSnapshot = payload.notes;
             }
           } catch {
             // Keep local snapshot when response body is unavailable.
           }
 
-          copyBacklogNotesMap(persistedBacklogNotes, persistedSnapshot);
+          copyNotesMap(persistedNotes, persistedSnapshot);
           syncNoteDirtyState();
           syncNoteSidebarTrigger();
-          syncNoteBacklogSelectOptions();
+          renderNoteList();
           refreshNoteSidebarStatus();
           return true;
         } catch {
@@ -8413,23 +8824,43 @@ function renderHtml(
         }, 220);
       }
 
-      async function saveBacklogNotesManually() {
+      async function saveNotesManually(options) {
+        const targetNoteId = String(options && options.noteId ? options.noteId : activeNoteId).trim();
+        const mode = options && options.mode === 'delete' ? 'delete' : 'upsert';
+        if (!targetNoteId) {
+          return false;
+        }
+
         if (!previewStateApiUrl) {
           if (noteSidebarStatus instanceof HTMLElement) {
             noteSidebarStatus.textContent = '저장 API가 없어 새로고침 시 노트가 유지되지 않습니다.';
           }
-          return;
+          return false;
         }
 
         if (noteSidebarStatus instanceof HTMLElement) {
           noteSidebarStatus.textContent = '저장 중...';
         }
 
-        const snapshot = normalizeBacklogNotesSnapshot(backlogNotes);
+        const snapshot = buildNoteSaveSnapshot(targetNoteId, mode);
         const saved = await savePreviewState(snapshot);
         if (!saved) {
-          return;
+          return false;
         }
+
+        if (mode === 'upsert' && notes[targetNoteId] && persistedNotes[targetNoteId]) {
+          notes[targetNoteId] = {
+            title: persistedNotes[targetNoteId].title,
+            content: persistedNotes[targetNoteId].content,
+            updatedAt: persistedNotes[targetNoteId].updatedAt
+          };
+        }
+
+        syncNoteDirtyState();
+        syncNoteSidebarTrigger();
+        renderNoteList();
+        refreshNoteSidebarStatus();
+        return true;
       }
 
       async function loadPreviewState() {
@@ -8442,8 +8873,8 @@ function renderHtml(
           applySearch();
           syncNoteDirtyState();
           syncNoteSidebarTrigger();
-          syncNoteBacklogSelectOptions();
-          selectNoteBacklog(activeNoteBacklogId);
+          renderNoteList();
+          refreshNoteSidebarStatus();
           return;
         }
 
@@ -8463,8 +8894,8 @@ function renderHtml(
             applySearch();
             syncNoteDirtyState();
             syncNoteSidebarTrigger();
-            syncNoteBacklogSelectOptions();
-            selectNoteBacklog(activeNoteBacklogId);
+            renderNoteList();
+            refreshNoteSidebarStatus();
             return;
           }
 
@@ -8472,8 +8903,8 @@ function renderHtml(
           const rows = payload && typeof payload === 'object' && payload.reviews && typeof payload.reviews === 'object'
             ? payload.reviews
             : {};
-          const notes = payload && typeof payload === 'object' && payload.backlogNotes && typeof payload.backlogNotes === 'object'
-            ? payload.backlogNotes
+          const noteRows = payload && typeof payload === 'object' && payload.notes && typeof payload.notes === 'object'
+            ? payload.notes
             : {};
 
           Object.keys(reviewState).forEach((key) => {
@@ -8494,21 +8925,30 @@ function renderHtml(
             };
           });
 
-          Object.keys(backlogNotes).forEach((key) => {
-            delete backlogNotes[key];
+          Object.keys(notes).forEach((key) => {
+            delete notes[key];
           });
 
-          Object.entries(notes).forEach(([backlogId, row]) => {
-            if (!backlogId || !row || typeof row !== 'object') {
+          Object.entries(noteRows).forEach(([noteId, row]) => {
+            const normalizedNoteId = String(noteId || '').trim();
+            if (
+              !normalizedNoteId ||
+              normalizedNoteId.length > 180 ||
+              !NOTE_ID_PATTERN.test(normalizedNoteId) ||
+              !row ||
+              typeof row !== 'object'
+            ) {
               return;
             }
 
+            const title = normalizeNoteTitle(typeof row.title === 'string' ? row.title : '');
             const content = normalizeNoteContent(typeof row.content === 'string' ? row.content : '');
-            if (!content.trim()) {
+            if (!title && !content.trim()) {
               return;
             }
 
-            backlogNotes[backlogId] = {
+            notes[normalizedNoteId] = {
+              title: title || fallbackNoteTitle(content),
               content,
               updatedAt: typeof row.updatedAt === 'string' ? row.updatedAt : new Date().toISOString()
             };
@@ -8517,7 +8957,7 @@ function renderHtml(
           // Keep UI behavior even when loading persistence fails.
         }
 
-        copyBacklogNotesMap(persistedBacklogNotes, backlogNotes);
+        copyNotesMap(persistedNotes, notes);
         syncNoteDirtyState();
         syncAllCardStateVisuals();
         syncBacklogQuickSelectOptions();
@@ -8526,8 +8966,7 @@ function renderHtml(
         }
         applySearch();
         syncNoteSidebarTrigger();
-        syncNoteBacklogSelectOptions();
-        selectNoteBacklog(activeNoteBacklogId);
+        renderNoteList();
         refreshNoteSidebarStatus();
       }
 
@@ -8558,7 +8997,7 @@ function renderHtml(
         if (!(button instanceof HTMLElement)) {
           return;
         }
-        const label = opened ? '근거 숨기기' : '근거 보기';
+        const label = opened ? '리뷰 숨기기' : '리뷰 보기';
         button.setAttribute('aria-expanded', opened ? 'true' : 'false');
         button.setAttribute('aria-label', label);
         button.setAttribute('title', label);
@@ -8601,7 +9040,7 @@ function renderHtml(
       function syncEvidenceToggleText() {
         const rows = visibleEvidenceRows();
         const allOpen = rows.length > 0 && rows.every((row) => row.classList.contains('open'));
-        toggleEvidenceAll.textContent = allOpen ? '근거 접기' : '근거 펼치기';
+        toggleEvidenceAll.textContent = allOpen ? '리뷰 접기' : '리뷰 펼치기';
         toggleEvidenceAll.disabled = !viewBacklog.classList.contains('active') || rows.length === 0;
       }
 
@@ -8763,7 +9202,7 @@ function renderHtml(
           if (!backlogId) {
             return;
           }
-          deleteBacklogItemById(backlogId);
+          void deleteBacklogItemById(backlogId);
           return;
         }
 
@@ -8787,6 +9226,26 @@ function renderHtml(
           }
           toggleEvidenceDetailById(detailId);
           return;
+        }
+
+        const backlogItemRow = target.closest('tr.backlog-item.main-row');
+        if (backlogItemRow instanceof HTMLElement) {
+          const clickedInteractiveControl = Boolean(
+            target.closest('.backlog-inline-select') ||
+              target.closest('.backlog-icon-btn') ||
+              target.closest('.evidence-toggle') ||
+              target.closest('.evidence-detail-toggle') ||
+              target.closest('a, button, input, select, textarea, label')
+          );
+          if (!clickedInteractiveControl) {
+            const backlogId = String(backlogItemRow.getAttribute('data-backlog-id') || '').trim();
+            const selection = window.getSelection();
+            const hasSelection = Boolean(selection && String(selection).trim().length > 0);
+            if (backlogId && !hasSelection) {
+              openBacklogEditor('edit', backlogId);
+              return;
+            }
+          }
         }
 
         const toggleOne = target.closest('.toggle-one');
@@ -8884,8 +9343,33 @@ function renderHtml(
       if (noteSidebarClose instanceof HTMLElement) {
         noteSidebarClose.addEventListener('click', closeBacklogNoteSidebar);
       }
-      if (noteSidebarSave instanceof HTMLElement) {
-        noteSidebarSave.addEventListener('click', saveBacklogNotesManually);
+      if (noteEditorSaveButton instanceof HTMLElement) {
+        noteEditorSaveButton.addEventListener('click', () => {
+          void saveNotesManually();
+        });
+      }
+      if (noteCreateButton instanceof HTMLButtonElement) {
+        noteCreateButton.addEventListener('click', createNote);
+      }
+      if (noteDeleteButton instanceof HTMLButtonElement) {
+        noteDeleteButton.addEventListener('click', deleteActiveNote);
+      }
+      if (noteList instanceof HTMLElement) {
+        noteList.addEventListener('click', (event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLElement)) {
+            return;
+          }
+          const item = target.closest('[data-note-id]');
+          if (!(item instanceof HTMLElement)) {
+            return;
+          }
+          const noteId = String(item.getAttribute('data-note-id') || '').trim();
+          if (!noteId) {
+            return;
+          }
+          selectNote(noteId);
+        });
       }
       if (addBacklogItemButton instanceof HTMLElement) {
         addBacklogItemButton.addEventListener('click', () => {
@@ -8908,8 +9392,12 @@ function renderHtml(
           if (backlogEditorMode !== 'edit' || !backlogEditorItemId) {
             return;
           }
-          deleteBacklogItemById(backlogEditorItemId);
-          closeBacklogEditor();
+          void (async () => {
+            const deleted = await deleteBacklogItemById(backlogEditorItemId);
+            if (deleted) {
+              closeBacklogEditor();
+            }
+          })();
         });
       }
       if (backlogEditorReviewSearch instanceof HTMLInputElement) {
@@ -8941,6 +9429,15 @@ function renderHtml(
           backlogReviewPickerPage += 1;
           renderBacklogEditorReviewList();
         });
+      }
+      if (confirmDialogBackdrop instanceof HTMLElement) {
+        confirmDialogBackdrop.addEventListener('click', () => closeConfirmDialog(false));
+      }
+      if (confirmDialogCancel instanceof HTMLButtonElement) {
+        confirmDialogCancel.addEventListener('click', () => closeConfirmDialog(false));
+      }
+      if (confirmDialogConfirm instanceof HTMLButtonElement) {
+        confirmDialogConfirm.addEventListener('click', () => closeConfirmDialog(true));
       }
       if (backlogEditorSelectVisible instanceof HTMLButtonElement) {
         backlogEditorSelectVisible.addEventListener('click', () => {
@@ -9008,11 +9505,6 @@ function renderHtml(
       if (openNoteSidebarButton instanceof HTMLElement) {
         openNoteSidebarButton.addEventListener('click', openBacklogNoteSidebar);
       }
-      if (noteBacklogSelect instanceof HTMLSelectElement) {
-        noteBacklogSelect.addEventListener('change', () => {
-          selectNoteBacklog(noteBacklogSelect.value);
-        });
-      }
       if (openFilterPanelButton instanceof HTMLElement) {
         openFilterPanelButton.addEventListener('click', openFilterPanel);
       }
@@ -9022,13 +9514,20 @@ function renderHtml(
       if (filterPanelClose instanceof HTMLElement) {
         filterPanelClose.addEventListener('click', closeFilterPanel);
       }
-      if (noteSidebarText instanceof HTMLTextAreaElement) {
-        noteSidebarText.addEventListener('input', () => {
-          if (!activeNoteBacklogId) {
+      if (noteTitleInput instanceof HTMLInputElement) {
+        noteTitleInput.addEventListener('input', () => {
+          if (!activeNoteId) {
             return;
           }
-          writeBacklogNote(activeNoteBacklogId, noteSidebarText.value);
-          schedulePreviewStateSave();
+          writeActiveNoteDraft({ title: noteTitleInput.value });
+        });
+      }
+      if (noteSidebarText instanceof HTMLTextAreaElement) {
+        noteSidebarText.addEventListener('input', () => {
+          if (!activeNoteId) {
+            return;
+          }
+          writeActiveNoteDraft({ content: noteSidebarText.value });
         });
       }
       if (searchInput instanceof HTMLInputElement) {
@@ -9043,14 +9542,14 @@ function renderHtml(
             void applyBacklogEditorChanges();
             return;
           }
+          if (noteSidebarRoot instanceof HTMLElement && !noteSidebarRoot.hidden) {
+            event.preventDefault();
+            void saveNotesManually();
+            return;
+          }
           if (viewBacklog.classList.contains('active')) {
             event.preventDefault();
             saveBacklogState();
-            return;
-          }
-          if (noteSidebarRoot instanceof HTMLElement && !noteSidebarRoot.hidden) {
-            event.preventDefault();
-            saveBacklogNotesManually();
             return;
           }
         }
@@ -9061,6 +9560,10 @@ function renderHtml(
         }
         if (event.key === 'Escape') {
           if (backlogEditorSaving) {
+            return;
+          }
+          if (confirmDialogRoot instanceof HTMLElement && !confirmDialogRoot.hidden) {
+            closeConfirmDialog(false);
             return;
           }
           if (backlogReviewPickerRoot instanceof HTMLElement && !backlogReviewPickerRoot.hidden) {
@@ -9233,9 +9736,9 @@ async function renderBundleForApp(params: {
     const rawBacklogText = await fs.readFile(backlogPath, "utf8");
     hadLegacyBacklogFormat = rawBacklogText.includes("\"appBacklogs\"");
     hadLegacyEvidenceCountSuffix =
-      /\(\s*근거\s*리뷰\s*\d+\s*건\s*\)/i.test(rawBacklogText) ||
+      /\(\s*(?:근거\s*)?리뷰\s*\d+\s*건\s*\)/i.test(rawBacklogText) ||
       /\(\s*evidence\s*\d+\s*reviews?\s*\)/i.test(rawBacklogText) ||
-      /근거\s*리뷰\s*\d+\s*건/i.test(rawBacklogText) ||
+      /(?:근거\s*)?리뷰\s*\d+\s*건/i.test(rawBacklogText) ||
       /evidence\s*\d+\s*reviews?/i.test(rawBacklogText);
     hadLegacyImportanceField = /"\s*(impact|importance)\s*"\s*:/.test(rawBacklogText);
   } catch {

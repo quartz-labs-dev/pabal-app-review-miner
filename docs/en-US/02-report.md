@@ -44,8 +44,9 @@ Render actionable markdown report to a shared-viewer bundle JSON.
 - On narrow screens, the filter panel opens as a bottom sheet.
 - On narrow screens, the notes panel also opens as a bottom sheet instead of a right drawer.
 - Search is shown as a `🔎` button by default and expands to the input field on tap/click.
+- The expanded search input fills remaining header space with `flex` layout to reduce awkward header wrapping.
 - Top controls are tab-scoped: `Reviews` and `Backlog` both show `Filter` and `Notes`.
-- In `Backlog`, `Expand evidence` is available inside the filter panel.
+- In `Backlog`, `Expand reviews` is available inside the filter panel.
 - Top navigation state is synced to query parameters, so refresh keeps the same UI state:
   - `tab` (`review|backlog`)
   - `q` (search text)
@@ -61,20 +62,20 @@ Render actionable markdown report to a shared-viewer bundle JSON.
 - `Backlog` shows one unified backlog table across all apps (not per-app grouped sections).
 - In `Backlog`, identical backlog items are merged into a single row even when they come from different apps.
 - In `Backlog`, near-duplicate backlog rows (same normalized title/action) are also merged during backlog normalization.
-- In `Backlog`, default backlog sorting is: `Priority` (`MUST > SHOULD > COULD`) → `Effort` (`High > Medium > Low`) → `Evidence count` (high to low).
+- In `Backlog`, default backlog sorting is: `Priority` (`MUST > SHOULD > COULD`) → `Status` (`Not Started > In Progress > Done`) → `Effort` (`High > Medium > Low`) → `Review count` (high to low).
 - In `Backlog`, each row now includes `Status` (`Not Started | In Progress | Done`) and status can be changed inline.
 - `Status` uses color-coded states for quick scanning: `Not Started` (red), `In Progress` (yellow), `Done` (green).
 - Inline selectors in the backlog table are color-coded for both `Priority` (`MUST/SHOULD/COULD`) and `Effort` (`High/Medium/Low`).
 - The app list in each backlog row is rendered as a single-line text with ellipsis (`...`) when it overflows.
 - In `Backlog`, use the same filter panel UX as `Reviews` to filter rows by `Priority / Effort`.
-- In the `Backlog` table, there is no separate `Evidence` column; use the chevron button next to `Evidence count` to expand/collapse evidence rows.
-- `Evidence count` is calculated as the number of unique reviews (`reviewId`-based dedupe), not raw quote line count.
-- In expanded evidence rows, the Korean sentence is shown by default (without `KR:` prefix), and `See details` reveals the review ID, metadata, and original text.
-- Expanded evidence rows render prioritized evidence reviews only (top 8 max per backlog row).
+- In the `Backlog` table, there is no separate review-detail column; use the chevron button next to `Review count` to expand/collapse review rows.
+- `Review count` is calculated as the number of unique reviews (`reviewId`-based dedupe), not raw quote line count.
+- In expanded review rows, the Korean sentence is shown by default (without `KR:` prefix), and `See details` reveals the review ID, metadata, and original text.
+- Expanded review rows render prioritized reviews only (top 8 max per backlog row).
 - Backlog themes are now derived dynamically from each app's review text (token-frequency heuristic), instead of using a fixed hardcoded theme list.
-- Synthetic backlog input now filters out low-signal reviews (e.g., short generic praise without request/issue) and keeps actionable evidence first.
-- Backlog `action` text is generated as a concrete checklist (up to 3 items) inferred from matched evidence patterns, not only a generic count sentence.
-- Backlog `action` text no longer appends evidence-count suffixes like `(근거 리뷰 N건)` or `(evidence N reviews)`; use the `Evidence count` column instead.
+- Synthetic backlog input now filters out low-signal reviews (e.g., short generic praise without request/issue) and keeps actionable reviews first.
+- Backlog `action` text is generated as a concrete checklist (up to 3 items) inferred from matched review patterns, not only a generic count sentence.
+- Backlog `action` text no longer appends count suffixes like `(리뷰 N건)` or `(evidence N reviews)`; use the `Review count` column instead.
 - In `Reviews`, hashtag filter supports multi-select (`#❤️`, `#Requests`, `#Satisfaction`, `#Dissatisfaction`), and `All tags` clears tag filters.
 - In `Reviews`, state filter is tri-state: `All` / `Active` / `Inactive` (default: `All`).
 - In `Reviews`, app sections are ordered by latest review registration date first, then higher app rating.
@@ -92,17 +93,25 @@ Render actionable markdown report to a shared-viewer bundle JSON.
 - Curated quotes are shown in one `Selected Reviews (Hashtag-based)` section instead of separate category sections.
 - In review cards, `Original` text open/close uses a smooth expand/collapse animation.
 - Hashtags remain editable even when the card is `Inactive` (no click blocking by state).
-- Top-right controls include a `Notes` button; in the right sidebar you can switch the backlog selector to manage one note per backlog item.
+- Top-right controls include a `Notes` button; the right sidebar provides full note CRUD (create/select/edit/delete) with free-form titles and content.
 - The header action button `➕ 백로그 생성` is available in both `Reviews` and `Backlog` tabs.
-- In the notes panel, use the backlog selector to switch the currently active backlog item for note editing.
-- The notes sidebar shows metadata for the selected backlog item (`Priority / Status / Effort / Evidence`).
-- Notes are auto-saved while typing (same preview-state persistence path). `Save` (or `Ctrl/Cmd + S`) is still available for immediate flush.
+- In the notes panel, notes are managed from a dedicated list UI (not a backlog selector).
+- The notes editor has separate `Title` and `Content` fields per note.
+- Note `Create` persists immediately.
+- Note `Save` persists only the currently active note (`Save` button below the content field, or `Ctrl/Cmd + S` while the notes panel is open).
+- Note `Delete` removes the currently active note and persists immediately.
 - In `Backlog`, backlog rows are editable directly from the page:
   - add/remove backlog items
+  - table columns are ordered as `Priority → Backlog Item → Status → Effort → Review count → Actions`
   - update each row's `Priority / Status / Effort` directly from inline selectors
+  - inline selectors use vivid red/yellow/green text colors with bold labels for clearer state separation (no state fill)
+  - `Status` labels use the same vivid red/yellow/green text-only style
+  - clicking a backlog table row opens the editor directly (except inline controls such as selectors/toggles/buttons)
   - row action buttons are icon-only and pinned to the far right (`Delete` first, then `Edit`)
-  - evidence review selection is done in a centered modal with pagination (active reviews only)
-  - backlog editor body shows only currently selected evidence reviews (chip list)
+  - deleting a backlog row uses a centered custom confirmation modal (not the browser confirm dialog)
+  - review selection is done in a centered modal with pagination and open/close animation (active reviews only)
+  - backlog editor body renders selected reviews as compact review text items (text only, no app name/ID chips)
+  - backlog editor header actions are `Delete`, `Apply`, and close (`✕`); `Delete` appears left of `Apply`
   - in backlog editor, `Apply` saves immediately (persistent save), including `Status`
   - report-table edits outside the backlog editor (row delete, inline priority/status/effort changes, quick-add from `Reviews`) are also auto-persisted
 - In `Reviews`, each review card has a single quick-add selector; selecting a backlog item immediately attaches that review.
@@ -112,9 +121,9 @@ Render actionable markdown report to a shared-viewer bundle JSON.
 - Reviews view is hydrated from full review datasets (`data/{myAppId}/reviews-ko/*.json`, fallback `reviews/*.json`) per app:
   - preselected report quotes start as `Active`
   - non-selected reviews are included as `Inactive` by default for manual curation
-- In preview mode, card states and backlog notes are persisted to `data/{myAppId}/reports/preview-state.json` (both update immediately).
+- In preview mode, card states and notes are persisted to `data/{myAppId}/reports/preview-state.json` (both update immediately).
 - `preview-state.json` is treated as a full-state snapshot for review cards (not diff-only overrides).
-- `preview-state.json` now uses v3 schema only (`reviews.tags`, `reviews.excluded`, `backlogNotes`). Older `favorite`/`notes` and `appNotes` fields are no longer used.
+- `preview-state.json` now uses v4 schema (`reviews.tags`, `reviews.excluded`, `notes.{id}.title`, `notes.{id}.content`).
 - If `data/{myAppId}/icon.png` exists, HTML includes icon meta tags (`icon`, `og:image`, `twitter:image`) automatically.
 
 ### CLI Options
@@ -138,7 +147,7 @@ npm run report:render-html -- --all
 ### Output
 
 - `data/{myAppId}/reports/competitor-raw-actionable.ko.json` (shared-viewer bundle payload)
-- `data/{myAppId}/reports/backlog.ko.json` (unified backlog `items` data including `status`; evidence is stored as scoped IDs in `sourceToken::reviewId` format)
+- `data/{myAppId}/reports/backlog.ko.json` (unified backlog `items` data including `status`; reviews are stored as scoped IDs in `sourceToken::reviewId` format)
 - Optional legacy output with `--with-html`: `data/{myAppId}/reports/competitor-raw-actionable.ko.html`
 
 ## `report:init-backlog`
@@ -195,7 +204,7 @@ Initialize `preview-state.json` from report bundle defaults.
 - `--data-dir` (default: `data/`)
 - `--input` (default: `data/{myAppId}/reports/competitor-raw-actionable.ko.json`)
 - `--output` (default: `data/{myAppId}/reports/preview-state.json`)
-- `--keep-notes` (default `true`): keep existing backlog notes while re-initializing review states
+- `--keep-notes` (default `true`): keep existing user notes while re-initializing review states
 - `--all` cannot be combined with `--my-app`, `--input`, or `--output`
 
 ### Example

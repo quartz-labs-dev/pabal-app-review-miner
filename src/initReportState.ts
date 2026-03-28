@@ -25,17 +25,18 @@ interface ReviewStateEntry {
   updatedAt: string;
 }
 
-interface BacklogNoteEntry {
+interface UserNoteEntry {
+  title: string;
   content: string;
   updatedAt: string;
 }
 
 interface PreviewStateFile {
-  version: 3;
+  version: 4;
   ownerAppId: string;
   updatedAt: string;
   reviews: Record<string, ReviewStateEntry>;
-  backlogNotes: Record<string, BacklogNoteEntry>;
+  notes: Record<string, UserNoteEntry>;
 }
 
 interface InitResult {
@@ -195,27 +196,43 @@ function extractReviewDefaultsFromBundle(bundle: ReportBundlePayload, updatedAt:
   };
 }
 
-function normalizeBacklogNotes(input: unknown): Record<string, BacklogNoteEntry> {
+function deriveFallbackNoteTitle(content: string): string {
+  const firstLine = content
+    .split("\n")
+    .map((line) => normalizeText(line))
+    .find((line) => line.length > 0);
+  if (firstLine) {
+    return firstLine.slice(0, 200);
+  }
+  return "Untitled";
+}
+
+function normalizeNotes(input: unknown): Record<string, UserNoteEntry> {
   if (!input || typeof input !== "object") {
     return {};
   }
 
   const source = input as Record<string, unknown>;
-  const result: Record<string, BacklogNoteEntry> = {};
+  const result: Record<string, UserNoteEntry> = {};
 
-  for (const [appKeyRaw, row] of Object.entries(source)) {
-    const appKey = normalizeText(appKeyRaw);
-    if (!appKey || !row || typeof row !== "object") {
+  for (const [noteIdRaw, row] of Object.entries(source)) {
+    const noteId = normalizeText(noteIdRaw);
+    if (!noteId || !row || typeof row !== "object") {
       continue;
     }
 
     const payload = row as Record<string, unknown>;
-    const content = normalizeText(typeof payload.content === "string" ? payload.content : "");
-    if (!content) {
+    const title = normalizeText(typeof payload.title === "string" ? payload.title : "").slice(0, 200);
+    const content = String(typeof payload.content === "string" ? payload.content : "")
+      .replace(/\r\n?/g, "\n")
+      .replace(/\u0000/g, "")
+      .slice(0, 20000);
+    if (!title && !content.trim()) {
       continue;
     }
 
-    result[appKey] = {
+    result[noteId] = {
+      title: title || deriveFallbackNoteTitle(content),
       content,
       updatedAt: normalizeText(typeof payload.updatedAt === "string" ? payload.updatedAt : new Date().toISOString())
     };
@@ -224,11 +241,11 @@ function normalizeBacklogNotes(input: unknown): Record<string, BacklogNoteEntry>
   return result;
 }
 
-async function readExistingBacklogNotes(outputPath: string): Promise<Record<string, BacklogNoteEntry>> {
+async function readExistingNotes(outputPath: string): Promise<Record<string, UserNoteEntry>> {
   try {
     const raw = await fs.readFile(outputPath, "utf8");
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    return normalizeBacklogNotes(parsed.backlogNotes);
+    return normalizeNotes(parsed.notes);
   } catch (error) {
     const nodeError = error as NodeJS.ErrnoException;
     if (nodeError?.code === "ENOENT") {
@@ -270,7 +287,7 @@ async function parseArgs(): Promise<CliArgs> {
     .option("keep-notes", {
       type: "boolean",
       default: true,
-      describe: "Keep existing backlog notes from preview-state.json"
+      describe: "Keep existing user notes from preview-state.json"
     })
     .help()
     .strict()
@@ -355,13 +372,13 @@ async function initPreviewStateForApp(params: {
     reviews[reviewId] = extracted.reviewStates[reviewId];
   }
 
-  const backlogNotes = keepNotes ? await readExistingBacklogNotes(outputPath) : {};
+  const notes = keepNotes ? await readExistingNotes(outputPath) : {};
   const previewState: PreviewStateFile = {
-    version: 3,
+    version: 4,
     ownerAppId,
     updatedAt: now,
     reviews,
-    backlogNotes
+    notes
   };
 
   await fs.mkdir(path.dirname(outputPath), { recursive: true });

@@ -11,6 +11,7 @@ export const PREVIEW_STATE_API_PREFIX = "/api/preview-state/";
 const PREVIEW_STATE_MAX_BODY_BYTES = 25_000_000;
 const PREVIEW_STATE_MAX_REVIEWS = 200_000;
 const PREVIEW_STATE_MAX_NOTES = 2_000;
+const PREVIEW_STATE_MAX_NOTE_TITLE_LENGTH = 200;
 const PREVIEW_STATE_MAX_NOTE_LENGTH = 20_000;
 
 type PreviewTag = "heart" | "satisfaction" | "dissatisfaction" | "requests";
@@ -21,17 +22,18 @@ interface PreviewStateEntry {
   updatedAt: string;
 }
 
-interface BacklogNoteEntry {
+interface UserNoteEntry {
+  title: string;
   content: string;
   updatedAt: string;
 }
 
 interface PreviewStateFile {
-  version: 3;
+  version: 4;
   ownerAppId: string;
   updatedAt: string;
   reviews: Record<string, PreviewStateEntry>;
-  backlogNotes: Record<string, BacklogNoteEntry>;
+  notes: Record<string, UserNoteEntry>;
 }
 
 const PREVIEW_TAG_SET = new Set<PreviewTag>(["heart", "satisfaction", "dissatisfaction", "requests"]);
@@ -44,17 +46,17 @@ function isSafeReviewId(reviewId: string): boolean {
   return /^[a-z0-9._:-]+$/i.test(reviewId) && reviewId.length <= 180;
 }
 
-function isSafeNoteBacklogKey(backlogId: string): boolean {
-  return /^[a-z0-9._:-]+$/i.test(backlogId) && backlogId.length <= 180;
+function isSafeNoteId(noteId: string): boolean {
+  return /^[a-z0-9._:-]+$/i.test(noteId) && noteId.length <= 180;
 }
 
 function createDefaultPreviewState(ownerAppId: string): PreviewStateFile {
   return {
-    version: 3,
+    version: 4,
     ownerAppId,
     updatedAt: new Date().toISOString(),
     reviews: {},
-    backlogNotes: {}
+    notes: {}
   };
 }
 
@@ -88,20 +90,38 @@ function normalizePreviewStateEntry(value: unknown): PreviewStateEntry | undefin
   };
 }
 
-function normalizeBacklogNoteEntry(value: unknown): BacklogNoteEntry | undefined {
+function deriveFallbackNoteTitle(content: string): string {
+  const firstLine = content
+    .split("\n")
+    .map((line) => normalizeText(line))
+    .find((line) => line.length > 0);
+  if (firstLine) {
+    return firstLine.slice(0, PREVIEW_STATE_MAX_NOTE_TITLE_LENGTH);
+  }
+  return "Untitled";
+}
+
+function normalizeNoteEntry(value: unknown): UserNoteEntry | undefined {
   if (!value || typeof value !== "object") {
     return undefined;
   }
 
   const row = value as Record<string, unknown>;
+  const titleSource = typeof row.title === "string" ? row.title : "";
   const contentSource = typeof row.content === "string" ? row.content : "";
-  const content = contentSource.replace(/\r\n?/g, "\n").replace(/\u0000/g, "").trim();
-  if (!content) {
+  const title = titleSource
+    .replace(/\r\n?/g, " ")
+    .replace(/\u0000/g, "")
+    .trim()
+    .slice(0, PREVIEW_STATE_MAX_NOTE_TITLE_LENGTH);
+  const content = contentSource.replace(/\r\n?/g, "\n").replace(/\u0000/g, "").slice(0, PREVIEW_STATE_MAX_NOTE_LENGTH);
+  if (!title && !content.trim()) {
     return undefined;
   }
 
   return {
-    content: content.slice(0, PREVIEW_STATE_MAX_NOTE_LENGTH),
+    title: title || deriveFallbackNoteTitle(content),
+    content,
     updatedAt: normalizeText(typeof row.updatedAt === "string" ? row.updatedAt : new Date().toISOString())
   };
 }
@@ -115,13 +135,13 @@ function normalizePreviewState(ownerAppId: string, value: unknown): PreviewState
   const source = value as Record<string, unknown>;
   const rawReviews =
     source.reviews && typeof source.reviews === "object" ? (source.reviews as Record<string, unknown>) : {};
-  const rawBacklogNotes =
-    source.backlogNotes && typeof source.backlogNotes === "object"
-      ? (source.backlogNotes as Record<string, unknown>)
+  const rawNotes =
+    source.notes && typeof source.notes === "object"
+      ? (source.notes as Record<string, unknown>)
       : {};
 
   const reviews: Record<string, PreviewStateEntry> = {};
-  const backlogNotes: Record<string, BacklogNoteEntry> = {};
+  const notes: Record<string, UserNoteEntry> = {};
 
   const reviewPairs = Object.entries(rawReviews).slice(0, PREVIEW_STATE_MAX_REVIEWS);
   for (const [reviewIdRaw, reviewStateRaw] of reviewPairs) {
@@ -138,27 +158,27 @@ function normalizePreviewState(ownerAppId: string, value: unknown): PreviewState
     reviews[reviewId] = normalized;
   }
 
-  const notePairs = Object.entries(rawBacklogNotes).slice(0, PREVIEW_STATE_MAX_NOTES);
-  for (const [backlogIdRaw, backlogNoteRaw] of notePairs) {
-    const backlogId = normalizeText(backlogIdRaw);
-    if (!backlogId || !isSafeNoteBacklogKey(backlogId)) {
+  const notePairs = Object.entries(rawNotes).slice(0, PREVIEW_STATE_MAX_NOTES);
+  for (const [noteIdRaw, noteRaw] of notePairs) {
+    const noteId = normalizeText(noteIdRaw);
+    if (!noteId || !isSafeNoteId(noteId)) {
       continue;
     }
 
-    const normalized = normalizeBacklogNoteEntry(backlogNoteRaw);
+    const normalized = normalizeNoteEntry(noteRaw);
     if (!normalized) {
       continue;
     }
 
-    backlogNotes[backlogId] = normalized;
+    notes[noteId] = normalized;
   }
 
   return {
-    version: 3,
+    version: 4,
     ownerAppId,
     updatedAt: normalizeText(typeof source.updatedAt === "string" ? source.updatedAt : new Date().toISOString()),
     reviews,
-    backlogNotes
+    notes
   };
 }
 

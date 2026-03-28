@@ -117,9 +117,9 @@ function sanitizeBacklogText(value: unknown): string {
 function sanitizeBacklogAction(value: unknown): string {
   let text = normalizeText(String(value ?? ""));
   text = text
-    .replace(/\(\s*근거\s*리뷰\s*\d+\s*건\s*\)/gi, "")
+    .replace(/\(\s*(?:근거\s*)?리뷰\s*\d+\s*건\s*\)/gi, "")
     .replace(/\(\s*evidence\s*\d+\s*reviews?\s*\)/gi, "")
-    .replace(/근거\s*리뷰\s*\d+\s*건/gi, "")
+    .replace(/(?:근거\s*)?리뷰\s*\d+\s*건/gi, "")
     .replace(/evidence\s*\d+\s*reviews?/gi, "");
   return normalizeText(text.replace(/\s{2,}/g, " "));
 }
@@ -127,7 +127,7 @@ function sanitizeBacklogAction(value: unknown): string {
 function backlogSimilarityText(value: unknown): string {
   return normalizeText(String(value ?? ""))
     .toLowerCase()
-    .replace(/\(\s*근거\s*리뷰\s*\d+\s*건\s*\)/gi, "")
+    .replace(/\(\s*(?:근거\s*)?리뷰\s*\d+\s*건\s*\)/gi, "")
     .replace(/\(\s*evidence\s*\d+\s*reviews?\s*\)/gi, "")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .replace(/\s+/g, " ")

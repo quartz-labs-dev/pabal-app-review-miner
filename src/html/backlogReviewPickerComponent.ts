@@ -27,6 +27,13 @@ export const backlogReviewPickerStyles = `
         position: fixed;
         inset: 0;
         z-index: 55;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 180ms ease;
+      }
+      .backlog-review-picker-root.is-open {
+        opacity: 1;
+        pointer-events: auto;
       }
       .backlog-review-picker-backdrop {
         position: absolute;
@@ -37,6 +44,11 @@ export const backlogReviewPickerStyles = `
         width: 100%;
         height: 100%;
         background: rgba(15, 23, 42, 0.5);
+        opacity: 0;
+        transition: opacity 180ms ease;
+      }
+      .backlog-review-picker-root.is-open .backlog-review-picker-backdrop {
+        opacity: 1;
       }
       .backlog-review-picker {
         position: absolute;
@@ -44,7 +56,7 @@ export const backlogReviewPickerStyles = `
         left: 50%;
         width: min(960px, calc(100vw - 36px));
         max-height: min(84vh, 820px);
-        transform: translate(-50%, -50%);
+        transform: translate(-50%, calc(-50% + 10px)) scale(0.98);
         border: 1px solid var(--line);
         border-radius: 16px;
         background: #ffffff;
@@ -52,6 +64,12 @@ export const backlogReviewPickerStyles = `
         display: flex;
         flex-direction: column;
         overflow: hidden;
+        opacity: 0;
+        transition: transform 180ms ease, opacity 180ms ease;
+      }
+      .backlog-review-picker-root.is-open .backlog-review-picker {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
       }
       .backlog-review-picker-head {
         padding: 12px 14px;
@@ -135,12 +153,19 @@ export const backlogReviewPickerStyles = `
           max-height: 88vh;
         }
       }
+      @media (prefers-reduced-motion: reduce) {
+        .backlog-review-picker-root,
+        .backlog-review-picker-backdrop,
+        .backlog-review-picker {
+          transition: none;
+        }
+      }
 `;
 
 export function renderBacklogEvidenceSelectorHtml(): string {
   return `
           <div class=\"backlog-editor-field\">
-            <span>근거 리뷰</span>
+            <span>리뷰</span>
             <div class=\"backlog-editor-picker-actions\">
               <span id=\"backlogEditorSelectionSummary\" class=\"backlog-review-selection-summary\">선택 0개</span>
               <button id=\"openBacklogReviewPicker\" class=\"backlog-editor-open-picker\" type=\"button\">활성 리뷰 선택</button>
