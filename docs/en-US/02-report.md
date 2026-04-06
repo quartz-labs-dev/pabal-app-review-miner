@@ -111,6 +111,7 @@ Render actionable markdown report to a shared-viewer bundle JSON.
   - row action buttons are icon-only and pinned to the far right (`Delete` first, then `Edit`)
   - deleting a backlog row uses a centered custom confirmation modal (not the browser confirm dialog)
   - review selection is done in a centered modal with pagination and open/close animation (active reviews only)
+  - the review-picker modal keeps a fixed height regardless of result count, and only the list area scrolls
   - editor summary shows both `selected count` and `saved total count`; if saved reviews are inactive, a guidance message is shown
   - in the backlog editor `Reviews` list, each linked review can be toggled `Active ↔ Inactive` directly (persisted immediately to `preview-state`)
   - setting a review to `Inactive` keeps the backlog linkage; use unlink (`×`) to remove it from evidence

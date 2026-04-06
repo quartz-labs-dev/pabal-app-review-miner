@@ -55,6 +55,7 @@ export const backlogReviewPickerStyles = `
         top: 50%;
         left: 50%;
         width: min(960px, calc(100vw - 36px));
+        height: min(84vh, 820px);
         max-height: min(84vh, 820px);
         transform: translate(-50%, calc(-50% + 10px)) scale(0.98);
         border: 1px solid var(--line);
@@ -90,8 +91,11 @@ export const backlogReviewPickerStyles = `
         font-size: 12px;
       }
       .backlog-review-picker-body {
+        flex: 1;
+        min-height: 0;
         padding: 12px 14px;
         display: grid;
+        grid-template-rows: auto auto minmax(0, 1fr);
         gap: 10px;
       }
       .backlog-review-picker-toolbar {
@@ -150,6 +154,7 @@ export const backlogReviewPickerStyles = `
       @media (max-width: 900px) {
         .backlog-review-picker {
           width: calc(100vw - 18px);
+          height: 88vh;
           max-height: 88vh;
         }
       }
