@@ -121,7 +121,7 @@ Render actionable markdown report to a shared-viewer bundle JSON.
   - backlog editor header actions are `Delete`, `Apply`, and close (`✕`); `Delete` appears left of `Apply`
   - in backlog editor, `Apply` saves immediately (persistent save), including `Status`
   - report-table edits outside the backlog editor (row delete, inline priority/status/effort changes, quick-add from `Reviews`) are also auto-persisted
-- In `Reviews`, each review card has a single quick-add selector; selecting a backlog item immediately attaches that review.
+- In `Reviews`, each review card has a single quick-add selector; selecting a backlog item toggles linkage immediately (`attach` when not linked, `unlink` when already linked).
 - In that quick-add selector, already linked backlog items are marked with `✓` (without priority labels), and the card shows a right-aligned linked-status text in the format `(N linked: title, title)`.
 - The quick-add selector is rendered on a dedicated backlog row under the card action row (separate from tag/status controls).
 - When a review is added to backlog from `Reviews`, that review is automatically switched to `Active`.

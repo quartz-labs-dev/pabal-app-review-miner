@@ -7473,7 +7473,7 @@ function renderHtml(
 
         const hasBacklog = backlogStateItems.length > 0;
         select.disabled = !hasBacklog;
-        select.title = hasBacklog ? '백로그를 선택하면 즉시 추가됩니다.' : '추가할 백로그가 없습니다.';
+        select.title = hasBacklog ? '백로그를 선택하면 즉시 연결/해제됩니다.' : '추가할 백로그가 없습니다.';
 
         if (linkedItems.length === 0) {
           setBacklogQuickStatus(card, '미연결', false);
@@ -8293,13 +8293,18 @@ function renderHtml(
         }
 
         let added = false;
+        let removed = false;
         backlogStateItems = backlogStateItems.map((item) => {
           if (item.id !== normalizedId) {
             return item;
           }
           const currentEvidenceIds = Array.isArray(item.evidenceReviewIds) ? item.evidenceReviewIds : [];
           if (currentEvidenceIds.includes(context.scopedReviewId)) {
-            return item;
+            removed = true;
+            return normalizeBacklogItem({
+              ...item,
+              evidenceReviewIds: currentEvidenceIds.filter((scopedReviewId) => scopedReviewId !== context.scopedReviewId)
+            });
           }
           const nextEvidenceIds = new Set(Array.isArray(item.evidenceReviewIds) ? item.evidenceReviewIds : []);
           nextEvidenceIds.add(context.scopedReviewId);
@@ -8315,7 +8320,7 @@ function renderHtml(
           });
         });
 
-        if (!added) {
+        if (!added && !removed) {
           if (activated) {
             applySearch();
           }
