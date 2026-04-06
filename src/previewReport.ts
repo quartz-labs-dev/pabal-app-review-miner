@@ -35,6 +35,22 @@ const DEFAULT_REPORT_BUNDLE_FILE_NAME = "competitor-raw-actionable.ko.json";
 const DEFAULT_REPORT_HTML_FILE_NAME = "competitor-raw-actionable.ko.html";
 const APP_ICON_ROUTE_PREFIX = "/assets/app-icons/";
 
+function normalizeAlwaysExpandedAppSections(html: string): string {
+  if (!html || !html.includes("class=\"app\"")) {
+    return html;
+  }
+
+  return html
+    .replace(/<details class="app"([^>]*?)\sopen>/g, "<section class=\"app\"$1>")
+    .replace(/<details class="app"([^>]*)>/g, "<section class=\"app\"$1>")
+    .replace(/<\/details>/g, "</section>")
+    .replace(/<summary>/g, "<div class=\"app-header\">")
+    .replace(/<\/summary>/g, "</div>")
+    .replace(/\.app > summary \{/g, ".app > .app-header {")
+    .replace(/\s*\.app > summary::-webkit-details-marker \{ display: none; \}\n/g, "\n")
+    .replace(/(\.app > \.app-header \{\n)\s*cursor: pointer;\n\s*list-style: none;\n/g, "$1");
+}
+
 function toAbsolutePath(input: string): string {
   return path.resolve(process.cwd(), input);
 }
@@ -173,7 +189,7 @@ async function resolveViewerHtmlFromBundle(dataRoot: string, appId: string): Pro
     if (!html.trim()) {
       return undefined;
     }
-    return html;
+    return normalizeAlwaysExpandedAppSections(html);
   } catch {
     return undefined;
   }
@@ -340,7 +356,12 @@ function createDashboardHandler(context: ApiRouteContext) {
 
       const legacyHtmlPath = path.resolve(context.dataRoot, appId, "reports", DEFAULT_REPORT_HTML_FILE_NAME);
       if (existsSync(legacyHtmlPath)) {
-        serveFile(res, legacyHtmlPath);
+        try {
+          const legacyHtml = await fs.readFile(legacyHtmlPath, "utf8");
+          sendHtml(res, normalizeAlwaysExpandedAppSections(legacyHtml));
+        } catch {
+          serveFile(res, legacyHtmlPath);
+        }
         return;
       }
 

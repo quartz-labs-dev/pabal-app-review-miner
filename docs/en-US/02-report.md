@@ -82,6 +82,7 @@ Render actionable markdown report to a shared-viewer bundle JSON.
 - In `Reviews`, app filter is available in the filter panel (`All apps` + per-app buttons).
 - In `Reviews`, state filter is tri-state: `All` / `Active` / `Inactive` (default: `All`).
 - In `Reviews`, app sections are ordered by latest review registration date first, then higher app rating.
+- In `Reviews`, app sections are always expanded; collapse/close interaction is not provided.
 - In `Reviews`, review cards are ordered by latest registration date first, with higher rating as the secondary sort.
 - In `Reviews`, cards are paginated (50 cards per page) with `Prev/Next` controls in the top status row; `Prev` scrolls to page bottom, and `Next` scrolls to the top of the review-card section.
 - In `Reviews`, bookmark controls are shown when no non-app filters are active (`search/tag/state/100+ chars` clear; app-only filter is allowed). Bookmark storage is scoped by app filter, so each app-filter view keeps its own bookmark. The bookmark update control is an icon button: it appears filled on the bookmarked page and outlined on other pages. The summary label shows only the bookmarked page number (`Bookmark {page}`). `Go to bookmark` jumps back to the saved bookmark page.

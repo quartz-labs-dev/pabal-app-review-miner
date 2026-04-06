@@ -3337,7 +3337,7 @@ function renderHtml(
     });
 
   const rawAppSections = sortedApps
-    .map(({ app }, appIndex) => {
+    .map(({ app }) => {
       const appPool = resolvePoolForApp(app.title, reviewPools);
       const appKey = resolveAppStateKey(app.title, appPool);
       const parsedTitle = parseAppTitle(app.title);
@@ -3400,29 +3400,28 @@ function renderHtml(
           </div>
         </section>
       `;
-      const defaultOpenAttr = appIndex < 2 ? " open" : "";
       const appReviewCountLabel = normalizeText(String(app.reviewCount ?? ""));
       const initialAppCountText = appReviewCountLabel
         ? `${appReviewCountLabel}/${appReviewCountLabel}`
         : "0/0";
 
       return `
-        <details class=\"app\" data-app-key=\"${escapeHtml(appKey)}\" data-app-title=\"${escapeHtml(
+        <section class=\"app\" data-app-key=\"${escapeHtml(appKey)}\" data-app-title=\"${escapeHtml(
           parsedTitle.displayName
         )}\" data-app-raw-title=\"${escapeHtml(app.title)}\" data-app-source-token=\"${escapeHtml(
         parsedTitle.sourceToken ?? ""
-      )}\"${defaultOpenAttr}>
-          <summary>
+      )}\">
+          <div class=\"app-header\">
             ${renderAppHeading(app.title)}
             <span class=\"app-summary-right\">
               <span class=\"app-count\">리뷰 ${escapeHtml(initialAppCountText)}</span>
             </span>
-          </summary>
+          </div>
           <div class=\"app-body\">
             ${selectedReviewsBlock}
             ${fullPoolBlock}
           </div>
-        </details>
+        </section>
       `;
     })
     .join("\n");
@@ -4139,9 +4138,7 @@ function renderHtml(
         content-visibility: auto;
         contain-intrinsic-size: 480px;
       }
-      .app > summary {
-        cursor: pointer;
-        list-style: none;
+      .app > .app-header {
         padding: 13px 14px;
         display: flex;
         justify-content: space-between;
@@ -4150,7 +4147,6 @@ function renderHtml(
         flex-wrap: wrap;
         background: linear-gradient(180deg, #ffffff, #f6faff);
       }
-      .app > summary::-webkit-details-marker { display: none; }
       .app-heading {
         display: inline-flex;
         align-items: center;
