@@ -3743,6 +3743,68 @@ function renderHtml(
         gap: 6px;
         flex-wrap: wrap;
       }
+      .raw-bookmark-controls {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 8px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #f8fbff;
+      }
+      .raw-bookmark-summary {
+        color: #334155;
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .raw-bookmark-controls button {
+        min-width: 52px;
+        padding: 6px 10px;
+        font-size: 12px;
+      }
+      .raw-bookmark-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-weight: 700;
+      }
+      .raw-bookmark-btn .btn-icon {
+        font-size: 12px;
+        line-height: 1;
+      }
+      .raw-bookmark-icon-btn {
+        min-width: 34px !important;
+        width: 34px;
+        height: 34px;
+        padding: 0 !important;
+        border-radius: 10px;
+      }
+      .raw-bookmark-icon-btn.is-current-page {
+        border-color: #7dd3fc;
+        background: #e0f2fe;
+        color: #075985;
+      }
+      .raw-bookmark-icon-svg {
+        width: 15px;
+        height: 15px;
+        display: inline-block;
+      }
+      .raw-bookmark-icon-svg .bookmark-fill {
+        fill: currentColor;
+        opacity: 0;
+        transition: opacity 120ms ease;
+      }
+      .raw-bookmark-icon-svg .bookmark-stroke {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .raw-bookmark-icon-btn.is-current-page .raw-bookmark-icon-svg .bookmark-fill {
+        opacity: 1;
+      }
       .raw-pagination {
         display: inline-flex;
         align-items: center;
@@ -5547,6 +5609,9 @@ function renderHtml(
           border-radius: 12px;
           justify-content: center;
         }
+        .raw-bookmark-controls {
+          order: 3;
+        }
         .raw-pagination {
           order: 4;
           margin-left: 0;
@@ -5700,6 +5765,10 @@ function renderHtml(
           min-width: 0;
           flex: 1 1 100%;
         }
+        .raw-bookmark-controls {
+          width: auto;
+          max-width: 100%;
+        }
         .filter-summary {
           min-width: 0;
           width: auto;
@@ -5745,6 +5814,19 @@ function renderHtml(
       <div class=\"top-inner top-status-row\">
         <div id=\"activeFilterChips\" class=\"active-filter-chips\"></div>
         <p id=\"filterSummary\" class=\"filter-summary page-filter-summary\">리뷰 0/0 표시</p>
+        <div id=\"rawBookmarkControls\" class=\"raw-bookmark-controls hidden-control\" aria-live=\"polite\">
+          <span id=\"rawBookmarkSummary\" class=\"raw-bookmark-summary\">북마크 없음</span>
+          <button id=\"rawBookmarkSet\" class=\"raw-bookmark-icon-btn\" type=\"button\" aria-label=\"현재 페이지를 북마크로 저장\" title=\"현재 페이지를 북마크로 저장\">
+            <svg class=\"raw-bookmark-icon-svg\" viewBox=\"0 0 16 16\" aria-hidden=\"true\" focusable=\"false\">
+              <path class=\"bookmark-fill\" d=\"M4 2.5H12A1 1 0 0 1 13 3.5V13L8 10.25L3 13V3.5A1 1 0 0 1 4 2.5Z\"></path>
+              <path class=\"bookmark-stroke\" d=\"M4 2.5H12A1 1 0 0 1 13 3.5V13L8 10.25L3 13V3.5A1 1 0 0 1 4 2.5Z\"></path>
+            </svg>
+          </button>
+          <button id=\"rawBookmarkGo\" class=\"raw-bookmark-btn\" type=\"button\" aria-label=\"저장한 북마크 위치로 이동\" title=\"저장한 북마크 위치로 이동\">
+            <span class=\"btn-icon\" aria-hidden=\"true\">↪</span>
+            <span>북마크로 이동</span>
+          </button>
+        </div>
         <div id=\"rawPagination\" class=\"raw-pagination\">
           <button id=\"rawPagePrev\" type=\"button\" aria-label=\"이전 페이지\">이전</button>
           <span id=\"rawTotalCount\" class=\"raw-total-count\">리뷰 0/0</span>
@@ -5978,6 +6060,10 @@ function renderHtml(
       const filterSummary = document.getElementById('filterSummary');
       const filterPanelCount = document.getElementById('filterPanelCount');
       const activeFilterChips = document.getElementById('activeFilterChips');
+      const rawBookmarkControls = document.getElementById('rawBookmarkControls');
+      const rawBookmarkSummary = document.getElementById('rawBookmarkSummary');
+      const rawBookmarkSet = document.getElementById('rawBookmarkSet');
+      const rawBookmarkGo = document.getElementById('rawBookmarkGo');
       const rawPagination = document.getElementById('rawPagination');
       const rawPagePrev = document.getElementById('rawPagePrev');
       const rawTotalCount = document.getElementById('rawTotalCount');
@@ -6113,6 +6199,7 @@ function renderHtml(
       let excludeFilterMode = 'all';
       let backlogPriorityFilterMode = 'all';
       let backlogEffortFilterMode = 'all';
+      let rawBookmark = null;
       let noteDirty = false;
       let noteSaving = false;
       const selectedTagFilters = new Set();
@@ -6134,6 +6221,7 @@ function renderHtml(
       const PRIORITY_QUERY_KEY = 'priority';
       const EFFORT_QUERY_KEY = 'effort';
       const RAW_PAGE_QUERY_KEY = 'page';
+      const RAW_BOOKMARK_STORAGE_PREFIX = 'pabal-review-bookmark-v1';
       const TAB_REVIEW_VALUES = new Set(['review']);
       const TAB_BACKLOG_VALUES = new Set(['backlog']);
       const TAG_LABELS = {
@@ -6179,6 +6267,7 @@ function renderHtml(
       const ownerAppId = resolveOwnerAppId();
       const previewStateApiUrl = ownerAppId ? '/api/preview-state/' + encodeURIComponent(ownerAppId) : '';
       const backlogApiUrl = ownerAppId ? '/api/backlog/' + encodeURIComponent(ownerAppId) : '';
+      const rawBookmarkStorageKey = RAW_BOOKMARK_STORAGE_PREFIX + ':' + encodeURIComponent(ownerAppId || 'global');
       const reviewPageTitle = pageTitleElement instanceof HTMLElement
         ? String(pageTitleElement.getAttribute('data-title-review') || '').trim()
         : '';
@@ -6376,6 +6465,162 @@ function renderHtml(
           return 1;
         }
         return parsed;
+      }
+
+      function getCardAppTitle(card) {
+        return (card && card.getAttribute && card.getAttribute('data-app-title') || '').trim();
+      }
+
+      function normalizeRawBookmark(input) {
+        if (!input || typeof input !== 'object') {
+          return null;
+        }
+
+        const page = parseQueryPositiveInt(input.page);
+        const reviewId = String(input.reviewId || '').trim();
+        const appTitle = String(input.appTitle || '').trim();
+        const updatedAt = String(input.updatedAt || '').trim();
+
+        if (!reviewId && page < 1) {
+          return null;
+        }
+
+        return {
+          reviewId,
+          appTitle,
+          page,
+          updatedAt: updatedAt || new Date().toISOString()
+        };
+      }
+
+      function loadRawBookmark() {
+        if (!rawBookmarkStorageKey || !window.localStorage) {
+          return null;
+        }
+        try {
+          const raw = window.localStorage.getItem(rawBookmarkStorageKey);
+          if (!raw) {
+            return null;
+          }
+          return normalizeRawBookmark(JSON.parse(raw));
+        } catch {
+          return null;
+        }
+      }
+
+      function saveRawBookmark() {
+        if (!rawBookmarkStorageKey || !window.localStorage) {
+          return;
+        }
+        try {
+          if (!rawBookmark) {
+            window.localStorage.removeItem(rawBookmarkStorageKey);
+            return;
+          }
+          window.localStorage.setItem(rawBookmarkStorageKey, JSON.stringify(rawBookmark));
+        } catch {}
+      }
+
+      function resolveRawBookmarkPage(bookmark) {
+        const normalized = normalizeRawBookmark(bookmark);
+        if (!normalized) {
+          return 1;
+        }
+
+        if (normalized.reviewId) {
+          const targetIndex = rawCards.findIndex((card) => {
+            if (getCardReviewId(card) !== normalized.reviewId) {
+              return false;
+            }
+            if (!normalized.appTitle) {
+              return true;
+            }
+            return getCardAppTitle(card) === normalized.appTitle;
+          });
+          if (targetIndex >= 0) {
+            const byReviewId = Math.floor(targetIndex / RAW_PAGE_SIZE) + 1;
+            return Math.max(1, Math.min(byReviewId, rawTotalPages));
+          }
+        }
+
+        return Math.max(1, Math.min(parseQueryPositiveInt(normalized.page), rawTotalPages));
+      }
+
+      function isRawBookmarkVisible() {
+        return viewRaw.classList.contains('active') && countActiveRawFilters() === 0;
+      }
+
+      function visibleRawCards() {
+        return rawCards.filter(
+          (card) =>
+            !card.classList.contains('hidden-by-search') &&
+            !card.classList.contains('hidden-by-state') &&
+            !card.classList.contains('hidden-by-page')
+        );
+      }
+
+      function syncRawBookmarkUi() {
+        if (!(rawBookmarkControls instanceof HTMLElement)) {
+          return;
+        }
+
+        const visible = isRawBookmarkVisible();
+        rawBookmarkControls.classList.toggle('hidden-control', !visible);
+        if (!visible) {
+          return;
+        }
+
+        const hasBookmark = Boolean(normalizeRawBookmark(rawBookmark));
+        const bookmarkPage = hasBookmark ? resolveRawBookmarkPage(rawBookmark) : 0;
+        const isCurrentBookmarkPage = hasBookmark && bookmarkPage === rawCurrentPage;
+        if (rawBookmarkSummary instanceof HTMLElement) {
+          rawBookmarkSummary.textContent = hasBookmark ? '북마크 ' + bookmarkPage : '북마크 없음';
+        }
+        if (rawBookmarkSet instanceof HTMLButtonElement) {
+          rawBookmarkSet.disabled = rawFilteredCount < 1;
+          rawBookmarkSet.classList.toggle('is-current-page', isCurrentBookmarkPage);
+          rawBookmarkSet.setAttribute(
+            'aria-label',
+            isCurrentBookmarkPage ? '현재 페이지가 북마크됨' : '현재 페이지를 북마크로 저장'
+          );
+          rawBookmarkSet.setAttribute(
+            'title',
+            isCurrentBookmarkPage ? '현재 페이지가 북마크됨' : '현재 페이지를 북마크로 저장'
+          );
+        }
+        if (rawBookmarkGo instanceof HTMLButtonElement) {
+          rawBookmarkGo.disabled = !hasBookmark;
+        }
+      }
+
+      function setRawBookmarkToCurrentPage() {
+        if (!isRawBookmarkVisible()) {
+          return;
+        }
+        const visibleCards = visibleRawCards();
+        const anchorCard = visibleCards[0] || null;
+        const reviewId = getCardReviewId(anchorCard);
+        rawBookmark = normalizeRawBookmark({
+          reviewId,
+          appTitle: getCardAppTitle(anchorCard),
+          page: rawCurrentPage,
+          updatedAt: new Date().toISOString()
+        });
+        saveRawBookmark();
+        syncRawBookmarkUi();
+      }
+
+      function moveToRawBookmarkPage() {
+        const normalized = normalizeRawBookmark(rawBookmark);
+        if (!normalized || !isRawBookmarkVisible()) {
+          return;
+        }
+        const targetPage = resolveRawBookmarkPage(normalized);
+        if (targetPage === rawCurrentPage) {
+          window.requestAnimationFrame(() => scrollWindowToEdge('top'));
+          return;
+        }
+        setRawPage(targetPage, 'top');
       }
 
       function resolveUiStateFromQuery() {
@@ -8376,6 +8621,8 @@ function renderHtml(
           rawPageNext.classList.toggle('hidden-control', !isRawTab);
           rawPageNext.disabled = !isRawTab || rawCurrentPage >= rawTotalPages;
         }
+
+        syncRawBookmarkUi();
       }
 
       function syncRawSectionVisibility() {
@@ -9947,6 +10194,12 @@ function renderHtml(
           setRawPage(rawCurrentPage + 1, 'top');
         });
       }
+      if (rawBookmarkSet instanceof HTMLButtonElement) {
+        rawBookmarkSet.addEventListener('click', setRawBookmarkToCurrentPage);
+      }
+      if (rawBookmarkGo instanceof HTMLButtonElement) {
+        rawBookmarkGo.addEventListener('click', moveToRawBookmarkPage);
+      }
       document.addEventListener('click', (event) => {
         if (getSearchQuery().length > 0) {
           return;
@@ -9962,6 +10215,7 @@ function renderHtml(
         }
         setSearchExpanded(false);
       });
+      rawBookmark = loadRawBookmark();
       loadBacklogState();
       applyInitialQueryState();
       loadPreviewState();

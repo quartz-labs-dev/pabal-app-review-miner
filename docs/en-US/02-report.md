@@ -83,6 +83,7 @@ Render actionable markdown report to a shared-viewer bundle JSON.
 - In `Reviews`, app sections are ordered by latest review registration date first, then higher app rating.
 - In `Reviews`, review cards are ordered by latest registration date first, with higher rating as the secondary sort.
 - In `Reviews`, cards are paginated (50 cards per page) with `Prev/Next` controls in the top status row; `Prev` scrolls to page bottom, and `Next` scrolls to the top of the review-card section.
+- In `Reviews`, bookmark controls are shown on the left side of pagination only when no filters are active (`search/tag/state/100+ chars` all clear). The bookmark update control is an icon button: it appears filled on the bookmarked page and outlined on other pages. The summary label shows only the bookmarked page number (`Bookmark {page}`). `Go to bookmark` jumps back to the saved bookmark page.
 - In `Reviews`, you can toggle `100+ chars` to focus on longer reviews.
 - `Reset filters` clears search/state/tag/length filters in one click.
 - In the filter panel, `Reset all to inactive` sets every review to `Inactive` in bulk and clears all hashtags.
