@@ -3725,6 +3725,12 @@ function renderHtml(
         margin-left: auto;
         min-width: 0;
       }
+      .top-controls button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+      }
       .top-filters-left {
         display: inline-flex;
         align-items: center;
@@ -6127,6 +6133,7 @@ function renderHtml(
       const SHOW_ORIGINAL_QUERY_KEY = 'orig';
       const PRIORITY_QUERY_KEY = 'priority';
       const EFFORT_QUERY_KEY = 'effort';
+      const RAW_PAGE_QUERY_KEY = 'page';
       const TAB_REVIEW_VALUES = new Set(['review']);
       const TAB_BACKLOG_VALUES = new Set(['backlog']);
       const TAG_LABELS = {
@@ -6363,9 +6370,18 @@ function renderHtml(
         return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
       }
 
+      function parseQueryPositiveInt(input) {
+        const parsed = Number.parseInt(String(input || '').trim(), 10);
+        if (!Number.isFinite(parsed) || parsed < 1) {
+          return 1;
+        }
+        return parsed;
+      }
+
       function resolveUiStateFromQuery() {
         const initial = {
           rawTab: true,
+          rawPage: 1,
           search: '',
           tags: [],
           excludeMode: 'all',
@@ -6383,6 +6399,7 @@ function renderHtml(
           } else if (TAB_REVIEW_VALUES.has(tabValue)) {
             initial.rawTab = true;
           }
+          initial.rawPage = parseQueryPositiveInt(params.get(RAW_PAGE_QUERY_KEY));
 
           const search = String(params.get(SEARCH_QUERY_KEY) || '').trim();
           initial.search = search;
@@ -6425,6 +6442,7 @@ function renderHtml(
             ? backlogPriorityFilterMode
             : 'all';
           const effortMode = normalizeBacklogLevelFilter(backlogEffortFilterMode);
+          const rawPage = Math.max(1, Number(rawCurrentPage) || 1);
 
           nextParams.set(TAB_QUERY_KEY, activeRawTab ? 'review' : 'backlog');
 
@@ -6468,6 +6486,12 @@ function renderHtml(
             nextParams.set(EFFORT_QUERY_KEY, effortMode);
           } else {
             nextParams.delete(EFFORT_QUERY_KEY);
+          }
+
+          if (activeRawTab && rawPage > 1) {
+            nextParams.set(RAW_PAGE_QUERY_KEY, String(rawPage));
+          } else {
+            nextParams.delete(RAW_PAGE_QUERY_KEY);
           }
 
           const currentSearch = url.searchParams.toString();
@@ -8431,6 +8455,7 @@ function renderHtml(
         rawCurrentPage = clamped;
         applyRawPagination();
         syncFilterSummary();
+        syncUiQuery();
         if (scrollEdge === 'top' || scrollEdge === 'bottom') {
           window.requestAnimationFrame(() => scrollWindowToEdge(scrollEdge));
         }
@@ -9349,6 +9374,7 @@ function renderHtml(
         syncActiveFilterChips();
         setSearchExpanded(queryState.search.length > 0);
         syncAllCardStateVisuals();
+        rawCurrentPage = queryState.rawPage;
         setTab(queryState.rawTab, { syncQuery: true });
       }
 

@@ -56,6 +56,7 @@ npm run report:translate -- --my-app golden-horizon
   - `orig` (`원어 보기` 활성 시 `1`)
   - `priority` (`백로그` 탭 `all|must|should|could`)
   - `effort` (`백로그` 탭 `all|high|medium|low`)
+  - `page` (`리뷰` 페이지네이션 번호, 1부터 시작하며 1페이지일 때는 생략)
 - 헤더 아래 상태줄은 두 탭 모두 표시됩니다.
   - 좌측: 현재 적용 필터 칩(없으면 `필터 없음`)
   - 우측: 전체 대비 선택/필터 결과 수(`리뷰 x/y` 또는 `백로그 x/y`)

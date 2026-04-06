@@ -56,6 +56,7 @@ Render actionable markdown report to a shared-viewer bundle JSON.
   - `orig` (`1` when `Original` toggle is enabled)
   - `priority` (`all|must|should|could` in `Backlog`)
   - `effort` (`all|high|medium|low` in `Backlog`)
+  - `page` (`Reviews` pagination page number, 1-based; omitted on page 1)
 - The status row under the header is shown in both tabs:
   - left: active filter chips (`No filter` when empty)
   - right: selected/filtered count over total (`Reviews x/y` or `Backlog x/y`)
