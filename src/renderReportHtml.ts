@@ -3565,7 +3565,7 @@ function renderHtml(
                 <th>백로그 항목</th>
                 <th>Status</th>
                 <th>Effort</th>
-                <th>리뷰 수</th>
+                <th>리뷰 수 (활성/전체)</th>
                 <th>작업</th>
               </tr>
             </thead>
@@ -5132,22 +5132,70 @@ function renderHtml(
         border: 1px solid #bfdbfe;
         border-radius: 12px;
         background: #eff6ff;
-        padding: 8px 36px 8px 10px;
-        position: relative;
+        padding: 8px 10px;
+        display: grid;
+        gap: 6px;
       }
-      .backlog-selected-item button {
-        position: absolute;
-        top: 6px;
-        right: 8px;
-        min-height: 22px;
-        width: 22px;
-        border: 1px solid #93c5fd;
+      .backlog-selected-item.is-inactive {
+        border-color: #cbd5e1;
+        background: #f8fafc;
+      }
+      .backlog-selected-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .backlog-selected-state-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 20px;
+        padding: 0 8px;
         border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .backlog-selected-state-badge.is-active {
+        border: 1px solid #7dd3fc;
+        color: #075985;
+        background: #e0f2fe;
+      }
+      .backlog-selected-state-badge.is-inactive {
+        border: 1px solid #cbd5e1;
+        color: #475569;
+        background: #f1f5f9;
+      }
+      .backlog-selected-app {
+        flex: 1 1 auto;
+        min-width: 0;
+        color: #334155;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .backlog-selected-actions {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .backlog-selected-state-btn,
+      .backlog-selected-remove-btn {
+        min-height: 22px;
+        border: 1px solid #93c5fd;
+        border-radius: 8px;
         background: #ffffff;
         color: #1e3a8a;
-        line-height: 1;
-        font-size: 12px;
+        font-size: 11px;
+        padding: 0 7px;
+      }
+      .backlog-selected-remove-btn {
+        width: 22px;
         padding: 0;
+        border-radius: 999px;
+        line-height: 1;
       }
       .backlog-selected-item .review-body {
         color: #334155;
@@ -5769,7 +5817,7 @@ function renderHtml(
         <div class=\"backlog-editor-head\">
           <div>
             <h2 id=\"backlogEditorTitleLabel\">백로그 편집</h2>
-            <div id=\"backlogEditorSub\" class=\"backlog-editor-sub\">활성 리뷰만 추가/제거할 수 있습니다.</div>
+            <div id=\"backlogEditorSub\" class=\"backlog-editor-sub\">활성 리뷰만 추가/제거할 수 있습니다. (표시: 활성/전체)</div>
           </div>
           <div class=\"backlog-editor-head-actions\">
             <button id=\"backlogEditorDelete\" type=\"button\">삭제</button>
@@ -5985,7 +6033,6 @@ function renderHtml(
       const contextRaw = document.getElementById('contextRaw');
       const contextBacklog = document.getElementById('contextBacklog');
       const rawCards = Array.from(viewRaw.querySelectorAll('.quote-card[data-review-id]'));
-      const quickAddSelects = Array.from(viewRaw.querySelectorAll('.backlog-quick-select'));
       const rawAppSections = Array.from(viewRaw.querySelectorAll('.app[data-app-key]'));
       const rawAppSectionCards = rawAppSections.map((section) => ({
         section,
@@ -6036,12 +6083,18 @@ function renderHtml(
       let backlogEditorMode = 'create';
       let backlogEditorItemId = '';
       let backlogEditorSelection = new Set();
+      let backlogEditorEvidenceScopedReviewIds = [];
+      let backlogEditorEvidenceTotalCount = 0;
+      let backlogEditorInactiveEvidenceCount = 0;
       let backlogEditorVisibleScopedReviewIds = [];
       let backlogEditorSaving = false;
       let backlogReviewPickerPage = 1;
       let confirmDialogResolver = null;
       const BACKLOG_REVIEW_PICKER_PAGE_SIZE = 20;
       let backlogSaveTimer = 0;
+      let backlogSyncTimer = 0;
+      let backlogSyncInFlight = false;
+      let backlogLastSyncedAt = 0;
       const searchableTextCache = new WeakMap();
       let saveStateTimer = null;
       let searchApplyRaf = 0;
@@ -6064,6 +6117,8 @@ function renderHtml(
       const REVIEW_TAGS = ['heart', 'satisfaction', 'dissatisfaction', 'requests'];
       const TAG_FILTER_MODES = new Set(['all', 'heart', 'satisfaction', 'dissatisfaction', 'requests']);
       const RAW_PAGE_SIZE = 50;
+      const BACKLOG_SYNC_INTERVAL_MS = 10 * 1000;
+      const BACKLOG_SYNC_MIN_GAP_MS = 1200;
       const TAB_QUERY_KEY = 'tab';
       const SEARCH_QUERY_KEY = 'q';
       const TAGS_QUERY_KEY = 'tags';
@@ -6856,17 +6911,16 @@ function renderHtml(
         });
       }
 
-      function activateScopedReviewId(scopedReviewId) {
+      function setScopedReviewActiveState(scopedReviewId, active) {
         const normalizedScopedReviewId = canonicalizeScopedReviewIdForCatalog(scopedReviewId, 'global');
         if (!normalizedScopedReviewId) {
           return false;
         }
-
         const cards = reviewCardsByScopedId.get(normalizedScopedReviewId);
         if (!Array.isArray(cards) || cards.length === 0) {
           return false;
         }
-
+        const nextExcluded = !Boolean(active);
         let changed = false;
         cards.forEach((card) => {
           const reviewId = getCardReviewId(card);
@@ -6874,24 +6928,13 @@ function renderHtml(
             return;
           }
           const state = readCardState(reviewId, card);
-          if (!state.excluded) {
+          if (Boolean(state.excluded) === nextExcluded) {
             return;
           }
-          state.excluded = false;
+          state.excluded = nextExcluded;
           writeCardState(reviewId, state, card);
           syncCardStateVisual(card);
           changed = true;
-        });
-        return changed;
-      }
-
-      function activateScopedReviewIds(scopedReviewIds) {
-        const source = Array.isArray(scopedReviewIds) ? scopedReviewIds : [];
-        let changed = false;
-        source.forEach((scopedReviewId) => {
-          if (activateScopedReviewId(scopedReviewId)) {
-            changed = true;
-          }
         });
         if (changed) {
           schedulePreviewStateSave();
@@ -7179,8 +7222,15 @@ function renderHtml(
         }
       }
 
+      function queryQuickAddSelectElements() {
+        if (!(viewRaw instanceof HTMLElement)) {
+          return [];
+        }
+        return Array.from(viewRaw.querySelectorAll('.backlog-quick-select'));
+      }
+
       function syncBacklogQuickSelectOptions() {
-        quickAddSelects.forEach((select) => {
+        queryQuickAddSelectElements().forEach((select) => {
           if (!(select instanceof HTMLSelectElement)) {
             return;
           }
@@ -7195,6 +7245,7 @@ function renderHtml(
         }
 
         normalizeBacklogStateItems();
+        const activeIds = activeScopedReviewIds();
         syncBacklogSummary();
         syncBacklogDirtyState();
         syncBacklogQuickSelectOptions();
@@ -7213,6 +7264,12 @@ function renderHtml(
             const evidenceRows = item.evidenceReviewIds
               .map((scopedReviewId) => reviewCatalogByScopedId.get(scopedReviewId))
               .filter(Boolean);
+            const totalEvidenceCount = item.evidenceReviewIds.length;
+            const activeEvidenceCount = item.evidenceReviewIds.reduce(
+              (count, scopedReviewId) => (activeIds.has(scopedReviewId) ? count + 1 : count),
+              0
+            );
+            const evidenceCountLabel = String(activeEvidenceCount) + '/' + String(totalEvidenceCount);
             const appLabel = (item.appNames || []).join(', ') || '-';
             const evidenceListHtml =
               evidenceRows.length === 0
@@ -7364,7 +7421,7 @@ function renderHtml(
               '<td>' +
               '<div class=\"evidence-count-cell\">' +
               '<span class=\"evidence-count-value\">' +
-              String(item.evidenceReviewIds.length) +
+              evidenceCountLabel +
               '</span>' +
               '<button class=\"evidence-toggle\" type=\"button\" data-evidence-id=\"' +
               escapeInlineHtml(evidenceId) +
@@ -7502,6 +7559,45 @@ function renderHtml(
         syncBacklogEditorControlState();
       }
 
+      function setBacklogEditorEvidenceScopedReviewIds(scopedReviewIds) {
+        const normalized = Array.from(
+          new Set(
+            (Array.isArray(scopedReviewIds) ? scopedReviewIds : [])
+              .map((value) => String(value || '').trim())
+              .filter(Boolean)
+          )
+        );
+        backlogEditorEvidenceScopedReviewIds = normalized;
+        const activeIds = activeScopedReviewIds();
+        backlogEditorSelection = new Set(
+          normalized.filter((scopedReviewId) => activeIds.has(scopedReviewId))
+        );
+        backlogEditorEvidenceTotalCount = normalized.length;
+        backlogEditorInactiveEvidenceCount = Math.max(0, normalized.length - backlogEditorSelection.size);
+      }
+
+      function addBacklogEditorEvidenceScopedReviewIds(scopedReviewIds) {
+        const next = new Set(backlogEditorEvidenceScopedReviewIds);
+        (Array.isArray(scopedReviewIds) ? scopedReviewIds : []).forEach((value) => {
+          const scopedReviewId = String(value || '').trim();
+          if (!scopedReviewId) {
+            return;
+          }
+          next.add(scopedReviewId);
+        });
+        setBacklogEditorEvidenceScopedReviewIds(Array.from(next));
+      }
+
+      function removeBacklogEditorEvidenceScopedReviewId(scopedReviewId) {
+        const normalizedScopedReviewId = String(scopedReviewId || '').trim();
+        if (!normalizedScopedReviewId) {
+          return;
+        }
+        setBacklogEditorEvidenceScopedReviewIds(
+          backlogEditorEvidenceScopedReviewIds.filter((value) => value !== normalizedScopedReviewId)
+        );
+      }
+
       function openBacklogReviewPickerModal() {
         if (!(backlogReviewPickerRoot instanceof HTMLElement)) {
           return;
@@ -7570,11 +7666,26 @@ function renderHtml(
 
       function syncBacklogEditorSelectionUi() {
         const selectedCount = backlogEditorSelection.size;
+        const totalCount = backlogEditorEvidenceTotalCount;
+        const hasTotal = backlogEditorMode === 'edit' && totalCount > 0;
+        const summaryText = hasTotal
+          ? '선택 ' + selectedCount + '개 · 저장 전체 ' + totalCount + '개'
+          : '선택 ' + selectedCount + '개';
         if (backlogEditorSelectionSummary instanceof HTMLElement) {
-          backlogEditorSelectionSummary.textContent = '선택 ' + selectedCount + '개';
+          backlogEditorSelectionSummary.textContent = summaryText;
         }
         if (backlogReviewPickerSelectedCount instanceof HTMLElement) {
-          backlogReviewPickerSelectedCount.textContent = '선택 ' + selectedCount + '개';
+          backlogReviewPickerSelectedCount.textContent = summaryText;
+        }
+        if (backlogEditorSub instanceof HTMLElement && backlogEditorMode === 'edit') {
+          backlogEditorSub.textContent =
+            '활성 리뷰만 선택됩니다. 현재 저장 ' +
+            String(backlogEditorEvidenceTotalCount) +
+            '개 중 활성 ' +
+            String(backlogEditorEvidenceTotalCount - backlogEditorInactiveEvidenceCount) +
+            '개, 비활성 ' +
+            String(backlogEditorInactiveEvidenceCount) +
+            '개입니다.';
         }
       }
 
@@ -7582,23 +7693,45 @@ function renderHtml(
         if (!(backlogEditorSelectedList instanceof HTMLElement)) {
           return;
         }
-        const selectedIds = Array.from(backlogEditorSelection);
-        if (selectedIds.length === 0) {
-          backlogEditorSelectedList.innerHTML = '<span class=\"backlog-selected-empty\">선택된 리뷰가 없습니다.</span>';
+        const linkedEvidenceIds = backlogEditorEvidenceScopedReviewIds.slice();
+        if (linkedEvidenceIds.length === 0) {
+          backlogEditorSelectedList.innerHTML = '<span class=\"backlog-selected-empty\">연결된 리뷰가 없습니다.</span>';
           return;
         }
 
-        const catalogRows = activeReviewCandidates();
-        const catalogById = new Map(catalogRows.map((review) => [review.scopedReviewId, review]));
-        backlogEditorSelectedList.innerHTML = selectedIds
+        const activeIds = activeScopedReviewIds();
+        backlogEditorSelectedList.innerHTML = linkedEvidenceIds
           .map((scopedReviewId) => {
-            const review = catalogById.get(scopedReviewId);
-            const reviewBody = review ? (review.quoteKr || review.quoteOrg || '-') : '-';
+            const review = reviewCatalogByScopedId.get(scopedReviewId);
+            const reviewBody = review ? (review.quoteKr || review.quoteOrg || '-') : '(리뷰 본문 없음)';
+            const isActive = activeIds.has(scopedReviewId);
+            const stateClass = isActive ? ' is-active' : ' is-inactive';
+            const stateLabel = isActive ? '활성' : '비활성';
+            const toggleLabel = isActive ? '비활성으로' : '활성으로';
+            const nextActive = isActive ? '0' : '1';
+            const appLabel = review ? (review.appDisplayTitle || '-') : '-';
             return (
-              '<div class=\"backlog-selected-item\">' +
-              '<button type=\"button\" data-backlog-selected-remove=\"' +
+              '<div class=\"backlog-selected-item' + stateClass + '\">' +
+              '<div class=\"backlog-selected-head\">' +
+              '<span class=\"backlog-selected-state-badge' + stateClass + '\">' +
+              escapeInlineHtml(stateLabel) +
+              '</span>' +
+              '<span class=\"backlog-selected-app\">' +
+              escapeInlineHtml(appLabel) +
+              '</span>' +
+              '<div class=\"backlog-selected-actions\">' +
+              '<button class=\"backlog-selected-state-btn\" type=\"button\" data-backlog-selected-set-active=\"' +
+              escapeInlineHtml(nextActive) +
+              '\" data-backlog-selected-id=\"' +
               escapeInlineHtml(scopedReviewId) +
-              '\" aria-label=\"선택 해제\">×</button>' +
+              '\">' +
+              escapeInlineHtml(toggleLabel) +
+              '</button>' +
+              '<button class=\"backlog-selected-remove-btn\" type=\"button\" data-backlog-selected-remove=\"' +
+              escapeInlineHtml(scopedReviewId) +
+              '\" aria-label=\"연결 해제\">×</button>' +
+              '</div>' +
+              '</div>' +
               '<span class=\"review-body\">' +
               escapeInlineHtml(reviewBody) +
               '</span>' +
@@ -7676,12 +7809,14 @@ function renderHtml(
         backlogEditorMode = normalizedMode;
         backlogEditorItemId = normalizedMode === 'edit' ? String(backlogId || '').trim() : '';
         backlogEditorSelection = new Set();
+        backlogEditorEvidenceScopedReviewIds = [];
+        backlogEditorEvidenceTotalCount = 0;
+        backlogEditorInactiveEvidenceCount = 0;
         backlogEditorVisibleScopedReviewIds = [];
         backlogReviewPickerPage = 1;
         setBacklogEditorSaving(false);
 
         const targetItem = backlogStateItems.find((item) => item.id === backlogEditorItemId);
-        const activeIds = activeScopedReviewIds();
 
         const draft = targetItem
           ? normalizeBacklogItem(targetItem)
@@ -7696,11 +7831,7 @@ function renderHtml(
             appNames: []
             });
 
-        draft.evidenceReviewIds.forEach((scopedReviewId) => {
-          if (activeIds.has(scopedReviewId)) {
-            backlogEditorSelection.add(scopedReviewId);
-          }
-        });
+        setBacklogEditorEvidenceScopedReviewIds(draft.evidenceReviewIds);
 
         if (backlogEditorTitle instanceof HTMLInputElement) {
           backlogEditorTitle.value = draft.title;
@@ -7724,7 +7855,13 @@ function renderHtml(
         if (backlogEditorSub instanceof HTMLElement) {
           backlogEditorSub.textContent =
             normalizedMode === 'edit'
-              ? '선택된 리뷰를 확인하고, "활성 리뷰 선택" 버튼에서 항목을 추가/제거하세요.'
+              ? '활성 리뷰만 선택됩니다. 현재 저장 ' +
+                String(backlogEditorEvidenceTotalCount) +
+                '개 중 활성 ' +
+                String(backlogEditorEvidenceTotalCount - backlogEditorInactiveEvidenceCount) +
+                '개, 비활성 ' +
+                String(backlogEditorInactiveEvidenceCount) +
+                '개입니다.'
               : '활성 리뷰를 선택해 새 백로그 항목을 만드세요.';
         }
 
@@ -7823,7 +7960,7 @@ function renderHtml(
           return;
         }
 
-        const evidenceReviewIds = Array.from(backlogEditorSelection);
+        const evidenceReviewIds = backlogEditorEvidenceScopedReviewIds.slice();
         const appNames = new Set();
         evidenceReviewIds.forEach((scopedReviewId) => {
           const catalog = reviewCatalogByScopedId.get(scopedReviewId);
@@ -7865,19 +8002,6 @@ function renderHtml(
         }
         setBacklogEditorStatus('저장 완료');
         closeBacklogEditor();
-      }
-
-      function activateBacklogEvidenceReviews(items) {
-        const scopedReviewIds = [];
-        (Array.isArray(items) ? items : []).forEach((item) => {
-          if (!item || typeof item !== 'object' || !Array.isArray(item.evidenceReviewIds)) {
-            return;
-          }
-          item.evidenceReviewIds.forEach((scopedReviewId) => {
-            scopedReviewIds.push(scopedReviewId);
-          });
-        });
-        return activateScopedReviewIds(scopedReviewIds);
       }
 
       function addReviewToBacklog(backlogId, card) {
@@ -7935,12 +8059,90 @@ function renderHtml(
         scheduleBacklogStateSave();
       }
 
-      async function saveBacklogState() {
-        const activatedByBacklog = activateBacklogEvidenceReviews(backlogStateItems);
-        if (activatedByBacklog) {
-          applySearch({ syncQuery: false });
+      async function refreshBacklogStateFromApi(options) {
+        const config = options && typeof options === 'object' ? options : {};
+        const force = Boolean(config.force);
+        const applySearchOnUpdate = config.applySearchOnUpdate !== false;
+        const renderWhenUnchanged = Boolean(config.renderWhenUnchanged);
+        const now = Date.now();
+
+        if (!backlogApiUrl) {
+          return false;
+        }
+        if (!force && backlogEditorSaving) {
+          return false;
+        }
+        if (!force && backlogDirty) {
+          return false;
+        }
+        if (!force && backlogSyncInFlight) {
+          return false;
+        }
+        if (!force && now - backlogLastSyncedAt < BACKLOG_SYNC_MIN_GAP_MS) {
+          return false;
         }
 
+        backlogSyncInFlight = true;
+        try {
+          const response = await fetch(backlogApiUrl, { method: 'GET' });
+          if (!response.ok) {
+            return false;
+          }
+          const payload = await response.json();
+          if (!payload || typeof payload !== 'object' || !Array.isArray(payload.items)) {
+            return false;
+          }
+
+          const nextItems = cloneBacklogItems(payload.items);
+          const nextSignature = createBacklogSignature(nextItems);
+          const currentSignature = createBacklogSignature(backlogStateItems);
+          backlogLastSyncedAt = now;
+
+          if (nextSignature === currentSignature) {
+            if (renderWhenUnchanged) {
+              renderBacklogTable();
+            }
+            return false;
+          }
+          if (!force && backlogDirty) {
+            return false;
+          }
+
+          backlogStateItems = nextItems;
+          backlogPersistedSignature = nextSignature;
+          renderBacklogTable();
+          if (applySearchOnUpdate) {
+            applySearch({ syncQuery: false });
+          }
+          return true;
+        } catch {
+          return false;
+        } finally {
+          backlogSyncInFlight = false;
+          syncBacklogDirtyState();
+        }
+      }
+
+      function startBacklogAutoSync() {
+        if (backlogSyncTimer) {
+          window.clearInterval(backlogSyncTimer);
+          backlogSyncTimer = 0;
+        }
+        if (!backlogApiUrl) {
+          return;
+        }
+        backlogSyncTimer = window.setInterval(() => {
+          if (document.hidden) {
+            return;
+          }
+          if (backlogEditorSaving || backlogDirty) {
+            return;
+          }
+          void refreshBacklogStateFromApi({ applySearchOnUpdate: true });
+        }, BACKLOG_SYNC_INTERVAL_MS);
+      }
+
+      async function saveBacklogState() {
         if (!backlogApiUrl) {
           return false;
         }
@@ -7965,6 +8167,7 @@ function renderHtml(
             : backlogStateItems;
           backlogStateItems = cloneBacklogItems(nextItems);
           backlogPersistedSignature = createBacklogSignature(backlogStateItems);
+          backlogLastSyncedAt = Date.now();
           renderBacklogTable();
           return true;
         } catch {
@@ -7994,28 +8197,17 @@ function renderHtml(
       async function loadBacklogState() {
         backlogStateItems = cloneBacklogItems(backlogStateItems);
         backlogPersistedSignature = createBacklogSignature(backlogStateItems);
+        renderBacklogTable();
+        startBacklogAutoSync();
 
         if (!backlogApiUrl) {
-          renderBacklogTable();
           return;
         }
 
-        try {
-          const response = await fetch(backlogApiUrl, { method: 'GET' });
-          if (!response.ok) {
-            renderBacklogTable();
-            return;
-          }
-          const payload = await response.json();
-          if (payload && typeof payload === 'object' && Array.isArray(payload.items)) {
-            backlogStateItems = cloneBacklogItems(payload.items);
-            backlogPersistedSignature = createBacklogSignature(backlogStateItems);
-          }
-        } catch {
-          // Keep local seed data when API loading fails.
-        }
-
-        renderBacklogTable();
+        await refreshBacklogStateFromApi({
+          force: true,
+          applySearchOnUpdate: false
+        });
       }
 
       function syncActiveFilterChips() {
@@ -9441,15 +9633,13 @@ function renderHtml(
       }
       if (backlogEditorSelectVisible instanceof HTMLButtonElement) {
         backlogEditorSelectVisible.addEventListener('click', () => {
-          backlogEditorVisibleScopedReviewIds.forEach((scopedReviewId) => {
-            backlogEditorSelection.add(scopedReviewId);
-          });
+          addBacklogEditorEvidenceScopedReviewIds(backlogEditorVisibleScopedReviewIds);
           renderBacklogEditorReviewList();
         });
       }
       if (backlogEditorClearSelection instanceof HTMLButtonElement) {
         backlogEditorClearSelection.addEventListener('click', () => {
-          backlogEditorSelection.clear();
+          setBacklogEditorEvidenceScopedReviewIds([]);
           renderBacklogEditorReviewList();
         });
       }
@@ -9464,9 +9654,9 @@ function renderHtml(
             return;
           }
           if (target.checked) {
-            backlogEditorSelection.add(scopedReviewId);
+            addBacklogEditorEvidenceScopedReviewIds([scopedReviewId]);
           } else {
-            backlogEditorSelection.delete(scopedReviewId);
+            removeBacklogEditorEvidenceScopedReviewId(scopedReviewId);
           }
           renderBacklogEditorReviewList();
         });
@@ -9477,6 +9667,23 @@ function renderHtml(
           if (!(target instanceof HTMLElement)) {
             return;
           }
+          const toggleButton = target.closest('[data-backlog-selected-set-active][data-backlog-selected-id]');
+          if (toggleButton instanceof HTMLElement) {
+            const scopedReviewId = String(toggleButton.getAttribute('data-backlog-selected-id') || '').trim();
+            const nextActive = String(toggleButton.getAttribute('data-backlog-selected-set-active') || '').trim();
+            if (!scopedReviewId || (nextActive !== '0' && nextActive !== '1')) {
+              return;
+            }
+            const changed = setScopedReviewActiveState(scopedReviewId, nextActive === '1');
+            if (!changed) {
+              return;
+            }
+            setBacklogEditorEvidenceScopedReviewIds(backlogEditorEvidenceScopedReviewIds);
+            renderBacklogTable();
+            applySearch({ syncQuery: false });
+            renderBacklogEditorReviewList();
+            return;
+          }
           const removeButton = target.closest('[data-backlog-selected-remove]');
           if (!(removeButton instanceof HTMLElement)) {
             return;
@@ -9485,7 +9692,7 @@ function renderHtml(
           if (!scopedReviewId) {
             return;
           }
-          backlogEditorSelection.delete(scopedReviewId);
+          removeBacklogEditorEvidenceScopedReviewId(scopedReviewId);
           renderBacklogEditorReviewList();
         });
       }
@@ -9585,24 +9792,58 @@ function renderHtml(
         syncUiQuery();
       });
 
-      quickAddSelects.forEach((select) => {
-        if (!(select instanceof HTMLSelectElement)) {
-          return;
-        }
-        select.addEventListener('change', () => {
-          const card = select.closest('.quote-card');
+      if (viewRaw instanceof HTMLElement) {
+        viewRaw.addEventListener('pointerdown', (event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLElement)) {
+            return;
+          }
+          const select = target.closest('.backlog-quick-select');
+          if (!(select instanceof HTMLSelectElement)) {
+            return;
+          }
+          void refreshBacklogStateFromApi({ applySearchOnUpdate: true });
+        });
+
+        viewRaw.addEventListener('focusin', (event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLSelectElement)) {
+            return;
+          }
+          if (!target.classList.contains('backlog-quick-select')) {
+            return;
+          }
+          void refreshBacklogStateFromApi({ applySearchOnUpdate: true });
+        });
+
+        viewRaw.addEventListener('change', (event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLSelectElement)) {
+            return;
+          }
+          if (!target.classList.contains('backlog-quick-select')) {
+            return;
+          }
+          const card = target.closest('.quote-card');
           if (!card) {
             return;
           }
-          const backlogId = String(select.value || '').trim();
+          const backlogId = String(target.value || '').trim();
           if (!backlogId) {
             syncBacklogQuickSelectForCard(card);
             return;
           }
           addReviewToBacklog(backlogId, card);
-          select.value = '';
+          target.value = '';
           syncBacklogQuickSelectForCard(card);
         });
+      }
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          return;
+        }
+        void refreshBacklogStateFromApi({ force: true, applySearchOnUpdate: true });
       });
 
       minLength100.addEventListener('change', () => {

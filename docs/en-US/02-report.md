@@ -62,14 +62,15 @@ Render actionable markdown report to a shared-viewer bundle JSON.
 - `Backlog` shows one unified backlog table across all apps (not per-app grouped sections).
 - In `Backlog`, identical backlog items are merged into a single row even when they come from different apps.
 - In `Backlog`, near-duplicate backlog rows (same normalized title/action) are also merged during backlog normalization.
-- In `Backlog`, default backlog sorting is: `Priority` (`MUST > SHOULD > COULD`) → `Status` (`Not Started > In Progress > Done`) → `Effort` (`High > Medium > Low`) → `Review count` (high to low).
+- In `Backlog`, default backlog sorting is: `Priority` (`MUST > SHOULD > COULD`) → `Status` (`Not Started > In Progress > Done`) → `Effort` (`High > Medium > Low`) → `Review count` (total count, high to low).
 - In `Backlog`, each row now includes `Status` (`Not Started | In Progress | Done`) and status can be changed inline.
 - `Status` uses color-coded states for quick scanning: `Not Started` (red), `In Progress` (yellow), `Done` (green).
 - Inline selectors in the backlog table are color-coded for both `Priority` (`MUST/SHOULD/COULD`) and `Effort` (`High/Medium/Low`).
 - The app list in each backlog row is rendered as a single-line text with ellipsis (`...`) when it overflows.
 - In `Backlog`, use the same filter panel UX as `Reviews` to filter rows by `Priority / Effort`.
 - In the `Backlog` table, there is no separate review-detail column; use the chevron button next to `Review count` to expand/collapse review rows.
-- `Review count` is calculated as the number of unique reviews (`reviewId`-based dedupe), not raw quote line count.
+- `Review count` is displayed as `active/total` (for example, `2/8`).
+- The `total` side of `Review count` is calculated as the number of unique reviews (`reviewId`-based dedupe), not raw quote line count.
 - In expanded review rows, the Korean sentence is shown by default (without `KR:` prefix), and `See details` reveals the review ID, metadata, and original text.
 - Expanded review rows render prioritized reviews only (top 8 max per backlog row).
 - Backlog themes are now derived dynamically from each app's review text (token-frequency heuristic), instead of using a fixed hardcoded theme list.
@@ -102,7 +103,7 @@ Render actionable markdown report to a shared-viewer bundle JSON.
 - Note `Delete` removes the currently active note and persists immediately.
 - In `Backlog`, backlog rows are editable directly from the page:
   - add/remove backlog items
-  - table columns are ordered as `Priority → Backlog Item → Status → Effort → Review count → Actions`
+  - table columns are ordered as `Priority → Backlog Item → Status → Effort → Review count (active/total) → Actions`
   - update each row's `Priority / Status / Effort` directly from inline selectors
   - inline selectors use vivid red/yellow/green text colors with bold labels for clearer state separation (no state fill)
   - `Status` labels use the same vivid red/yellow/green text-only style
@@ -110,6 +111,9 @@ Render actionable markdown report to a shared-viewer bundle JSON.
   - row action buttons are icon-only and pinned to the far right (`Delete` first, then `Edit`)
   - deleting a backlog row uses a centered custom confirmation modal (not the browser confirm dialog)
   - review selection is done in a centered modal with pagination and open/close animation (active reviews only)
+  - editor summary shows both `selected count` and `saved total count`; if saved reviews are inactive, a guidance message is shown
+  - in the backlog editor `Reviews` list, each linked review can be toggled `Active ↔ Inactive` directly (persisted immediately to `preview-state`)
+  - setting a review to `Inactive` keeps the backlog linkage; use unlink (`×`) to remove it from evidence
   - backlog editor body renders selected reviews as compact review text items (text only, no app name/ID chips)
   - backlog editor header actions are `Delete`, `Apply`, and close (`✕`); `Delete` appears left of `Apply`
   - in backlog editor, `Apply` saves immediately (persistent save), including `Status`
@@ -118,6 +122,7 @@ Render actionable markdown report to a shared-viewer bundle JSON.
 - In that quick-add selector, already linked backlog items are marked with `✓` (without priority labels), and the card shows a right-aligned linked-status text in the format `(N linked: title, title)`.
 - The quick-add selector is rendered on a dedicated backlog row under the card action row (separate from tag/status controls).
 - When a review is added to backlog from `Reviews`, that review is automatically switched to `Active`.
+- The quick-add selector auto-refreshes backlog options without page reload: it revalidates on selector focus/open, on tab visibility restore, and periodically while the page is visible.
 - Reviews view is hydrated from full review datasets (`data/{myAppId}/reviews-ko/*.json`, fallback `reviews/*.json`) per app:
   - preselected report quotes start as `Active`
   - non-selected reviews are included as `Inactive` by default for manual curation
