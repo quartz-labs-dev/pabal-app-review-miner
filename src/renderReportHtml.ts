@@ -5981,10 +5981,14 @@ function renderHtml(
           </div>
           <p id=\"filterPanelCount\" class=\"filter-summary filter-panel-summary\">리뷰 0/0</p>
         </div>
-        <div id=\"topFiltersLeft\" class=\"filter-panel-body\">
+          <div id=\"topFiltersLeft\" class=\"filter-panel-body\">
           <div id=\"rawFilterFields\">
             <div class=\"filter-field\">
               <label class=\"toggle-all-label\"><input id=\"toggleAll\" type=\"checkbox\" /> 원어 보기</label>
+            </div>
+            <div class=\"filter-field\">
+              <p class=\"filter-field-title\">앱</p>
+              <div id=\"appFilter\" class=\"exclude-filter\" role=\"group\" aria-label=\"앱 필터\"></div>
             </div>
             <div class=\"filter-field\">
               <p class=\"filter-field-title\">해시태그</p>
@@ -6046,6 +6050,7 @@ function renderHtml(
       const searchFixed = document.querySelector('.search-fixed');
       const openFilterPanelButton = document.getElementById('openFilterPanel');
       const toggleAll = document.getElementById('toggleAll');
+      const appFilter = document.getElementById('appFilter');
       const tagFilter = document.getElementById('tagFilter');
       const tagFilterButtons = tagFilter
         ? Array.from(tagFilter.querySelectorAll('[data-tag-filter]'))
@@ -6196,6 +6201,7 @@ function renderHtml(
       let rawFilteredCount = rawCards.length;
       let rawCurrentPage = 1;
       let rawTotalPages = 1;
+      let appFilterMode = 'all';
       let excludeFilterMode = 'all';
       let backlogPriorityFilterMode = 'all';
       let backlogEffortFilterMode = 'all';
@@ -6214,6 +6220,7 @@ function renderHtml(
       const BACKLOG_SYNC_MIN_GAP_MS = 1200;
       const TAB_QUERY_KEY = 'tab';
       const SEARCH_QUERY_KEY = 'q';
+      const APP_QUERY_KEY = 'app';
       const TAGS_QUERY_KEY = 'tags';
       const EXCLUDE_QUERY_KEY = 'exclude';
       const MIN_LENGTH_QUERY_KEY = 'min100';
@@ -6221,15 +6228,31 @@ function renderHtml(
       const PRIORITY_QUERY_KEY = 'priority';
       const EFFORT_QUERY_KEY = 'effort';
       const RAW_PAGE_QUERY_KEY = 'page';
-      const RAW_BOOKMARK_STORAGE_PREFIX = 'pabal-review-bookmark-v1';
+      const RAW_BOOKMARK_STORAGE_PREFIX = 'pabal-review-bookmark-v2';
       const TAB_REVIEW_VALUES = new Set(['review']);
       const TAB_BACKLOG_VALUES = new Set(['backlog']);
+      const APP_FILTER_ALL = 'all';
       const TAG_LABELS = {
         heart: '❤️',
         satisfaction: '만족',
         dissatisfaction: '불만족',
         requests: '요청기능'
       };
+      const rawAppFilterOptions = (() => {
+        const seen = new Set();
+        const options = [];
+        rawAppSections.forEach((section) => {
+          const key = String(section.getAttribute('data-app-key') || '').trim();
+          if (!key || seen.has(key)) {
+            return;
+          }
+          seen.add(key);
+          const title = String(section.getAttribute('data-app-title') || '').trim() || key;
+          options.push({ key, title });
+        });
+        return options;
+      })();
+      const rawAppFilterKeys = new Set(rawAppFilterOptions.map((option) => option.key));
       const NOTE_ID_PATTERN = /^[a-z0-9._:-]+$/i;
       const NOTE_TITLE_PLACEHOLDER_DEFAULT = '예) 다음 스프린트 액션 아이템';
       const NOTE_CONTENT_PLACEHOLDER_DEFAULT = '예) 반복 불만 키워드, 다음 비교 포인트, 액션 아이템';
@@ -6267,13 +6290,45 @@ function renderHtml(
       const ownerAppId = resolveOwnerAppId();
       const previewStateApiUrl = ownerAppId ? '/api/preview-state/' + encodeURIComponent(ownerAppId) : '';
       const backlogApiUrl = ownerAppId ? '/api/backlog/' + encodeURIComponent(ownerAppId) : '';
-      const rawBookmarkStorageKey = RAW_BOOKMARK_STORAGE_PREFIX + ':' + encodeURIComponent(ownerAppId || 'global');
       const reviewPageTitle = pageTitleElement instanceof HTMLElement
         ? String(pageTitleElement.getAttribute('data-title-review') || '').trim()
         : '';
       const backlogPageTitle = pageTitleElement instanceof HTMLElement
         ? String(pageTitleElement.getAttribute('data-title-backlog') || '').trim()
         : '';
+
+      function normalizeAppFilterMode(mode) {
+        const normalized = String(mode || '').trim();
+        if (!normalized || normalized === APP_FILTER_ALL) {
+          return APP_FILTER_ALL;
+        }
+        return rawAppFilterKeys.has(normalized) ? normalized : APP_FILTER_ALL;
+      }
+
+      function resolveCurrentBookmarkScope() {
+        if (appFilterMode === APP_FILTER_ALL) {
+          return APP_FILTER_ALL;
+        }
+        return normalizeScopeToken(appFilterMode) || APP_FILTER_ALL;
+      }
+
+      function resolveRawBookmarkStorageKey() {
+        return (
+          RAW_BOOKMARK_STORAGE_PREFIX +
+          ':' +
+          encodeURIComponent(ownerAppId || 'global') +
+          ':' +
+          encodeURIComponent(resolveCurrentBookmarkScope())
+        );
+      }
+
+      function resolveActiveAppFilterLabel() {
+        if (appFilterMode === APP_FILTER_ALL) {
+          return '';
+        }
+        const matched = rawAppFilterOptions.find((item) => item.key === appFilterMode);
+        return matched ? matched.title : '';
+      }
 
       function syncPageTitle(rawMode) {
         const nextTitle = rawMode ? reviewPageTitle : backlogPageTitle;
@@ -6471,6 +6526,10 @@ function renderHtml(
         return (card && card.getAttribute && card.getAttribute('data-app-title') || '').trim();
       }
 
+      function getCardAppKey(card) {
+        return (card && card.getAttribute && card.getAttribute('data-app-key') || '').trim();
+      }
+
       function normalizeRawBookmark(input) {
         if (!input || typeof input !== 'object') {
           return null;
@@ -6494,11 +6553,12 @@ function renderHtml(
       }
 
       function loadRawBookmark() {
-        if (!rawBookmarkStorageKey || !window.localStorage) {
+        if (!window.localStorage) {
           return null;
         }
+        const storageKey = resolveRawBookmarkStorageKey();
         try {
-          const raw = window.localStorage.getItem(rawBookmarkStorageKey);
+          const raw = window.localStorage.getItem(storageKey);
           if (!raw) {
             return null;
           }
@@ -6509,15 +6569,16 @@ function renderHtml(
       }
 
       function saveRawBookmark() {
-        if (!rawBookmarkStorageKey || !window.localStorage) {
+        if (!window.localStorage) {
           return;
         }
+        const storageKey = resolveRawBookmarkStorageKey();
         try {
           if (!rawBookmark) {
-            window.localStorage.removeItem(rawBookmarkStorageKey);
+            window.localStorage.removeItem(storageKey);
             return;
           }
-          window.localStorage.setItem(rawBookmarkStorageKey, JSON.stringify(rawBookmark));
+          window.localStorage.setItem(storageKey, JSON.stringify(rawBookmark));
         } catch {}
       }
 
@@ -6547,7 +6608,7 @@ function renderHtml(
       }
 
       function isRawBookmarkVisible() {
-        return viewRaw.classList.contains('active') && countActiveRawFilters() === 0;
+        return viewRaw.classList.contains('active') && countActiveRawFilters({ ignoreAppFilter: true }) === 0;
       }
 
       function visibleRawCards() {
@@ -6628,6 +6689,7 @@ function renderHtml(
           rawTab: true,
           rawPage: 1,
           search: '',
+          appFilterMode: APP_FILTER_ALL,
           tags: [],
           excludeMode: 'all',
           minLength100: false,
@@ -6648,6 +6710,8 @@ function renderHtml(
 
           const search = String(params.get(SEARCH_QUERY_KEY) || '').trim();
           initial.search = search;
+
+          initial.appFilterMode = normalizeAppFilterMode(params.get(APP_QUERY_KEY));
 
           const tagValues = String(params.get(TAGS_QUERY_KEY) || '')
             .split(',')
@@ -6695,6 +6759,12 @@ function renderHtml(
             nextParams.set(SEARCH_QUERY_KEY, search);
           } else {
             nextParams.delete(SEARCH_QUERY_KEY);
+          }
+
+          if (appFilterMode !== APP_FILTER_ALL) {
+            nextParams.set(APP_QUERY_KEY, appFilterMode);
+          } else {
+            nextParams.delete(APP_QUERY_KEY);
           }
 
           if (tags.length > 0) {
@@ -7116,6 +7186,39 @@ function renderHtml(
           const mode = (button.getAttribute('data-exclude-filter') || '').trim();
           button.classList.toggle('is-active', mode === excludeFilterMode);
         });
+      }
+
+      function syncAppFilterButtons() {
+        if (!(appFilter instanceof HTMLElement)) {
+          return;
+        }
+
+        const optionsHtml = [
+          '<button type=\"button\" class=\"exclude-filter-btn' +
+            (appFilterMode === APP_FILTER_ALL ? ' is-active' : '') +
+            '\" data-app-filter=\"' +
+            APP_FILTER_ALL +
+            '\">앱 전체</button>'
+        ];
+        rawAppFilterOptions.forEach((item) => {
+          optionsHtml.push(
+            '<button type=\"button\" class=\"exclude-filter-btn' +
+              (item.key === appFilterMode ? ' is-active' : '') +
+              '\" data-app-filter=\"' +
+              escapeInlineHtml(item.key) +
+              '\">' +
+              escapeInlineHtml(item.title) +
+              '</button>'
+          );
+        });
+        appFilter.innerHTML = optionsHtml.join('');
+      }
+
+      function setAppFilterMode(nextMode) {
+        appFilterMode = normalizeAppFilterMode(nextMode);
+        syncAppFilterButtons();
+        rawBookmark = loadRawBookmark();
+        syncRawBookmarkUi();
       }
 
       function setTagFilterMode(nextMode) {
@@ -8496,6 +8599,10 @@ function renderHtml(
         }
 
         if (viewRaw.classList.contains('active')) {
+          const appFilterLabel = resolveActiveAppFilterLabel();
+          if (appFilterLabel) {
+            chips.push('앱: ' + appFilterLabel);
+          }
           selectedTagFilters.forEach((tag) => {
             chips.push('#' + TAG_LABELS[tag]);
           });
@@ -8526,10 +8633,13 @@ function renderHtml(
           .join('');
       }
 
-      function countActiveRawFilters() {
+      function countActiveRawFilters(options) {
         let count = 0;
         const query = searchInput instanceof HTMLInputElement ? searchInput.value.trim() : '';
         if (query) {
+          count += 1;
+        }
+        if ((!options || options.ignoreAppFilter !== true) && appFilterMode !== APP_FILTER_ALL) {
           count += 1;
         }
         count += selectedTagFilters.size;
@@ -8792,6 +8902,7 @@ function renderHtml(
         }
         document.body.classList.remove('show-all-original');
         selectedTagFilters.clear();
+        setAppFilterMode(APP_FILTER_ALL);
         rawCurrentPage = 1;
         syncTagFilterButtons();
         setExcludeFilterMode('all');
@@ -8845,7 +8956,9 @@ function renderHtml(
           }
 
           const state = readCardState(reviewId, card);
+          const cardAppKey = getCardAppKey(card);
           const textLength = Number(card.getAttribute('data-text-length') || '0');
+          const hideByApp = appFilterMode !== APP_FILTER_ALL && cardAppKey !== appFilterMode;
           const hideByTag =
             selectedTagFilters.size > 0 && !state.tags.some((tag) => selectedTagFilters.has(tag));
           const hideByLength = minLengthChecked && textLength < 100;
@@ -8854,7 +8967,7 @@ function renderHtml(
             (excludeFilterMode === 'excluded' && !state.excluded);
           const hideBySearch = query.length > 0 && !getSearchableText(card).includes(query);
           card.classList.toggle('hidden-by-search', hideBySearch);
-          card.classList.toggle('hidden-by-state', hideByTag || hideByLength || hideByExcluded);
+          card.classList.toggle('hidden-by-state', hideByApp || hideByTag || hideByLength || hideByExcluded);
         });
       }
 
@@ -9619,6 +9732,7 @@ function renderHtml(
           selectedTagFilters.add(tag);
         });
 
+        setAppFilterMode(queryState.appFilterMode);
         setExcludeFilterMode(queryState.excludeMode);
         setBacklogPriorityFilterMode(queryState.backlogPriorityMode);
         setBacklogEffortFilterMode(queryState.backlogEffortMode);
@@ -10128,6 +10242,22 @@ function renderHtml(
         rawCurrentPage = 1;
         applySearch();
       });
+      if (appFilter instanceof HTMLElement) {
+        appFilter.addEventListener('click', (event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLElement)) {
+            return;
+          }
+          const button = target.closest('[data-app-filter]');
+          if (!(button instanceof HTMLElement)) {
+            return;
+          }
+          const mode = String(button.getAttribute('data-app-filter') || '').trim();
+          setAppFilterMode(mode);
+          rawCurrentPage = 1;
+          applySearch();
+        });
+      }
       tagFilterButtons.forEach((button) => {
         if (!(button instanceof HTMLElement)) {
           return;

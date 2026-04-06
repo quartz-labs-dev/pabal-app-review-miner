@@ -79,13 +79,14 @@ Render actionable markdown report to a shared-viewer bundle JSON.
 - Backlog `action` text is generated as a concrete checklist (up to 3 items) inferred from matched review patterns, not only a generic count sentence.
 - Backlog `action` text no longer appends count suffixes like `(리뷰 N건)` or `(evidence N reviews)`; use the `Review count` column instead.
 - In `Reviews`, hashtag filter supports multi-select (`#❤️`, `#Requests`, `#Satisfaction`, `#Dissatisfaction`), and `All tags` clears tag filters.
+- In `Reviews`, app filter is available in the filter panel (`All apps` + per-app buttons).
 - In `Reviews`, state filter is tri-state: `All` / `Active` / `Inactive` (default: `All`).
 - In `Reviews`, app sections are ordered by latest review registration date first, then higher app rating.
 - In `Reviews`, review cards are ordered by latest registration date first, with higher rating as the secondary sort.
 - In `Reviews`, cards are paginated (50 cards per page) with `Prev/Next` controls in the top status row; `Prev` scrolls to page bottom, and `Next` scrolls to the top of the review-card section.
-- In `Reviews`, bookmark controls are shown on the left side of pagination only when no filters are active (`search/tag/state/100+ chars` all clear). The bookmark update control is an icon button: it appears filled on the bookmarked page and outlined on other pages. The summary label shows only the bookmarked page number (`Bookmark {page}`). `Go to bookmark` jumps back to the saved bookmark page.
+- In `Reviews`, bookmark controls are shown when no non-app filters are active (`search/tag/state/100+ chars` clear; app-only filter is allowed). Bookmark storage is scoped by app filter, so each app-filter view keeps its own bookmark. The bookmark update control is an icon button: it appears filled on the bookmarked page and outlined on other pages. The summary label shows only the bookmarked page number (`Bookmark {page}`). `Go to bookmark` jumps back to the saved bookmark page.
 - In `Reviews`, you can toggle `100+ chars` to focus on longer reviews.
-- `Reset filters` clears search/state/tag/length filters in one click.
+- `Reset filters` clears search/app/state/tag/length filters in one click.
 - In the filter panel, `Reset all to inactive` sets every review to `Inactive` in bulk and clears all hashtags.
 - The review filter sidebar/bottom sheet header shows `filtered reviews / total reviews` in real time.
 - Each app row in the `Reviews` tab also shows `filtered reviews / total reviews` on the right.
