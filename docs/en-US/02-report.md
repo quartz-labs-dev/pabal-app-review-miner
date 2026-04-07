@@ -85,7 +85,8 @@ Render actionable markdown report to a shared-viewer bundle JSON.
 - In `Reviews`, app sections are always expanded; collapse/close interaction is not provided.
 - In `Reviews`, review cards are ordered by latest registration date first, with higher rating as the secondary sort.
 - In `Reviews`, cards are paginated (50 cards per page) with `Prev/Next` controls in the top status row; `Prev` scrolls to page bottom, and `Next` scrolls to the top of the review-card section.
-- In `Reviews`, bookmark controls are shown when no non-app filters are active (`search/tag/state/100+ chars` clear; app-only filter is allowed). Bookmark storage is scoped by app filter, so each app-filter view keeps its own bookmark. The bookmark update control is an icon button: it appears filled on the bookmarked page and outlined on other pages. The summary label shows only the bookmarked page number (`Bookmark {page}`). `Go to bookmark` jumps back to the saved bookmark page.
+- In `Reviews`, bookmark controls are shown when no non-app filters are active (`search/tag/state/100+ chars` clear; app-only filter is allowed). Bookmark storage is scoped by app filter, so each app-filter view keeps its own bookmark. The bookmark update control is an icon button: it appears filled on the bookmarked page and outlined on other pages. The summary label shows progress (`Bookmark {page}/{total}`), and when bookmarked page reaches the last page it shows `Bookmark {total}/{total} · Done`. `Go to bookmark` jumps back to the saved bookmark page.
+- In `Reviews`, when bookmark is on the last page, active chips include `Review status: Done` (`검토 상태: 완료`).
 - In `Reviews`, you can toggle `100+ chars` to focus on longer reviews.
 - `Reset filters` clears search/app/state/tag/length filters in one click.
 - In the filter panel, `Reset all to inactive` sets every review to `Inactive` in bulk and clears all hashtags.

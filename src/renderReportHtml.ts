@@ -6603,6 +6603,27 @@ function renderHtml(
         return Math.max(1, Math.min(parseQueryPositiveInt(normalized.page), rawTotalPages));
       }
 
+      function resolveRawBookmarkProgress(bookmark) {
+        const normalized = normalizeRawBookmark(bookmark);
+        const totalPages = Math.max(1, rawTotalPages);
+        if (!normalized) {
+          return {
+            hasBookmark: false,
+            bookmarkPage: 0,
+            totalPages,
+            completed: false
+          };
+        }
+
+        const bookmarkPage = resolveRawBookmarkPage(normalized);
+        return {
+          hasBookmark: true,
+          bookmarkPage,
+          totalPages,
+          completed: bookmarkPage >= totalPages
+        };
+      }
+
       function isRawBookmarkVisible() {
         return viewRaw.classList.contains('active') && countActiveRawFilters({ ignoreAppFilter: true }) === 0;
       }
@@ -6627,11 +6648,21 @@ function renderHtml(
           return;
         }
 
-        const hasBookmark = Boolean(normalizeRawBookmark(rawBookmark));
-        const bookmarkPage = hasBookmark ? resolveRawBookmarkPage(rawBookmark) : 0;
+        const bookmarkProgress = resolveRawBookmarkProgress(rawBookmark);
+        const hasBookmark = bookmarkProgress.hasBookmark;
+        const bookmarkPage = bookmarkProgress.bookmarkPage;
         const isCurrentBookmarkPage = hasBookmark && bookmarkPage === rawCurrentPage;
         if (rawBookmarkSummary instanceof HTMLElement) {
-          rawBookmarkSummary.textContent = hasBookmark ? '북마크 ' + bookmarkPage : '북마크 없음';
+          if (!hasBookmark) {
+            rawBookmarkSummary.textContent = '북마크 없음';
+          } else {
+            rawBookmarkSummary.textContent =
+              '북마크 ' +
+              bookmarkProgress.bookmarkPage +
+              '/' +
+              bookmarkProgress.totalPages +
+              (bookmarkProgress.completed ? ' · 완료' : '');
+          }
         }
         if (rawBookmarkSet instanceof HTMLButtonElement) {
           rawBookmarkSet.disabled = rawFilteredCount < 1;
@@ -8609,6 +8640,12 @@ function renderHtml(
           }
           if (minLength100 instanceof HTMLInputElement && minLength100.checked) {
             chips.push('100자 이상');
+          }
+          if (isRawBookmarkVisible()) {
+            const bookmarkProgress = resolveRawBookmarkProgress(rawBookmark);
+            if (bookmarkProgress.hasBookmark && bookmarkProgress.completed) {
+              chips.push('검토 상태: 완료');
+            }
           }
         } else {
           if (backlogPriorityFilterMode !== 'all') {
